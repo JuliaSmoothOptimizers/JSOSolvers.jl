@@ -1,0 +1,24 @@
+{
+  "description": "JuliaSmoothOptimizers optimization solvers",
+  "title": "JSOSolvers.jl",
+  "upload_type": "software",
+  "license": "MPL-2.0",
+  "creators": [
+    {
+      "affiliation": "Federal University of Paraná - UFPR",
+      "name": "Abel Soares Siqueira"
+    },
+    {
+      "affiliation": "École Polytechnique/GERAD - Montréal",
+      "name": "Dominique Orban"
+    }
+  ],
+  "access_right": "open",
+  "related_identifiers": [
+    {
+      "scheme": "url",
+      "identifier": "https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/releases/latest",
+      "relation": "isSupplementTo"
+    }
+  ]
+}
