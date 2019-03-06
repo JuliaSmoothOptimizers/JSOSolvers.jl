@@ -29,8 +29,7 @@ function tron(nlp :: AbstractNLPModel;
               atol :: Real=√eps(eltype(x)),
               rtol :: Real=√eps(eltype(x)),
               fatol :: Real=zero(eltype(x)),
-              frtol :: Real=eps(eltype(x))^eltype(x)(2/3),
-              kwargs...
+              frtol :: Real=eps(eltype(x))^eltype(x)(2/3)
              )
 
   T = eltype(x)
