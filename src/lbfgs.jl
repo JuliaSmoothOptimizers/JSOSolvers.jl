@@ -1,5 +1,11 @@
 export lbfgs
 
+"""
+    lbfgs(nlp)
+
+An implementation of a limited memory BFGS line-search method for unconstrained
+minimization.
+"""
 function lbfgs(nlp :: AbstractNLPModel;
                x :: AbstractVector=copy(nlp.meta.x0),
                atol :: Real=√eps(eltype(x)), rtol :: Real=√eps(eltype(x)),
