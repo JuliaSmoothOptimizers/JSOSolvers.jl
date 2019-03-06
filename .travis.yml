@@ -24,7 +24,13 @@ branches:
     - master
     - /^v\d+\.\d+(\.\d+)?(-\S*)?$/ # tags
 
+addons:
+  apt_packages:
+    - gfortran
+
 before_install:
+  - if [ "$TRAVIS_OS_NAME" == "osx" ]; then brew update && brew cask uninstall --force oclint && brew install gcc; brew tap optimizers/cutest; brew install cutest; brew install mastsif; for f in "archdefs" "sifdecode" "mastsif" "cutest"; do source $(brew --prefix $f)/$f.bashrc; done; fi
+  - if [ "$TRAVIS_OS_NAME" == "linux" ]; then unset DYLD_LIBRARY_PATH; fi
   - julia -e 'using Pkg; pkg"add https://github.com/JuliaSmoothOptimizers/SolverTools.jl"'
 
 jobs:

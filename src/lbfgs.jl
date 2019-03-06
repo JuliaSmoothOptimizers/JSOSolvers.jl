@@ -12,8 +12,7 @@ function lbfgs(nlp :: AbstractNLPModel;
                max_eval :: Int=-1,
                max_time :: Float64=30.0,
                verbose :: Bool=true,
-               mem :: Int=5,
-               kwargs...)
+               mem :: Int=5)
 
   start_time = time()
   elapsed_time = 0.0

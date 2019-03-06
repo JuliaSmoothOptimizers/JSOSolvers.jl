@@ -23,12 +23,7 @@ function trunk(nlp :: AbstractNLPModel;
                max_time :: Float64=30.0,
                bk_max :: Int=10,
                monotone :: Bool=true,
-               nm_itmax :: Int=25,
-               kwargs...)
-
-  for (k,v) in kwargs
-    @warn "Ignoring argument $k = $v"
-  end
+               nm_itmax :: Int=25)
 
   start_time = time()
   elapsed_time = 0.0
