@@ -1,18 +1,20 @@
-# A trust-region solver for unconstrained optimization
-# using exact second derivatives.
-#
-# This implementation follows the description given in [1].
-# The main algorithm follows the basic trust-region method described in Section 6.
-# The backtracking linesearch follows Section 10.3.2.
-# The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
-#
-# [1] A. R. Conn, N. I. M. Gould, and Ph. L. Toint,
-#     Trust-Region Methods, volume 1 of MPS/SIAM Series on Optimization.
-#     SIAM, Philadelphia, USA, 2000.
-#     DOI: 10.1137/1.9780898719857.
-
 export trunk
 
+"""
+    trunk(nlp)
+
+A trust-region solver for unconstrained optimization using exact second derivatives.
+
+This implementation follows the description given in [1].
+The main algorithm follows the basic trust-region method described in Section 6.
+The backtracking linesearch follows Section 10.3.2.
+The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
+
+[1] A. R. Conn, N. I. M. Gould, and Ph. L. Toint,
+    Trust-Region Methods, volume 1 of MPS/SIAM Series on Optimization.
+    SIAM, Philadelphia, USA, 2000.
+    DOI: 10.1137/1.9780898719857.
+"""
 function trunk(nlp :: AbstractNLPModel;
                subsolver_logger :: AbstractLogger=NullLogger(),
                x :: AbstractVector=copy(nlp.meta.x0),

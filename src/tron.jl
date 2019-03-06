@@ -3,7 +3,8 @@
 
 export tron
 
-"""`tron(nlp)`
+"""
+    tron(nlp)
 
 A pure Julia implementation of a trust-region solver for bound-constrained
 optimization:
