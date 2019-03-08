@@ -92,7 +92,7 @@ function test_bound_constrained_solver(solver)
                      lvar=zeros(n), uvar=0.3*ones(n))
 
     stats = with_logger(NullLogger()) do
-      solver(nlp, max_time=600.0)
+      solver(nlp, max_time=30.0)
     end
     @test stats.dual_feas < 1e-6
     @test stats.status == :first_order
@@ -116,27 +116,6 @@ function test_bound_constrained_solver(solver)
       @test stats.primal_feas isa T
       @test isapprox(stats.solution, [0.5; 0.25], atol=ϵ * ng0 * 10)
       @test stats.dual_feas < ϵ * ng0 + ϵ
-    end
-  end
-
-  @static if Sys.isunix()
-    @testset "CUTEst" begin
-      problems = CUTEst.select(max_var=2, max_con=0, only_bnd_var=true)
-      stline = statshead([:objective, :dual_feas, :elapsed_time, :iter, :neval_obj,
-                          :neval_grad, :neval_hprod, :status])
-      @info @sprintf("%8s  %5s  %4s  %s\n", "Problem", "n", "type", stline)
-      for p in problems
-        nlp = CUTEstModel(p)
-        stats = with_logger(NullLogger()) do
-          solver(nlp, max_time=3.0)
-        end
-        finalize(nlp)
-
-        ctype = "bnd"
-        stline = statsline(stats, [:objective, :dual_feas, :elapsed_time, :iter, :neval_obj,
-                                   :neval_grad, :neval_hprod, :status])
-        @info @sprintf("%8s  %5d  %4s  %s\n", p, nlp.meta.nvar, ctype, stline)
-      end
     end
   end
 end
