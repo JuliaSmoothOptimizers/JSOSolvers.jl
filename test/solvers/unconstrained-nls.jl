@@ -38,7 +38,7 @@ function test_unconstrained_nls_solver(solver)
       @test stats.status == :first_order
     end
 
-    @testset "Underdeterminded" begin
+    @testset "Underdetermined" begin
       nls = ADNLSModel(x -> [x[2] - x[1]^2], [-1.2; 1.0], 1)
 
       stats = with_logger(NullLogger()) do
@@ -49,7 +49,7 @@ function test_unconstrained_nls_solver(solver)
       @test stats.status == :first_order
     end
 
-    @testset "Overdeterminded" begin
+    @testset "Overdetermined" begin
       nls = ADNLSModel(x -> [x[1] - 1; 10 * (x[2] - x[1]^2); x[1] * x[2] - 1], [-1.2; 1.0], 3)
 
       stats = with_logger(NullLogger()) do
@@ -67,7 +67,7 @@ function test_unconstrained_nls_solver(solver)
     nls = ADNLSModel(x->[[10 * (x[i+1] - x[i]^2) for i = 1:n-1]; [x[i] - 1 for i = 1:n-1]], (1:n) ./ (n + 1), 2n - 2)
 
     stats = with_logger(NullLogger()) do
-      solver(nls, max_time=600.0, max_eval=-1)
+      solver(nls, max_time=30.0, max_eval=-1)
     end
     @test isapprox(stats.solution, ones(n), atol=1e-6)
     @test isapprox(stats.objective, 0.0, atol=1e-6)
@@ -93,27 +93,6 @@ function test_unconstrained_nls_solver(solver)
       @test isapprox(stats.solution, ones(T, 2), atol=ϵ * ng0 * 10)
       @test isapprox(stats.objective, zero(T), atol=ϵ * ng0)
       @test stats.dual_feas < ϵ * ng0 + ϵ
-    end
-  end
-
-  @static if Sys.isunix()
-    @testset "CUTEst" begin
-      problems = CUTEst.select(max_var=2, objtype=:none, only_free_var=true, only_equ_con=true)
-      stline = statshead([:objective, :dual_feas, :elapsed_time, :iter, :neval_obj,
-                          :neval_grad, :neval_hprod, :status])
-      @info @sprintf("%8s  %5s  %4s  %s\n", "Problem", "n", "type", stline)
-      for p in problems
-        nls = FeasibilityResidual(CUTEstModel(p))
-        stats = with_logger(NullLogger()) do
-          solver(nls, max_time=3.0)
-        end
-        finalize(nls)
-
-        ctype = "unc"
-        stline = statsline(stats, [:objective, :dual_feas, :elapsed_time, :iter, :neval_obj,
-                                   :neval_grad, :neval_hprod, :status])
-        @info @sprintf("%8s  %5d  %4s  %s\n", p, nls.meta.nvar, ctype, stline)
-      end
     end
   end
 end

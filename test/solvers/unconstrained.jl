@@ -59,7 +59,7 @@ function test_unconstrained_solver(solver)
 
     ng0 = norm(grad(nlp, nlp.meta.x0))
     stats = with_logger(NullLogger()) do
-      solver(nlp, max_time=600.0, max_eval=-1)
+      solver(nlp, max_time=30.0, max_eval=-1)
     end
     @test isapprox(stats.solution, ones(n), atol=1e-6)
     @test isapprox(stats.objective, 0.0, atol=1e-6)
@@ -84,27 +84,6 @@ function test_unconstrained_solver(solver)
       @test isapprox(stats.solution, ones(T, 2), atol=ϵ * ng0 * 10)
       @test isapprox(stats.objective, zero(T), atol=ϵ * ng0)
       @test stats.dual_feas < ϵ * ng0 + ϵ
-    end
-  end
-
-  @static if Sys.isunix()
-    @testset "CUTEst" begin
-      problems = CUTEst.select(max_var=2, contype=:unc)
-      stline = statshead([:objective, :dual_feas, :elapsed_time, :iter, :neval_obj,
-                          :neval_grad, :neval_hprod, :status])
-      @info @sprintf("%8s  %5s  %4s  %s\n", "Problem", "n", "type", stline)
-      for p in problems
-        nlp = CUTEstModel(p)
-        stats = with_logger(NullLogger()) do
-          solver(nlp, max_time=3.0)
-        end
-        finalize(nlp)
-
-        ctype = "unc"
-        stline = statsline(stats, [:objective, :dual_feas, :elapsed_time, :iter, :neval_obj,
-                                   :neval_grad, :neval_hprod, :status])
-        @info @sprintf("%8s  %5d  %4s  %s\n", p, nlp.meta.nvar, ctype, stline)
-      end
     end
   end
 end
