@@ -31,8 +31,8 @@ function lbfgs(nlp :: AbstractNLPModel;
   ϵ = atol + rtol * ∇fNorm
   iter = 0
 
-  @info @sprintf("%4s  %8s  %7s  %8s  %4s", "iter", "f", "‖∇f‖", "∇f'd", "bk")
-  infoline = @sprintf("%4d  %8.1e  %7.1e", iter, f, ∇fNorm)
+  @info log_header([:iter, :f, :dual, :slope, :bk], [Int, T, T, T, Int],
+                   hdr_override=Dict(:f=>"f(x)", :dual=>"‖∇f‖", :slope=>"∇fᵀd"))
 
   optimal = ∇fNorm ≤ ϵ
   tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
@@ -51,13 +51,11 @@ function lbfgs(nlp :: AbstractNLPModel;
       continue
     end
 
-    infoline *= @sprintf("  %8.1e", slope)
-
     redirect!(h, x, d)
     # Perform improved Armijo linesearch.
     t, good_grad, ft, nbk, nbW = armijo_wolfe(h, f, slope, ∇ft, τ₁=T(0.9999), bk_max=25, verbose=false)
 
-    @info infoline * @sprintf("  %4d", nbk)
+    @info log_row(Any[iter, f, ∇fNorm, slope, nbk])
 
     copyaxpy!(n, t, d, x, xt)
     good_grad || grad!(nlp, xt, ∇ft)
@@ -73,13 +71,11 @@ function lbfgs(nlp :: AbstractNLPModel;
     ∇fNorm = nrm2(n, ∇f)
     iter = iter + 1
 
-    infoline = @sprintf("%4d  %8.1e  %7.1e", iter, f, ∇fNorm)
-
     optimal = ∇fNorm ≤ ϵ
     elapsed_time = time() - start_time
     tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   end
-  @info infoline
+  @info log_row(Any[iter, f, ∇fNorm])
 
   if optimal
     status = :first_order

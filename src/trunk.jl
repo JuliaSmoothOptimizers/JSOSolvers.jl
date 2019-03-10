@@ -61,14 +61,10 @@ function trunk(nlp :: AbstractNLPModel;
   stalled = false
   status = :unknown
 
-  @info @sprintf("%4s  %9s  %7s  %7s  %8s  %5s  %2s  %s",
-                 "Iter", "f", "‖∇f‖", "Radius", "Ratio", "Inner", "bk", "status")
-  infoline = @sprintf("%4d  %9.2e  %7.1e  %7.1e  ",
-                      iter, f, ∇fNorm2, get_property(tr, :radius))
+  @info log_header([:iter, :f, :dual, :radius, :ratio, :inner, :bk, :cgstatus], [Int, T, T, T, T, Int, Int, String],
+                   hdr_override=Dict(:f=>"f(x)", :dual=>"π", :radius=>"Δ"))
 
   while !(optimal || tired || stalled)
-    iter = iter + 1
-
     # Compute inexact solution to trust-region subproblem
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
@@ -154,6 +150,10 @@ function trunk(nlp :: AbstractNLPModel;
       end
     end
 
+    @info log_row([iter, f, ∇fNorm2, get_property(tr, :radius), get_property(tr, :ratio),
+                   length(cg_stats.residuals), bk, cg_stats.status])
+    iter = iter + 1
+
     if acceptable(tr)
       # Update non-monotone mode parameters.
       if !monotone
@@ -186,21 +186,14 @@ function trunk(nlp :: AbstractNLPModel;
       ∇fNorm2 = nrm2(n, ∇f)
     end
 
-    infoline *= @sprintf("%8.1e  %5d  %2d  %s",
-                         get_property(tr, :ratio), length(cg_stats.residuals),
-                         bk, cg_stats.status)
-    @info infoline
-
     # Move on.
     update!(tr, sNorm)
-
-    infoline = @sprintf("%4d  %9.2e  %7.1e  %7.1e  ", iter, f, ∇fNorm2, get_property(tr, :radius))
 
     optimal = ∇fNorm2 ≤ ϵ
     elapsed_time = time() - start_time
     tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   end
-  @info infoline
+  @info log_row(Any[iter, f, ∇fNorm2, get_property(tr, :radius)])
 
   if optimal
     status = :first_order

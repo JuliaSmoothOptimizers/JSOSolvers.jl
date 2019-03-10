@@ -67,10 +67,8 @@ function tron(nlp :: AbstractNLPModel;
 
   αC = one(T)
   tr = TRONTrustRegion(min(max(one(T), πx / 10), 100))
-  @info @sprintf("%4s  %9s  %7s  %7s  %7s  %s",
-                 "Iter", "f", "π", "Radius", "Ratio", "CG-status")
-  @info @sprintf("%4d  %9.2e  %7.1e  %7.1e",
-                 iter, fx, πx, get_property(tr, :radius))
+  @info log_header([:iter, :f, :dual, :radius, :ratio, :cgstatus], [Int, T, T, T, T, String],
+                   hdr_override=Dict(:f=>"f(x)", :dual=>"π", :radius=>"Δ"))
   while !(optimal || tired || stalled || unbounded)
     # Current iteration
     xc .= x
@@ -101,6 +99,7 @@ function tron(nlp :: AbstractNLPModel;
     end
     tr.ratio = ared / pred
     tr.quad_min = quad_min
+    @info log_row([iter, fx, πx, Δ, tr.ratio, cginfo])
 
     s_norm = nrm2(n, s)
     if num_success_iters == 0
@@ -130,9 +129,8 @@ function tron(nlp :: AbstractNLPModel;
     optimal = πx <= ϵ
     unbounded = fx < fmin
 
-    @info @sprintf("%4d  %9.2e  %7.1e  %7.1e  %7.1e  %s",
-                   iter, fx, πx, Δ, tr.ratio, cginfo)
   end
+  @info log_row(Any[iter, fx, πx, get_property(tr, :radius)])
 
   if tired
     if el_time > max_time
