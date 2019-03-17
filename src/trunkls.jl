@@ -165,7 +165,7 @@ function trunk(nlp :: AbstractNLSModel;
     end
 
     @info log_row([iter, f, ∇fNorm2, get_property(tr, :radius), sNorm,
-                   get_property(tr, :ratio), length(cg_stats.residuals), 0, cg_stats.status])
+                   get_property(tr, :ratio), length(cg_stats.residuals), bk, cg_stats.status])
     iter = iter + 1
 
     if acceptable(tr)
