@@ -28,16 +28,13 @@ addons:
   apt_packages:
     - gfortran
 
-before_install:
-  - julia -e 'using Pkg; pkg"add https://github.com/JuliaSmoothOptimizers/SolverTools.jl"'
-
 jobs:
   include:
     - stage: Documentation
       julia: 1.1
       os: linux
       script:
-        - julia --project=docs -e 'using Pkg; Pkg.instantiate(); pkg"add https://github.com/JuliaSmoothOptimizers/SolverTools.jl"; Pkg.add(PackageSpec(path=pwd()))'
+        - julia --project=docs -e 'using Pkg; Pkg.instantiate(); Pkg.add(PackageSpec(path=pwd()))'
         - julia --project=docs docs/make.jl
       after_success: skip
 
