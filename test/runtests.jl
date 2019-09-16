@@ -9,6 +9,7 @@ using JSOSolvers
 
 include("consistency.jl")
 include("test_solvers.jl")
+include("test_tuning.jl")
 
 nlp = ADNLPModel(x -> (x[1] - 1)^2 + 100 * (x[2] - x[1]^2)^2, [-1.2; 1.0])
 for solver in [lbfgs, tron, trunk]

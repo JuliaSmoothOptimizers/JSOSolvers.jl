@@ -1,4 +1,17 @@
-export lbfgs
+export lbfgs, SolverLBFGS
+
+function SolverLBFGS(; mem :: Int=5,
+                     ls_acceptance :: Real=1e-4,
+                     ls_angle :: Real=0.9999)
+  params = [:mem, :ls_acceptance, :ls_angle]
+  values = Any[mem, ls_acceptance, ls_angle]
+  types = [:integer, :real, :real]
+  lvar = [1, 1e-4, 0.9]
+  uvar = [50, 0.9, 0.9999]
+  cons(x) = Float64[]
+  lcon = ucon = zeros(0)
+  return JSOSolver(lbfgs, params, values, types, lvar, uvar, cons, lcon, ucon)
+end
 
 """
     lbfgs(nlp)
@@ -12,6 +25,8 @@ function lbfgs(nlp :: AbstractNLPModel;
                max_eval :: Int=-1,
                max_time :: Float64=30.0,
                verbose :: Bool=true,
+               ls_acceptance :: Real = 1e-4,
+               ls_angle :: Real = 0.9999,
                mem :: Int=5)
 
   start_time = time()
@@ -53,7 +68,7 @@ function lbfgs(nlp :: AbstractNLPModel;
 
     redirect!(h, x, d)
     # Perform improved Armijo linesearch.
-    t, good_grad, ft, nbk, nbW = armijo_wolfe(h, f, slope, ∇ft, τ₁=T(0.9999), bk_max=25, verbose=false)
+    t, good_grad, ft, nbk, nbW = armijo_wolfe(h, f, slope, ∇ft, τ₀=T(ls_acceptance), τ₁=T(ls_angle), bk_max=25, verbose=false)
 
     @info log_row(Any[iter, f, ∇fNorm, slope, nbk])
 

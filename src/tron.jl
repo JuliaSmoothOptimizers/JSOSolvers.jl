@@ -1,7 +1,20 @@
 #  Some parts of this code were adapted from
 # https://github.com/PythonOptimizers/NLP.py/blob/develop/nlp/optimize/tron.py
 
-export tron
+export tron, SolverTRON
+
+function SolverTRON(; μ₀ :: Real = 1e-2,
+                    μ₁ :: Real = 1.0,
+                    σ :: Real = 10.0)
+  params = [:μ₀, :μ₁, :σ]
+  values = Any[μ₀, μ₁, σ]
+  types = [:real, :real, :real]
+  lvar = [1e-4, 1e-4, 1.0001]
+  uvar = [0.5, 1.0, 100.0]
+  cons(x) = Float64[]
+  lcon = ucon = zeros(0)
+  return JSOSolver(tron, params, values, types, lvar, uvar, cons, lcon, ucon)
+end
 
 """
     tron(nlp)

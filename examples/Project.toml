@@ -1,0 +1,8 @@
+[deps]
+BenchmarkProfiles = "ecbce9bc-3e5e-569d-9e29-55181f61f8d0"
+CUTEst = "1b53aba6-35b6-5f92-a507-53c67d53f819"
+DerivativeFreeSolvers = "704b706e-a0d9-11e9-03cb-eb2963733e22"
+JSOSolvers = "10dff2fc-5484-5881-a0e0-c90441020f8a"
+NLPModels = "a4795742-8479-5a88-8948-cc11e1c8c1a6"
+SolverBenchmark = "581a75fa-a23a-52d0-a590-d6201de2218a"
+SolverTools = "b5612192-2639-5dc1-abfe-fbedd65fab29"

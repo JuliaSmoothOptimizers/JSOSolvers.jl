@@ -1,4 +1,16 @@
-export trunk
+export trunk, SolverTrunk
+
+function SolverTrunk(; monotone :: Bool=true,
+                    ls_acceptance :: Real=1e-4)
+  params = [:monotone, :ls_acceptance]
+  values = Any[monotone, ls_acceptance]
+  types = [:bool, :real]
+  lvar = [0, 1e-4]
+  uvar = [1, 0.9]
+  cons(x) = Float64[]
+  lcon = ucon = zeros(0)
+  return JSOSolver(trunk, params, values, types, lvar, uvar, cons, lcon, ucon)
+end
 
 """
     trunk(nlp)
@@ -19,6 +31,7 @@ function trunk(nlp :: AbstractNLPModel;
                subsolver_logger :: AbstractLogger=NullLogger(),
                x :: AbstractVector=copy(nlp.meta.x0),
                atol :: Real=√eps(eltype(x)), rtol :: Real=√eps(eltype(x)),
+               ls_acceptance :: Real = √√eps(eltype(x)),
                max_eval :: Int=-1,
                max_time :: Float64=30.0,
                bk_max :: Int=10,
@@ -32,9 +45,6 @@ function trunk(nlp :: AbstractNLPModel;
   n = nlp.meta.nvar
 
   cgtol = one(T)  # Must be ≤ 1.
-
-  # Armijo linesearch parameter.
-  β = eps(T)^T(1/4)
 
   iter = 0
   f = obj(nlp, x)
@@ -121,7 +131,7 @@ function trunk(nlp :: AbstractNLPModel;
         continue
       end
       α = one(T)
-      while (bk < bk_max) && (ft > f + β * α * slope)
+      while (bk < bk_max) && (ft > f + ls_acceptance * α * slope)
         bk = bk + 1
         α /= T(1.2)
         copyaxpy!(n, α, s, x, xt)
