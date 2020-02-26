@@ -74,8 +74,7 @@ function tron(nlp :: AbstractNLPModel;
     xc .= x
     fc = fx
     Δ = get_property(tr, :radius)
-    # H = hess_op!(nlp, xc, temp) # hess_op ignores the type of x in NLPModels 0.10-0.11
-    H = LinearOperator(T, n, n, true, true, v -> hprod!(nlp, xc, v, temp))
+    H = hess_op!(nlp, xc, temp)
 
     αC, s, cauchy_status = cauchy(x, H, gx, Δ, αC, ℓ, u, μ₀=μ₀, μ₁=μ₁, σ=σ)
 
