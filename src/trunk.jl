@@ -68,7 +68,8 @@ function trunk(nlp :: AbstractNLPModel;
     # Compute inexact solution to trust-region subproblem
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
-    H = hess_op!(nlp, x, temp)
+    # H = hess_op!(nlp, x, temp) # hess_op ignores the type of x in NLPModels 0.10-0.11
+    H = LinearOperator(T, n, n, true, true, v -> hprod!(nlp, x, v, temp))
     cgtol = max(rtol, min(T(0.1), 9 * cgtol / 10, sqrt(∇fNorm2)))
     (s, cg_stats) = with_logger(subsolver_logger) do
       cg(H, -∇f,

@@ -46,7 +46,8 @@ function trunk(nlp :: AbstractNLSModel;
   # preallocate storage for products with A and A'
   Av = Vector{T}(undef, m)
   Atv = Vector{T}(undef, n)
-  A = jac_op_residual!(nlp, x, Av, Atv)
+  # A = jac_op_residual!(nlp, x, Av, Atv) # jac_op ignores the type of x in NLPModels 0.10-0.11
+  A = LinearOperator(T, m, n, false, false, v -> jprod_residual!(nlp, x, v, Av), nothing, v -> jtprod_residual!(nlp, x, v, Atv))
   ∇f = A' * r
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
@@ -197,7 +198,8 @@ function trunk(nlp :: AbstractNLSModel;
       x .= xt
       r = rt
       f = ft
-      A = jac_op_residual!(nlp, x, Av, Atv)
+      # A = jac_op_residual!(nlp, x, Av, Atv) # jac_op ignores the type of x in NLPModels 0.10-0.11
+      A = LinearOperator(T, m, n, false, false, v -> jprod_residual!(nlp, x, v, Av), nothing, v -> jtprod_residual!(nlp, x, v, Atv))
       ∇f = A' * r
       ∇fNorm2 = nrm2(n, ∇f)
     end
