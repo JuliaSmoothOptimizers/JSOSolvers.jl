@@ -5,8 +5,8 @@ makedocs(
   doctest = true,
   linkcheck = true,
   strict = true,
-  assets = ["assets/style.css"],
-  format = Documenter.HTML(prettyurls = get(ENV, "CI", nothing) == "true"),
+  format = Documenter.HTML(prettyurls = get(ENV, "CI", nothing) == "true",
+                           assets = ["assets/style.css"]),
   sitename = "JSOSolvers.jl",
   pages = ["Home" => "index.md",
            "Solvers" => "solvers.md",
@@ -15,8 +15,4 @@ makedocs(
           ]
 )
 
-deploydocs(deps = nothing, make = nothing,
-  repo = "github.com/JuliaSmoothOptimizers/JSOSolvers.jl.git",
-  target = "build",
-  devbranch = "master"
-)
+deploydocs(repo = "github.com/JuliaSmoothOptimizers/JSOSolvers.jl.git")
