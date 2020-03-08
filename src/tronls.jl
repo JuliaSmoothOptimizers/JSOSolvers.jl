@@ -1,27 +1,38 @@
-#  Some parts of this code were adapted from
-# https://github.com/PythonOptimizers/NLP.py/blob/develop/nlp/optimize/tron.py
+const tronls_allowed_subsolvers = [:cgls, :crls, :lsqr, :lsmr]
 
-export tron
-
-tron(nlp :: AbstractNLPModel; variant=:Newton, kwargs...) = tron(Val(:Newton), nlp; kwargs...)
+tron(nls :: AbstractNLSModel; variant=:GaussNewton, kwargs...) = tron(Val(:GaussNewton), nls; kwargs...)
 
 """
-    tron(nlp)
+    slope, qs = compute_As_slope_qs!(As, A, s, Fx)
+
+Compute `slope = dot(As, Fx)` and `qs = dot(As, As) / 2 + slope`. Use `As` to store `A * s`.
+"""
+function compute_As_slope_qs!(As::AbstractVector{T}, A::Union{AbstractMatrix,AbstractLinearOperator},
+                              s::AbstractVector{T}, Fx::AbstractVector{T}) where {T <: Real}
+  As .= A * s
+  slope = dot(As, Fx)
+  qs = dot(As, As) / 2 + slope
+  return slope, qs
+end
+
+"""
+    tron(nls)
 
 A pure Julia implementation of a trust-region solver for bound-constrained
-optimization:
+nonlinear least squares optimization:
 
-    min f(x)    s.t.    ℓ ≦ x ≦ u
+    min ½‖F(x)‖²    s.t.    ℓ ≦ x ≦ u
 
-TRON is described in
+This is an adaptation of the TRON method described in
 
 Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
 Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
 """
-function tron(::Val{:Newton},
-              nlp :: AbstractNLPModel;
+function tron(::Val{:GaussNewton},
+              nlp :: AbstractNLSModel;
               subsolver_logger :: AbstractLogger=NullLogger(),
               x :: AbstractVector=copy(nlp.meta.x0),
+              subsolver :: Symbol=:lsmr,
               μ₀ :: Real=eltype(x)(1e-2),
               μ₁ :: Real=one(eltype(x)),
               σ :: Real=eltype(x)(10),
@@ -38,23 +49,29 @@ function tron(::Val{:Newton},
   T = eltype(x)
   ℓ = T.(nlp.meta.lvar)
   u = T.(nlp.meta.uvar)
-  f(x) = obj(nlp, x)
-  g(x) = grad(nlp, x)
   n = nlp.meta.nvar
+  m = nlp.nls_meta.nequ
 
   iter = 0
   start_time = time()
   el_time = 0.0
 
   # Preallocation
-  temp = zeros(T, n)
+  Av = zeros(T, m)
+  Atv = zeros(T, n)
   gpx = zeros(T, n)
   xc = zeros(T, n)
   Hs = zeros(T, n)
 
+  F(x) = residual(nlp, x)
+  A(x) = jac_op_residual!(nlp, x, Av, Atv)
+
   x .= max.(ℓ, min.(x, u))
-  fx = f(x)
-  gx = g(x)
+  Fx = F(x)
+  fx = dot(Fx, Fx) / 2
+  Ax = A(x)
+  gx = copy(Ax' * Fx)
+  Fc = zeros(T, m)
   num_success_iters = 0
 
   # Optimality measure
@@ -76,10 +93,10 @@ function tron(::Val{:Newton},
     # Current iteration
     xc .= x
     fc = fx
+    Fc .= Fx
     Δ = get_property(tr, :radius)
-    H = hess_op!(nlp, xc, temp)
 
-    αC, s, cauchy_status = cauchy(x, H, gx, Δ, αC, ℓ, u, μ₀=μ₀, μ₁=μ₁, σ=σ)
+    αC, s, cauchy_status = cauchy_ls(x, Ax, Fx, gx, Δ, αC, ℓ, u, μ₀=μ₀, μ₁=μ₁, σ=σ)
 
     if cauchy_status != :success
       @error "Cauchy step returned: $cauchy_status"
@@ -87,12 +104,13 @@ function tron(::Val{:Newton},
       stalled = true
       continue
     end
-    s, Hs, cgits, cginfo = with_logger(subsolver_logger) do
-      projected_newton!(x, H, gx, Δ, cgtol, s, ℓ, u, max_cgiter=max_cgiter)
+    s, As, cgits, cginfo = with_logger(subsolver_logger) do
+      projected_gauss_newton!(x, Ax, Fx, Δ, cgtol, s, ℓ, u, subsolver=subsolver, max_cgiter=max_cgiter)
     end
-    slope = dot(n, gx, s)
-    qs = dot(n, s, Hs) / 2 + slope
-    fx = f(x)
+    slope = dot(m, Fx, As)
+    qs = dot(As, As) / 2 + slope
+    Fx = F(x)
+    fx = dot(Fx, Fx) / 2
 
     ared, pred, quad_min = aredpred(tr, nlp, fc, fx, qs, x, s, slope)
     if pred ≥ 0
@@ -114,7 +132,8 @@ function tron(::Val{:Newton},
 
     if acceptable(tr)
       num_success_iters += 1
-      gx = g(x)
+      Ax = A(x)
+      gx .= Ax' * Fx
       project_step!(gpx, x, gx, ℓ, u, -one(T))
       πx = nrm2(n, gpx)
     end
@@ -122,6 +141,7 @@ function tron(::Val{:Newton},
     # No post-iteration
 
     if !acceptable(tr)
+      Fx .= Fc
       fx = fc
       x .= xc
     end
@@ -151,34 +171,35 @@ function tron(::Val{:Newton},
                                iter=iter, elapsed_time=el_time)
 end
 
-"""`s = projected_line_search!(x, H, g, d, ℓ, u; μ₀ = 1e-2)`
+"""`s = projected_line_search_ls!(x, A, g, d, ℓ, u; μ₀ = 1e-2)`
 
 Performs a projected line search, searching for a step size `t` such that
 
-    0.5sᵀHs + sᵀg ≦ μ₀sᵀg,
+    ½‖As + Fx‖² ≤ ½‖Fx‖² + μ₀FxᵀAs
 
 where `s = P(x + t * d) - x`, while remaining on the same face as `x + d`.
 Backtracking is performed from t = 1.0. `x` is updated in place.
 """
-function projected_line_search!(x::AbstractVector{T},
-                                H::Union{AbstractMatrix,AbstractLinearOperator},
-                                g::AbstractVector{T},
-                                d::AbstractVector{T},
-                                ℓ::AbstractVector{T},
-                                u::AbstractVector{T}; μ₀::Real = T(1e-2)) where T <: Real
+function projected_line_search_ls!(x::AbstractVector{T},
+                                   A::Union{AbstractMatrix,AbstractLinearOperator},
+                                   Fx::AbstractVector{T},
+                                   d::AbstractVector{T},
+                                   ℓ::AbstractVector{T},
+                                   u::AbstractVector{T}; μ₀::Real = T(1e-2)) where T <: Real
   α = one(T)
   _, brkmin, _ = breakpoints(x, d, ℓ, u)
   nsteps = 0
   n = length(x)
+  m = length(Fx)
 
   s = zeros(T, n)
-  Hs = zeros(T, n)
+  As = zeros(T, m)
 
   search = true
   while search && α > brkmin
     nsteps += 1
     project_step!(s, x, d, ℓ, u, α)
-    slope, qs = compute_Hs_slope_qs!(Hs, H, s, g)
+    slope, qs = compute_As_slope_qs!(As, A, s, Fx)
     if qs <= μ₀ * slope
       search = false
     else
@@ -188,7 +209,7 @@ function projected_line_search!(x::AbstractVector{T},
   if α < 1 && α < brkmin
     α = brkmin
     project_step!(s, x, d, ℓ, u, α)
-    slope, qs = compute_Hs_slope_qs!(Hs, H, s, g)
+    slope, qs = compute_As_slope_qs!(As, A, s, Fx)
   end
 
   project_step!(s, x, d, ℓ, u, α)
@@ -197,26 +218,30 @@ function projected_line_search!(x::AbstractVector{T},
   return s
 end
 
-"""`α, s = cauchy(x, H, g, Δ, ℓ, u; μ₀ = 1e-2, μ₁ = 1.0, σ=10.0)`
+"""`α, s = cauchy_ls(x, A, Fx, g, Δ, ℓ, u; μ₀ = 1e-2, μ₁ = 1.0, σ=10.0)`
 
 Computes a Cauchy step `s = P(x - α g) - x` for
 
-    min  q(s) = ¹/₂sᵀHs + gᵀs     s.t.    ‖s‖ ≦ μ₁Δ,  ℓ ≦ x + s ≦ u,
+    min  q(s) = ½‖As + Fx‖² - ½‖Fx‖²     s.t.    ‖s‖ ≦ μ₁Δ,  ℓ ≦ x + s ≦ u,
 
 with the sufficient decrease condition
 
-    q(s) ≦ μ₀sᵀg.
+    q(s) ≦ μ₀gᵀs,
+
+where g = AᵀFx.
 """
-function cauchy(x::AbstractVector{T},
-                H::Union{AbstractMatrix,AbstractLinearOperator},
-                g::AbstractVector{T},
-                Δ::Real, α::Real, ℓ::AbstractVector{T}, u::AbstractVector{T};
-                μ₀::Real = T(1e-2), μ₁::Real = one(T), σ::Real = T(10)) where T <: Real
+function cauchy_ls(x::AbstractVector{T},
+                   A::Union{AbstractMatrix,AbstractLinearOperator},
+                   Fx::AbstractVector{T},
+                   g::AbstractVector{T},
+                   Δ::Real, α::Real, ℓ::AbstractVector{T}, u::AbstractVector{T};
+                   μ₀::Real = T(1e-2), μ₁::Real = one(T), σ::Real = T(10)) where T <: Real
   # TODO: Use brkmin to care for g direction
   _, _, brkmax = breakpoints(x, -g, ℓ, u)
   n = length(x)
+  m = length(Fx)
   s = zeros(T, n)
-  Hs = zeros(T, n)
+  As = zeros(T, m)
 
   status = :success
 
@@ -227,7 +252,7 @@ function cauchy(x::AbstractVector{T},
   if s_norm > μ₁ * Δ
     interp = true
   else
-    slope, qs = compute_Hs_slope_qs!(Hs, H, s, g)
+    slope, qs = compute_As_slope_qs!(As, A, s, Fx)
     interp = qs >= μ₀ * slope
   end
 
@@ -238,7 +263,7 @@ function cauchy(x::AbstractVector{T},
       project_step!(s, x, g, ℓ, u, -α)
       s_norm = nrm2(n, s)
       if s_norm <= μ₁ * Δ
-        slope, qs = compute_Hs_slope_qs!(Hs, H, s, g)
+        slope, qs = compute_As_slope_qs!(As, A, s, Fx)
         search = qs >= μ₀ * slope
       end
       # TODO: Correctly assess why this fails
@@ -256,7 +281,7 @@ function cauchy(x::AbstractVector{T},
       project_step!(s, x, g, ℓ, u, -α)
       s_norm = nrm2(n, s)
       if s_norm <= μ₁ * Δ
-        slope, qs = compute_Hs_slope_qs!(Hs, H, s, g)
+        slope, qs = compute_As_slope_qs!(As, A, s, Fx)
         if qs <= μ₀ * slope
           αs = α
         end
@@ -271,57 +296,60 @@ function cauchy(x::AbstractVector{T},
   return α, s, status
 end
 
-"""`projected_newton!(x, H, g, Δ, gctol, s, max_cgiter, ℓ, u)`
+"""`projected_gauss_newton!(x, A, Fx, Δ, gctol, s, max_cgiter, ℓ, u)`
 
 Compute an approximate solution `d` for
 
-min q(d) = ¹/₂dᵀHs + dᵀg    s.t.    ℓ ≦ x + d ≦ u,  ‖d‖ ≦ Δ
+    min q(d) = ½‖Ad + Fx‖² - ½‖Fx‖²     s.t.    ℓ ≦ x + d ≦ u,  ‖d‖ ≦ Δ
 
 starting from `s`.  The steps are computed using the conjugate gradient method
 projected on the active bounds.
 """
-function projected_newton!(x::AbstractVector{T}, H::Union{AbstractMatrix,AbstractLinearOperator},
-                           g::AbstractVector{T}, Δ::Real, cgtol::Real, s::AbstractVector{T},
-                           ℓ::AbstractVector{T}, u::AbstractVector{T};
-                           max_cgiter::Int = max(50, length(x))) where T <: Real
+function projected_gauss_newton!(x::AbstractVector{T}, A::Union{AbstractMatrix,AbstractLinearOperator},
+                                 Fx::AbstractVector{T}, Δ::Real, cgtol::Real, s::AbstractVector{T},
+                                 ℓ::AbstractVector{T}, u::AbstractVector{T};
+                                 subsolver :: Symbol=:lsmr,
+                                 max_cgiter::Int = max(50, length(x))) where T <: Real
   n = length(x)
   status = ""
+  subsolver in tronls_allowed_subsolvers || error("subproblem solver must be one of $tronls_allowed_subsolvers")
+  lssolver = eval(subsolver)
 
-  Hs = H * s
+  As = A * s
 
   # Projected Newton Step
   exit_optimal = false
   exit_pcg = false
   exit_itmax = false
   iters = 0
-  x .= x .+ s
-  project!(x, x, ℓ, u)
+  xt = x .+ s
+  project!(xt, xt, ℓ, u)
   while !(exit_optimal || exit_pcg || exit_itmax)
-    ifree = setdiff(1:n, active(x, ℓ, u))
+    ifree = setdiff(1:n, active(xt, ℓ, u))
     if length(ifree) == 0
       exit_optimal = true
       continue
     end
     Z = opExtension(ifree, n)
-    @views wa = g[ifree]
-    @views gfree = Hs[ifree] + wa
-    gfnorm = norm(wa)
+    @views wa = Fx
+    @views Ffree = As + wa
+    wanorm = norm(wa)
 
-    ZHZ = Z' * H * Z
-    st, stats = Krylov.cg(ZHZ, -gfree, radius=Δ, rtol=cgtol, atol=zero(T),
-                          itmax=max_cgiter)
+    AZ = A * Z
+    st, stats = lssolver(AZ, -Ffree, radius=Δ, rtol=cgtol, atol=zero(T),
+                         itmax=max_cgiter)
     iters += length(stats.residuals)
     status = stats.status
 
     # Projected line search
-    xfree = @view x[ifree]
-    @views w = projected_line_search!(xfree, ZHZ, gfree, st, ℓ[ifree], u[ifree])
+    xfree = @view xt[ifree]
+    @views w = projected_line_search_ls!(xfree, AZ, Ffree, st, ℓ[ifree], u[ifree])
     @views s[ifree] .+= w
 
-    Hs .= H * s
+    As .= A * s
 
-    @views gfree .= Hs[ifree] .+ g[ifree]
-    if norm(gfree) <= cgtol * gfnorm
+    @views Ffree .= As .+ Fx
+    if norm(Z' * A' * Ffree) <= cgtol * wanorm
       exit_optimal = true
     elseif status == "on trust-region boundary"
       exit_pcg = true
@@ -337,5 +365,7 @@ function projected_newton!(x::AbstractVector{T}, H::Union{AbstractMatrix,Abstrac
     status # on trust-region
   end
 
-  return s, Hs, iters, status
+  x .= xt
+
+  return s, As, iters, status
 end
