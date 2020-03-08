@@ -17,8 +17,11 @@ function test_solvers()
 
   @info "Testing NLS solvers"
   @info "  unconstrained solvers"
-  for solver in [(nls; kwargs...) -> trunk(nls, subsolver=:cgls; kwargs...)] # trunk with cgls due to multiprecision
-    @info "    $solver"
+  for (name,solver) in [
+         ("trunk+cgls", (nls; kwargs...) -> trunk(nls, subsolver=:cgls; kwargs...)), # trunk with cgls due to multiprecision
+         ("trunk full Hessian", (nls; kwargs...) -> trunk(nls, variant=:Newton; kwargs...))
+       ]
+    @info "    $name"
     test_unconstrained_nls_solver(solver)
   end
 end
