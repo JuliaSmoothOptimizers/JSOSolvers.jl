@@ -1,5 +1,6 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+JSOSolvers = "10dff2fc-5484-5881-a0e0-c90441020f8a"
 
 [compat]
 Documenter = "~0.24"
