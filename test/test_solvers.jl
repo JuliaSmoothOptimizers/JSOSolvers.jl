@@ -1,6 +1,7 @@
 include("solvers/unconstrained.jl")
 include("solvers/bound-constrained.jl")
 include("solvers/unconstrained-nls.jl")
+include("solvers/bound-constrained-nls.jl")
 
 function test_solvers()
   @info "Testing NLP solvers"
@@ -19,10 +20,17 @@ function test_solvers()
   @info "  unconstrained solvers"
   for (name,solver) in [
          ("trunk+cgls", (nls; kwargs...) -> trunk(nls, subsolver=:cgls; kwargs...)), # trunk with cgls due to multiprecision
-         ("trunk full Hessian", (nls; kwargs...) -> trunk(nls, variant=:Newton; kwargs...))
+         ("trunk full Hessian", (nls; kwargs...) -> trunk(nls, variant=:Newton; kwargs...)),
+         ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver=:cgls; kwargs...)),
+         ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant=:Newton; kwargs...))
        ]
     @info "    $name"
     test_unconstrained_nls_solver(solver)
+  end
+  @info "  bound-constrained solvers"
+  for solver in [(nls; kwargs...) -> tron(nls, subsolver=:cgls; kwargs...) ]
+    @info "    $solver"
+    test_bound_constrained_nls_solver(solver)
   end
 end
 

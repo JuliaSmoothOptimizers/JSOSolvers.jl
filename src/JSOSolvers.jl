@@ -16,4 +16,7 @@ include("trunkls.jl")
 # Bound-constrained solvers
 include("tron.jl")
 
+# Bound-constrained solvers for NLS
+include("tronls.jl")
+
 end
