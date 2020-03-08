@@ -1,5 +1,7 @@
 export trunk
 
+trunk(nlp :: AbstractNLPModel; variant=:Newton, kwargs...) = trunk(Val(:Newton), nlp; kwargs...)
+
 """
     trunk(nlp)
 
@@ -15,7 +17,8 @@ The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
     SIAM, Philadelphia, USA, 2000.
     DOI: 10.1137/1.9780898719857.
 """
-function trunk(nlp :: AbstractNLPModel;
+function trunk(::Val{:Newton},
+               nlp :: AbstractNLPModel;
                subsolver_logger :: AbstractLogger=NullLogger(),
                x :: AbstractVector=copy(nlp.meta.x0),
                atol :: Real=√eps(eltype(x)), rtol :: Real=√eps(eltype(x)),

@@ -1,5 +1,7 @@
 const trunkls_allowed_subsolvers = [:cgls, :crls, :lsqr, :lsmr]
 
+trunk(nlp :: AbstractNLSModel; variant=:GaussNewton, kwargs...) = trunk(Val(:GaussNewton), nlp; kwargs...)
+
 """
     trunk(nls)
 
@@ -15,7 +17,8 @@ The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
     SIAM, Philadelphia, USA, 2000.
     DOI: 10.1137/1.9780898719857.
 """
-function trunk(nlp :: AbstractNLSModel;
+function trunk(::Val{:GaussNewton},
+               nlp :: AbstractNLSModel;
                x :: AbstractVector=copy(nlp.meta.x0),
                subsolver :: Symbol=:lsmr,
                atol :: Real=√eps(eltype(x)), rtol :: Real=√eps(eltype(x)),
