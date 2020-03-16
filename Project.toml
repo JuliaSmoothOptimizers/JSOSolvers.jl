@@ -1,6 +1,6 @@
 name = "JSOSolvers"
 uuid = "10dff2fc-5484-5881-a0e0-c90441020f8a"
-version = "0.2.0"
+version = "0.3.0"
 
 [deps]
 Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
@@ -14,7 +14,7 @@ SolverTools = "b5612192-2639-5dc1-abfe-fbedd65fab29"
 [compat]
 Krylov = "0.3, 0.4"
 LinearOperators = "0.6, 0.7, 1"
-NLPModels = "0.11.1"
+NLPModels = "0.11.1, 0.12"
 SolverTools = "0.1"
 julia = "1"
 
