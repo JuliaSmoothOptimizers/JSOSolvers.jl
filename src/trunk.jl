@@ -63,11 +63,16 @@ function trunk(::Val{:Newton},
   tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   stalled = false
   status = :unknown
+  solved = optimal || tired || stalled
+
+  if isa(nlp, QuasiNewtonModel) && !solved
+    ∇fn = copy(∇f)
+  end
 
   @info log_header([:iter, :f, :dual, :radius, :ratio, :inner, :bk, :cgstatus], [Int, T, T, T, T, Int, Int, String],
                    hdr_override=Dict(:f=>"f(x)", :dual=>"π", :radius=>"Δ"))
 
-  while !(optimal || tired || stalled)
+  while !solved
     # Compute inexact solution to trust-region subproblem
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
@@ -187,6 +192,13 @@ function trunk(::Val{:Newton},
       f = ft
       grad!(nlp, x, ∇f)
       ∇fNorm2 = nrm2(n, ∇f)
+
+      if isa(nlp, QuasiNewtonModel)
+        ∇fn .-= ∇f
+        ∇fn .*= -1  # = ∇f(xₖ₊₁) - ∇f(xₖ)
+        push!(nlp, s, ∇fn)
+        ∇fn .= ∇f
+      end
     end
 
     # Move on.
@@ -195,6 +207,7 @@ function trunk(::Val{:Newton},
     optimal = ∇fNorm2 ≤ ϵ
     elapsed_time = time() - start_time
     tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
+    solved = optimal || tired || stalled
   end
   @info log_row(Any[iter, f, ∇fNorm2, get_property(tr, :radius)])
 
