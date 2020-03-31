@@ -158,7 +158,7 @@ function tron(::Val{:Newton},
   end
 
   return GenericExecutionStats(status, nlp, solution=x, objective=fx, dual_feas=πx,
-                               iter=iter, elapsed_time=el_time)
+                               primal_feas=zero(eltype(x)), iter=iter, elapsed_time=el_time)
 end
 
 """`s = projected_line_search!(x, H, g, d, ℓ, u; μ₀ = 1e-2)`
