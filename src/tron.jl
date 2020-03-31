@@ -3,7 +3,7 @@
 
 export tron
 
-tron(nlp :: AbstractNLPModel; variant=:Newton, kwargs...) = tron(Val(:Newton), nlp; kwargs...)
+tron(nlp :: AbstractNLPModel; variant=:Newton, kwargs...) = tron(Val(variant), nlp; kwargs...)
 
 """
     tron(nlp)
