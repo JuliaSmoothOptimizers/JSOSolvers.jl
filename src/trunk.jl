@@ -1,6 +1,6 @@
 export trunk
 
-trunk(nlp :: AbstractNLPModel; variant=:Newton, kwargs...) = trunk(Val(:Newton), nlp; kwargs...)
+trunk(nlp :: AbstractNLPModel; variant=:Newton, kwargs...) = trunk(Val(variant), nlp; kwargs...)
 
 """
     trunk(nlp)

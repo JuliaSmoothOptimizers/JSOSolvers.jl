@@ -1,6 +1,6 @@
 const trunkls_allowed_subsolvers = [:cgls, :crls, :lsqr, :lsmr]
 
-trunk(nlp :: AbstractNLSModel; variant=:GaussNewton, kwargs...) = trunk(Val(:GaussNewton), nlp; kwargs...)
+trunk(nlp :: AbstractNLSModel; variant=:GaussNewton, kwargs...) = trunk(Val(variant), nlp; kwargs...)
 
 """
     trunk(nls)

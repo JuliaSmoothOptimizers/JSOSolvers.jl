@@ -1,6 +1,6 @@
 const tronls_allowed_subsolvers = [:cgls, :crls, :lsqr, :lsmr]
 
-tron(nls :: AbstractNLSModel; variant=:GaussNewton, kwargs...) = tron(Val(:GaussNewton), nls; kwargs...)
+tron(nls :: AbstractNLSModel; variant=:GaussNewton, kwargs...) = tron(Val(variant), nls; kwargs...)
 
 """
     slope, qs = compute_As_slope_qs!(As, A, s, Fx)

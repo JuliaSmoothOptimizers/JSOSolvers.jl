@@ -28,8 +28,11 @@ function test_solvers()
     test_unconstrained_nls_solver(solver)
   end
   @info "  bound-constrained solvers"
-  for solver in [(nls; kwargs...) -> tron(nls, subsolver=:cgls; kwargs...) ]
-    @info "    $solver"
+  for (name,solver) in [
+         ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver=:cgls; kwargs...)),
+         ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant=:Newton; kwargs...))
+        ]
+    @info "    $name"
     test_bound_constrained_nls_solver(solver)
   end
 end
