@@ -99,6 +99,23 @@ function test_bound_constrained_nls_solver(solver)
     @test stats.status == :first_order
   end
 
+  @testset "Nonlinear regression of COVID19 cases in São Paulo, Brazil" begin
+    y = [136, 152, 164, 240, 286, 345, 459, 631, 745, 810, 862, 1052, 1223, 1406, 1451, 1517]
+    n = length(y)
+    x = collect(1:n)
+    h(β, x) = β[3] * exp(β[1] + β[2] * x) / (1 + exp(β[1] + β[2] * x))
+    r(β) = [y[i] - h(β, x[i]) for i = 1:n]
+    lvar = [-Inf; -Inf; 2y[end]]
+    uvar = [ 0.0;  Inf;     Inf]
+    nls = ADNLSModel(r, [-1.0; 1.0; 3y[end]], n, lvar, uvar)
+
+    stats = with_logger(NullLogger()) do
+      solver(nls, max_time=30.0)
+    end
+    @test stats.dual_feas < 1e-6 * norm(grad(nls, nls.meta.x0))
+    @test stats.status == :first_order
+  end
+
   @testset "Multiprecision" begin
     F(x) = [x[1] - 1; 10 * (x[2] - x[1]^2)]
     for T in (Float16, Float32, Float64, BigFloat)
