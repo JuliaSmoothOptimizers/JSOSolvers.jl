@@ -68,6 +68,11 @@ function tron(::Val{:Newton},
   stalled = false
   status = :unknown
 
+  local gn
+  if isa(nlp, QuasiNewtonModel)
+    gn = copy(gx)
+  end
+
   αC = one(T)
   tr = TRONTrustRegion(min(max(one(T), πx / 10), 100))
   @info log_header([:iter, :f, :dual, :radius, :ratio, :cgstatus], [Int, T, T, T, T, String],
@@ -117,9 +122,14 @@ function tron(::Val{:Newton},
       gx = g(x)
       project_step!(gpx, x, gx, ℓ, u, -one(T))
       πx = nrm2(n, gpx)
-    end
 
-    # No post-iteration
+      if isa(nlp, QuasiNewtonModel)
+        gn .-= gx
+        gn .*= -1  # gn = ∇f(xₖ₊₁) - ∇f(xₖ)
+        push!(nlp, s, gn)
+        gn .= gx
+      end
+    end
 
     if !acceptable(tr)
       fx = fc
