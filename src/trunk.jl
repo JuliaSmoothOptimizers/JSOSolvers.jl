@@ -28,6 +28,10 @@ function trunk(::Val{:Newton},
                monotone :: Bool=true,
                nm_itmax :: Int=25)
 
+  if !unconstrained(nlp)
+    error("trunk should only be called for unconstrained problems. Try tron instead")
+  end
+
   start_time = time()
   elapsed_time = 0.0
 
