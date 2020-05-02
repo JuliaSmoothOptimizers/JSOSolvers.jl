@@ -14,6 +14,10 @@ function lbfgs(nlp :: AbstractNLPModel;
                verbose :: Bool=true,
                mem :: Int=5)
 
+  if !unconstrained(nlp)
+    error("lbfgs should only be called for unconstrained problems. Try tron instead")
+  end
+
   start_time = time()
   elapsed_time = 0.0
 

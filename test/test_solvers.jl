@@ -41,3 +41,4 @@ test_solvers()
 
 @info "Specific solver tests"
 include("solvers/trunkls.jl")
+include("incompatible.jl")

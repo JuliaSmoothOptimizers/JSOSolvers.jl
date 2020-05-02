@@ -46,6 +46,10 @@ function tron(::Val{:GaussNewton},
               frtol :: Real=eps(eltype(x))^eltype(x)(2/3)
              )
 
+  if !(unconstrained(nlp) || bound_constrained(nlp))
+    error("tron should only be called for unconstrained or bound-constrained problems")
+  end
+
   T = eltype(x)
   ℓ = T.(nlp.meta.lvar)
   u = T.(nlp.meta.uvar)
