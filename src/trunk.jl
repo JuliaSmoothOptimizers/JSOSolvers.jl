@@ -19,6 +19,7 @@ The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
 """
 function trunk(::Val{:Newton},
                nlp :: AbstractNLPModel;
+               callback = (args...) -> nothing,
                subsolver_logger :: AbstractLogger=NullLogger(),
                x :: AbstractVector=copy(nlp.meta.x0),
                atol :: Real=√eps(eltype(x)), rtol :: Real=√eps(eltype(x)),
@@ -32,8 +33,10 @@ function trunk(::Val{:Newton},
     error("trunk should only be called for unconstrained problems. Try tron instead")
   end
 
+  wks = Dict{Symbol,Any}(:x => x)
+
   start_time = time()
-  elapsed_time = 0.0
+  wks[:elapsed_time] = 0.0
 
   T = eltype(x)
   n = nlp.meta.nvar
@@ -43,19 +46,19 @@ function trunk(::Val{:Newton},
   # Armijo linesearch parameter.
   β = eps(T)^T(1/4)
 
-  iter = 0
-  f = obj(nlp, x)
-  ∇f = grad(nlp, x)
+  wks[:iter] = 0
+  wks[:f] = obj(nlp, x)
+  wks[:∇f] = ∇f = grad(nlp, x)
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
-  tr = TrustRegion(min(max(∇fNorm2 / 10, one(T)), T(100)))
+  wks[:tr] = tr = TrustRegion(min(max(∇fNorm2 / 10, one(T)), T(100)))
 
   # Non-monotone mode parameters.
   # fmin: current best overall objective value
   # nm_iter: number of successful iterations since fmin was first attained
   # fref: objective value at reference iteration
   # σref: cumulative model decrease over successful iterations since the reference iteration
-  fmin = fref = fcur = f
+  fmin = fref = fcur = wks[:f]
   σref = σcur = zero(T)
   nm_iter = 0
 
@@ -63,11 +66,12 @@ function trunk(::Val{:Newton},
   xt = Vector{T}(undef, n)
   temp = Vector{T}(undef, n)
 
-  optimal = ∇fNorm2 ≤ ϵ
-  tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
-  stalled = false
+  wks[:optimal] = ∇fNorm2 ≤ ϵ
+  wks[:tired] = neval_obj(nlp) > max_eval ≥ 0 || wks[:elapsed_time] > max_time
+  wks[:stalled] = false
+  wks[:user_stop] = false
   status = :unknown
-  solved = optimal || tired || stalled
+  solved = wks[:optimal] || wks[:tired] || wks[:stalled] || wks[:user_stop]
 
   if isa(nlp, QuasiNewtonModel) && !solved
     ∇fn = copy(∇f)
@@ -80,10 +84,10 @@ function trunk(::Val{:Newton},
     # Compute inexact solution to trust-region subproblem
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
-    H = hess_op!(nlp, x, temp)
+    wks[:H] = hess_op!(nlp, x, temp)
     cgtol = max(rtol, min(T(0.1), 9 * cgtol / 10, sqrt(∇fNorm2)))
     (s, cg_stats) = with_logger(subsolver_logger) do
-      cg(H, -∇f,
+      cg(wks[:H], -∇f,
          atol=T(atol), rtol=cgtol,
          radius=get_property(tr, :radius),
          itmax=max(2 * n, 50))
@@ -93,11 +97,11 @@ function trunk(::Val{:Newton},
     sNorm = nrm2(n, s)
     copyaxpy!(n, one(T), s, x, xt)
     slope = dot(n, s, ∇f)
-    curv = dot(n, s, H * s)
+    curv = dot(n, s, wks[:H] * s)
     Δq = slope + curv / 2
     ft = obj(nlp, xt)
 
-    ared, pred = aredpred(nlp, f, ft, Δq, xt, s, slope)
+    ared, pred = aredpred(nlp, wks[:f], ft, Δq, xt, s, slope)
     if pred ≥ 0
       status = :neg_pred
       stalled = true
@@ -133,7 +137,7 @@ function trunk(::Val{:Newton},
         continue
       end
       α = one(T)
-      while (bk < bk_max) && (ft > f + β * α * slope)
+      while (bk < bk_max) && (ft > wks[:f] + β * α * slope)
         bk = bk + 1
         α /= T(1.2)
         copyaxpy!(n, α, s, x, xt)
@@ -143,7 +147,7 @@ function trunk(::Val{:Newton},
       scal!(n, α, s)
       slope *= α
       Δq = slope + α * α * curv / 2
-      ared, pred = aredpred(nlp, f, ft, Δq, xt, s, slope)
+      ared, pred = aredpred(nlp, wks[:f], ft, Δq, xt, s, slope)
       if pred ≥ 0
         status = :neg_pred
         stalled = true
@@ -162,9 +166,9 @@ function trunk(::Val{:Newton},
       end
     end
 
-    @info log_row([iter, f, ∇fNorm2, get_property(tr, :radius), get_property(tr, :ratio),
+    @info log_row([wks[:iter], wks[:f], ∇fNorm2, get_property(tr, :radius), get_property(tr, :ratio),
                    length(cg_stats.residuals), bk, cg_stats.status])
-    iter = iter + 1
+    wks[:iter] += 1
 
     if acceptable(tr)
       # Update non-monotone mode parameters.
@@ -193,7 +197,7 @@ function trunk(::Val{:Newton},
       end
 
       x .= xt
-      f = ft
+      wks[:f] = ft
       grad!(nlp, x, ∇f)
       ∇fNorm2 = nrm2(n, ∇f)
 
@@ -208,23 +212,26 @@ function trunk(::Val{:Newton},
     # Move on.
     update!(tr, sNorm)
 
-    optimal = ∇fNorm2 ≤ ϵ
-    elapsed_time = time() - start_time
-    tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
-    solved = optimal || tired || stalled
-  end
-  @info log_row(Any[iter, f, ∇fNorm2, get_property(tr, :radius)])
+    wks[:optimal] = ∇fNorm2 ≤ ϵ
+    wks[:elapsed_time] = time() - start_time
+    wks[:tired] = neval_obj(nlp) > max_eval ≥ 0 || wks[:elapsed_time] > max_time
 
-  if optimal
+    callback(nlp, wks)
+
+    solved = wks[:optimal] || wks[:tired] || wks[:stalled] || wks[:user_stop]
+  end
+  @info log_row(Any[wks[:iter], wks[:f], ∇fNorm2, get_property(tr, :radius)])
+
+  if wks[:optimal]
     status = :first_order
-  elseif tired
+  elseif wks[:tired]
     if neval_obj(nlp) > max_eval ≥ 0
       status = :max_eval
-    elseif elapsed_time > max_time
+    elseif wks[:elapsed_time] > max_time
       status = :max_time
     end
   end
 
-  return GenericExecutionStats(status, nlp, solution=x, objective=f, dual_feas=∇fNorm2,
-                               iter=iter, elapsed_time=elapsed_time)
+  return GenericExecutionStats(status, nlp, solution=x, objective=wks[:f], dual_feas=∇fNorm2,
+                               iter=wks[:iter], elapsed_time=wks[:elapsed_time])
 end
