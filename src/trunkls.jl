@@ -160,7 +160,7 @@ function trunk(::Val{:GaussNewton},
       end
       tr.ratio = ared / pred
       if !monotone
-        ared_hist, pred_hist = ratio(nlp, fref, ft, σref + Δq, xt, s, slope)
+        ared_hist, pred_hist = aredpred(nlp, fref, ft, σref + Δq, xt, s, slope)
         if pred_hist ≥ 0
           status = :neg_pred
           stalled = true
