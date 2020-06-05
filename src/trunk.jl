@@ -117,6 +117,7 @@ function solve!(
   solver::TrunkSolver{T, V},
   nlp::AbstractNLPModel{T, V};
   subsolver_logger::AbstractLogger = NullLogger(),
+  callback = (args...) -> nothing,
   x::V = nlp.meta.x0,
   atol::T = √eps(T),
   rtol::T = √eps(T),
@@ -135,8 +136,10 @@ function solve!(
     error("trunk should only be called for unconstrained problems. Try tron instead")
   end
 
+  wks = Dict{Symbol,Any}(:x => x)
+
   start_time = time()
-  elapsed_time = 0.0
+  wks[:elapsed_time] = 0.0
 
   n = nlp.meta.nvar
 
@@ -155,8 +158,8 @@ function solve!(
   # Armijo linesearch parameter.
   β = eps(T)^T(1 / 4)
 
-  iter = 0
-  f = obj(nlp, x)
+  wks[:iter] = 0
+  wks[:f] = obj(nlp, x)
   grad!(nlp, x, ∇f)
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
@@ -168,15 +171,17 @@ function solve!(
   # nm_iter: number of successful iterations since fmin was first attained
   # fref: objective value at reference iteration
   # σref: cumulative model decrease over successful iterations since the reference iteration
-  fmin = fref = fcur = f
+  fmin = fref = fcur = wks[:f]
   σref = σcur = zero(T)
   nm_iter = 0
 
-  optimal = ∇fNorm2 ≤ ϵ
-  tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
-  stalled = false
+  wks[:optimal] = ∇fNorm2 ≤ ϵ
+  wks[:tired] = neval_obj(nlp) > max_eval ≥ 0 || wks[:elapsed_time] > max_time
+  wks[:stalled] = false
+  wks[:user_stop] = false
+
   status = :unknown
-  solved = optimal || tired || stalled
+  done = wks[:optimal] || wks[:tired] || wks[:stalled] || wks[:user_stop]
 
   verbose > 0 && @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :inner, :bk, :cgstatus],
@@ -184,7 +189,7 @@ function solve!(
     hdr_override = Dict(:f => "f(x)", :dual => "π", :radius => "Δ"),
   )
 
-  while !(solved || tired || stalled)
+  while !done
     # Compute inexact solution to trust-region subproblem
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
@@ -211,7 +216,7 @@ function solve!(
     Δq = slope + curv / 2
     ft = obj(nlp, xt)
 
-    ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
+    ared, pred = aredpred!(tr, nlp, wks[:f], ft, Δq, xt, s, slope)
     if pred ≥ 0
       status = :neg_pred
       stalled = true
@@ -247,7 +252,7 @@ function solve!(
         continue
       end
       α = one(T)
-      while (bk < bk_max) && (ft > f + β * α * slope)
+      while (bk < bk_max) && (ft > wks[:f] + β * α * slope)
         bk = bk + 1
         α /= T(1.2)
         copyaxpy!(n, α, s, x, xt)
@@ -257,7 +262,7 @@ function solve!(
       scal!(n, α, s)
       slope *= α
       Δq = slope + α * α * curv / 2
-      ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
+      ared, pred = aredpred!(tr, nlp, wks[:f], ft, Δq, xt, s, slope)
       if pred ≥ 0
         status = :neg_pred
         stalled = true
@@ -279,8 +284,8 @@ function solve!(
     verbose > 0 &&
       mod(iter, verbose) == 0 &&
       @info log_row([
-        iter,
-        f,
+        wks[:iter],
+        wks[:f],
         ∇fNorm2,
         tr.radius,
         tr.ratio,
@@ -288,7 +293,7 @@ function solve!(
         bk,
         cg_stats.status,
       ])
-    iter = iter + 1
+    wks[:iter] += 1
 
     if acceptable(tr)
       # Update non-monotone mode parameters.
@@ -317,7 +322,7 @@ function solve!(
       end
 
       x .= xt
-      f = ft
+      wks[:f] = ft
       if !tr.good_grad
         grad!(nlp, x, ∇f)
       else
@@ -337,19 +342,22 @@ function solve!(
     # Move on.
     update!(tr, sNorm)
 
-    optimal = ∇fNorm2 ≤ ϵ
-    elapsed_time = time() - start_time
-    tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
-    solved = optimal || tired || stalled
-  end
-  verbose > 0 && @info log_row(Any[iter, f, ∇fNorm2, tr.radius])
+    wks[:optimal] = ∇fNorm2 ≤ ϵ
+    wks[:elapsed_time] = time() - start_time
+    wks[:tired] = neval_obj(nlp) > max_eval ≥ 0 || wks[:elapsed_time] > max_time
 
-  if optimal
+    callback(nlp, solver, wks)
+
+    done = wks[:optimal] || wks[:tired] || wks[:stalled] || wks[:user_stop]
+  end
+  verbose > 0 && @info log_row(Any[wks[:iter], wks[:f], ∇fNorm2, tr.radius])
+
+  if wks[:optimal]
     status = :first_order
-  elseif tired
+  elseif wks[:tired]
     if neval_obj(nlp) > max_eval ≥ 0
       status = :max_eval
-    elseif elapsed_time > max_time
+    elseif wks[:elapsed_time] > max_time
       status = :max_time
     end
   end
@@ -358,9 +366,9 @@ function solve!(
     status,
     nlp,
     solution = x,
-    objective = f,
+    objective = wks[:f],
     dual_feas = ∇fNorm2,
-    iter = iter,
-    elapsed_time = elapsed_time,
+    iter = wks[:iter],
+    elapsed_time = wks[:elapsed_time],
   )
 end
