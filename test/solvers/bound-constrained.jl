@@ -6,7 +6,7 @@ function test_bound_constrained_solver(solver)
       l = [0.5; 0.25]
       u = [1.2; 1.5]
 
-      nlp = ADNLPModel(f, x0, lvar=l, uvar=u)
+      nlp = ADNLPModel(f, x0, l, u)
 
       stats = with_logger(NullLogger()) do
         solver(nlp)
@@ -23,7 +23,7 @@ function test_bound_constrained_solver(solver)
       x0 = (l + u) / 2
       f(x) = (x[1] - 1)^2 + 100 * (x[2] - x[1]^2)^2
 
-      nlp = ADNLPModel(f, x0, lvar=l, uvar=u)
+      nlp = ADNLPModel(f, x0, l, u)
 
       stats = with_logger(NullLogger()) do
         solver(nlp)
@@ -40,7 +40,7 @@ function test_bound_constrained_solver(solver)
       x0 = (l + u) / 2
       f(x) = (x[1] - 1)^2 + 100 * (x[2] - x[1]^2)^2
 
-      nlp = ADNLPModel(f, x0, lvar=l, uvar=u)
+      nlp = ADNLPModel(f, x0, l, u)
 
       sol = [0.9; 0.81]
 
@@ -60,7 +60,7 @@ function test_bound_constrained_solver(solver)
       l = [1.0; 0.0; 0.0]
       u = [1.0; 2.0; 2.0]
       f(x) = 0.5*dot(x .- 3, x .- 3)
-      nlp = ADNLPModel(f, x0, lvar=l, uvar=u)
+      nlp = ADNLPModel(f, x0, l, u)
       stats = with_logger(NullLogger()) do
         solver(nlp)
       end
@@ -76,7 +76,7 @@ function test_bound_constrained_solver(solver)
       l = 0.9*ones(n)
       u = copy(l)
       f(x) = sum(x.^4)
-      nlp = ADNLPModel(f, x0, lvar=l, uvar=u)
+      nlp = ADNLPModel(f, x0, l, u)
       stats = with_logger(NullLogger()) do
         solver(nlp)
       end
@@ -89,7 +89,7 @@ function test_bound_constrained_solver(solver)
   @testset "Extended Rosenbrock" begin
     n = 30
     nlp = ADNLPModel(x->sum(100 * (x[i+1] - x[i]^2)^2 + (x[i] - 1)^2 for i = 1:n-1), (1:n) ./ (n+1),
-                     lvar=zeros(n), uvar=0.3*ones(n))
+                     zeros(n), 0.3*ones(n))
 
     stats = with_logger(NullLogger()) do
       solver(nlp, max_time=30.0)
@@ -101,7 +101,7 @@ function test_bound_constrained_solver(solver)
   @testset "Multiprecision" begin
     for T in (Float16, Float32, Float64, BigFloat)
       nlp = ADNLPModel(x -> (x[1] - 1)^2 + (x[2] - x[1]^2)^2, T[-1.2; 1.0],
-                       lvar=zeros(T, 2), uvar= ones(T, 2) / 2)
+                       zeros(T, 2),  ones(T, 2) / 2)
       ϵ = eps(T)^T(1/4)
 
       g0 = grad(nlp, nlp.meta.x0)

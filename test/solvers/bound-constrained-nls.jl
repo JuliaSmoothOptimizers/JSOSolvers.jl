@@ -6,7 +6,7 @@ function test_bound_constrained_nls_solver(solver)
       l = [0.5; 0.25]
       u = [1.2; 1.5]
 
-      nls = ADNLSModel(F, x0, 2, lvar=l, uvar=u)
+      nls = ADNLSModel(F, x0, 2, l, u)
 
       stats = with_logger(NullLogger()) do
         solver(nls)
@@ -23,7 +23,7 @@ function test_bound_constrained_nls_solver(solver)
       x0 = (l + u) / 2
       F(x) = [x[1] - 1; 10 * (x[2] - x[1]^2)]
 
-      nls = ADNLSModel(F, x0, 2, lvar=l, uvar=u)
+      nls = ADNLSModel(F, x0, 2, l, u)
 
       stats = with_logger(NullLogger()) do
         solver(nls)
@@ -40,7 +40,7 @@ function test_bound_constrained_nls_solver(solver)
       x0 = (l + u) / 2
       F(x) = [x[1] - 1; 10 * (x[2] - x[1]^2)]
 
-      nls = ADNLSModel(F, x0, 2, lvar=l, uvar=u)
+      nls = ADNLSModel(F, x0, 2, l, u)
 
       sol = [0.9; 0.81]
 
@@ -60,7 +60,7 @@ function test_bound_constrained_nls_solver(solver)
       l = [1.0; 0.0; 0.0]
       u = [1.0; 2.0; 2.0]
       F(x) = x .- 3
-      nls = ADNLSModel(F, x0, 3, lvar=l, uvar=u)
+      nls = ADNLSModel(F, x0, 3, l, u)
       stats = with_logger(NullLogger()) do
         solver(nls)
       end
@@ -76,7 +76,7 @@ function test_bound_constrained_nls_solver(solver)
       l = 0.9*ones(n)
       u = copy(l)
       F(x) = x.^2
-      nls = ADNLSModel(F, x0, n, lvar=l, uvar=u)
+      nls = ADNLSModel(F, x0, n, l, u)
       stats = with_logger(NullLogger()) do
         solver(nls)
       end
@@ -90,7 +90,7 @@ function test_bound_constrained_nls_solver(solver)
     n = 30
     F(x) = [[10 * (x[i+1] - x[i]^2) for i = 1:n-1];
             [x[i] - 1 for i = 1:n-1]]
-    nls = ADNLSModel(F, collect((1:n) ./ (n+1)), 2n-2, lvar=zeros(n), uvar=0.3*ones(n))
+    nls = ADNLSModel(F, collect((1:n) ./ (n+1)), 2n-2, zeros(n), 0.3*ones(n))
 
     stats = with_logger(NullLogger()) do
       solver(nls, max_time=30.0)
@@ -102,7 +102,7 @@ function test_bound_constrained_nls_solver(solver)
   @testset "Multiprecision" begin
     F(x) = [x[1] - 1; 10 * (x[2] - x[1]^2)]
     for T in (Float16, Float32, Float64, BigFloat)
-      nls = ADNLSModel(F, T[-1.2; 1.0], 2, lvar=zeros(T, 2), uvar= ones(T, 2) / 2)
+      nls = ADNLSModel(F, T[-1.2; 1.0], 2, zeros(T, 2),  ones(T, 2) / 2)
       ϵ = eps(T)^T(1/4)
 
       g0 = grad(nls, nls.meta.x0)
