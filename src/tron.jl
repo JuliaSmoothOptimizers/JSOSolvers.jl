@@ -28,6 +28,7 @@ function tron(::Val{:Newton},
               max_eval :: Int=-1,
               max_time :: Real=30.0,
               max_cgiter :: Int=nlp.meta.nvar,
+              use_only_objgrad :: Bool=false,
               cgtol :: Real=eltype(x)(0.1),
               atol :: Real=√eps(eltype(x)),
               rtol :: Real=√eps(eltype(x)),
@@ -42,8 +43,6 @@ function tron(::Val{:Newton},
   T = eltype(x)
   ℓ = T.(nlp.meta.lvar)
   u = T.(nlp.meta.uvar)
-  f(x) = obj(nlp, x)
-  g(x) = grad(nlp, x)
   n = nlp.meta.nvar
 
   iter = 0
@@ -57,8 +56,9 @@ function tron(::Val{:Newton},
   Hs = zeros(T, n)
 
   x .= max.(ℓ, min.(x, u))
-  fx = f(x)
-  gx = g(x)
+  gx = zeros(T, n)
+  fx, _ = objgrad!(nlp, x, gx)
+  gt = use_only_objgrad ? zeros(T, n) : T[]
   num_success_iters = 0
 
   # Optimality measure
@@ -101,7 +101,11 @@ function tron(::Val{:Newton},
     end
     slope = dot(n, gx, s)
     qs = dot(n, s, Hs) / 2 + slope
-    fx = f(x)
+    fx = if use_only_objgrad
+      objgrad!(nlp, x, gt)[1]
+    else
+      obj(nlp, x)
+    end
 
     ared, pred, quad_min = aredpred(tr, nlp, fc, fx, qs, x, s, slope)
     if pred ≥ 0
@@ -123,7 +127,11 @@ function tron(::Val{:Newton},
 
     if acceptable(tr)
       num_success_iters += 1
-      gx = g(x)
+      if use_only_objgrad
+        gx .= gt
+      else
+        grad!(nlp, x, gx)
+      end
       project_step!(gpx, x, gx, ℓ, u, -one(T))
       πx = nrm2(n, gpx)
 

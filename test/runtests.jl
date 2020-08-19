@@ -23,3 +23,5 @@ for solver in [trunk]
   solver(nlp, max_eval=20)
   reset!(nlp)
 end
+
+include("objgrad-on-tron.jl")
