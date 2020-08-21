@@ -76,7 +76,7 @@ function trunk(::Val{:Newton},
   @info log_header([:iter, :f, :dual, :radius, :ratio, :inner, :bk, :cgstatus], [Int, T, T, T, T, Int, Int, String],
                    hdr_override=Dict(:f=>"f(x)", :dual=>"π", :radius=>"Δ"))
 
-  while !solved
+  while !(solved || tired || stalled)
     # Compute inexact solution to trust-region subproblem
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
