@@ -24,6 +24,7 @@ function trunk(::Val{:Newton},
                atol :: Real=√eps(eltype(x)), rtol :: Real=√eps(eltype(x)),
                max_eval :: Int=-1,
                max_time :: Float64=30.0,
+               tr_method :: Symbol=:basic,
                bk_max :: Int=10,
                monotone :: Bool=true,
                nm_itmax :: Int=25)
@@ -48,7 +49,8 @@ function trunk(::Val{:Newton},
   ∇f = grad(nlp, x)
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
-  tr = TrustRegion(min(max(∇fNorm2 / 10, one(T)), T(100)))
+  Δ = min(max(∇fNorm2 / 10, one(T)), T(100))
+  ϕ = UncMerit(nlp, fx=f, gx=∇f)
 
   # Non-monotone mode parameters.
   # fmin: current best overall objective value
@@ -85,39 +87,30 @@ function trunk(::Val{:Newton},
     (s, cg_stats) = with_logger(subsolver_logger) do
       cg(H, -∇f,
          atol=T(atol), rtol=cgtol,
-         radius=get_property(tr, :radius),
+         radius=Δ,
          itmax=max(2 * n, 50))
     end
 
-    # Compute actual vs. predicted reduction.
-    sNorm = nrm2(n, s)
-    copyaxpy!(n, one(T), s, x, xt)
     slope = dot(n, s, ∇f)
     curv = dot(n, s, H * s)
     Δq = slope + curv / 2
-    ft = obj(nlp, xt)
 
-    ared, pred = aredpred(nlp, f, ft, Δq, xt, s, slope)
-    if pred ≥ 0
-      status = :neg_pred
-      stalled = true
-      continue
+    tro = if monotone
+      ϕ.fx = f
+      trust_region!(ϕ, x, s, xt, Δq, Δ, method=tr_method, update_obj_at_x=false)
+    else
+      ϕ.fx = fref
+      trust_region!(ϕ, x, s, xt, Δq + σref, Δ, method=tr_method, update_obj_at_x=false)
     end
-    tr.ratio = ared / pred
 
-    if !monotone
-      ared_hist, pred_hist = aredpred(nlp, fref, ft, σref + Δq, xt, s, slope)
-      if pred_hist ≥ 0
-        status = :neg_pred
-        stalled = true
-        continue
-      end
-      ρ_hist = ared_hist / pred_hist
-      set_property!(tr, :ratio, max(get_property(tr, :ratio), ρ_hist))
-    end
+    # if abs(Δq) < 10_000 * eps(T) || abs(tro.ared) < 10_000 * eps(T) * abs(f)
+    #   @error("Small Δq")
+    # end
+
+    ft = tro.ϕt
 
     bk = 0
-    if !acceptable(tr)
+    if !tro.success
       # Perform backtracking linesearch along s
       # Scaling s to the trust-region boundary, as recommended in
       # Algorithm 10.3.2 of the Trust-Region book
@@ -126,12 +119,6 @@ function trunk(::Val{:Newton},
       # slope *= get_property(tr, :radius) / sNorm
       # sNorm = get_property(tr, :radius)
 
-      if slope ≥ 0
-        @error "not a descent direction: slope = $slope, ‖∇f‖ = $∇fNorm2"
-        status = :not_desc
-        stalled = true
-        continue
-      end
       α = one(T)
       while (bk < bk_max) && (ft > f + β * α * slope)
         bk = bk + 1
@@ -139,34 +126,26 @@ function trunk(::Val{:Newton},
         copyaxpy!(n, α, s, x, xt)
         ft = obj(nlp, xt)
       end
-      sNorm *= α
       scal!(n, α, s)
       slope *= α
       Δq = slope + α * α * curv / 2
-      ared, pred = aredpred(nlp, f, ft, Δq, xt, s, slope)
-      if pred ≥ 0
-        status = :neg_pred
-        stalled = true
-        continue
+
+      tro = if monotone
+        ϕ.fx = f
+        trust_region!(ϕ, x, s, xt, Δq, Δ, method=tr_method, update_obj_at_x=false, update_obj_at_xt=false, ft=ft)
+      else
+        ϕ.fx = fref
+        trust_region!(ϕ, x, s, xt, Δq + σref, Δ, method=tr_method, update_obj_at_x=false, update_obj_at_xt=false, ft=ft)
       end
-      tr.ratio = ared / pred
-      if !monotone
-        ared_hist, pred_hist = aredpred(nlp, fref, ft, σref + Δq, xt, s, slope)
-        if pred_hist ≥ 0
-          status = :neg_pred
-          stalled = true
-          continue
-        end
-        ρ_hist = ared_hist / pred_hist
-        set_property!(tr, :ratio, max(get_property(tr, :ratio), ρ_hist))
-      end
+
+      ft = tro.ϕt
     end
 
-    @info log_row([iter, f, ∇fNorm2, get_property(tr, :radius), get_property(tr, :ratio),
-                   length(cg_stats.residuals), bk, cg_stats.status])
+    Δ = tro.Δ
+    @info log_row([iter, f, ∇fNorm2, Δ, tro.ρ, length(cg_stats.residuals), bk, cg_stats.status])
     iter = iter + 1
 
-    if acceptable(tr)
+    if tro.success
       # Update non-monotone mode parameters.
       if !monotone
         σref = σref + Δq
@@ -194,7 +173,11 @@ function trunk(::Val{:Newton},
 
       x .= xt
       f = ft
-      grad!(nlp, x, ∇f)
+      if tro.good_grad
+        ∇f .= tro.gt
+      else
+        grad!(nlp, x, ∇f)
+      end
       ∇fNorm2 = nrm2(n, ∇f)
 
       if isa(nlp, QuasiNewtonModel)
@@ -205,15 +188,12 @@ function trunk(::Val{:Newton},
       end
     end
 
-    # Move on.
-    update!(tr, sNorm)
-
     optimal = ∇fNorm2 ≤ ϵ
     elapsed_time = time() - start_time
     tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
     solved = optimal || tired || stalled
   end
-  @info log_row(Any[iter, f, ∇fNorm2, get_property(tr, :radius)])
+  @info log_row(Any[iter, f, ∇fNorm2, Δ])
 
   if optimal
     status = :first_order

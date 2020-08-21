@@ -11,7 +11,7 @@ function lbfgs(nlp :: AbstractNLPModel;
                atol :: Real=√eps(eltype(x)), rtol :: Real=√eps(eltype(x)),
                max_eval :: Int=-1,
                max_time :: Float64=30.0,
-               verbose :: Bool=true,
+               ls_method :: Symbol=:armijo_wolfe,
                mem :: Int=5)
 
   if !unconstrained(nlp)
@@ -25,11 +25,12 @@ function lbfgs(nlp :: AbstractNLPModel;
   n = nlp.meta.nvar
 
   xt = zeros(T, n)
-  ∇ft = zeros(T, n)
+  ∇fold = zeros(T, n)
 
   f = obj(nlp, x)
   ∇f = grad(nlp, x)
   H = InverseLBFGSOperator(T, n, mem, scaling=true)
+  ϕ = UncMerit(nlp, fx=f, gx=∇f)
 
   ∇fNorm = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm
@@ -43,34 +44,22 @@ function lbfgs(nlp :: AbstractNLPModel;
   stalled = false
   status = :unknown
 
-  h = LineModel(nlp, x, ∇f)
-
   while !(optimal || tired || stalled)
     d = - H * ∇f
-    slope = dot(n, d, ∇f)
-    if slope ≥ 0
-      @error "not a descent direction" slope
-      status = :not_desc
-      stalled = true
-      continue
-    end
-
-    redirect!(h, x, d)
+    ∇fold .= ∇f
     # Perform improved Armijo linesearch.
-    t, good_grad, ft, nbk, nbW = armijo_wolfe(h, f, slope, ∇ft, τ₁=T(0.9999), bk_max=25, verbose=false)
+    lso = linesearch!(ϕ, x, d, xt, method=ls_method, bk_max=25)
 
-    @info log_row(Any[iter, f, ∇fNorm, slope, nbk])
+    @info log_row(Any[iter, f, ∇fNorm, dot(d, ∇fold), lso.specific[:nbk]])
 
-    copyaxpy!(n, t, d, x, xt)
-    good_grad || grad!(nlp, xt, ∇ft)
+    lso.good_grad || grad!(nlp, xt, ∇f)
 
     # Update L-BFGS approximation.
-    push!(H, t * d, ∇ft - ∇f)
+    push!(H, lso.t * d, ∇f - ∇fold)
 
     # Move on.
     x .= xt
-    f = ft
-    ∇f .= ∇ft
+    ϕ.fx = f = lso.ϕt
 
     ∇fNorm = nrm2(n, ∇f)
     iter = iter + 1

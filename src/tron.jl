@@ -29,6 +29,7 @@ function tron(::Val{:Newton},
               max_time :: Real=30.0,
               max_cgiter :: Int=nlp.meta.nvar,
               use_only_objgrad :: Bool=false,
+              tr_method :: Symbol=:tron,
               cgtol :: Real=eltype(x)(0.1),
               atol :: Real=√eps(eltype(x)),
               rtol :: Real=√eps(eltype(x)),
@@ -60,6 +61,7 @@ function tron(::Val{:Newton},
   fx, _ = objgrad!(nlp, x, gx)
   gt = use_only_objgrad ? zeros(T, n) : T[]
   num_success_iters = 0
+  ϕ = UncMerit(nlp, fx=fx, gx=gx)
 
   # Optimality measure
   project_step!(gpx, x, gx, ℓ, u, -one(T))
@@ -78,14 +80,13 @@ function tron(::Val{:Newton},
   end
 
   αC = one(T)
-  tr = TRONTrustRegion(min(max(one(T), πx / 10), 100))
+  Δ = min(max(one(T), πx / 10), 100)
   @info log_header([:iter, :f, :dual, :radius, :ratio, :cgstatus], [Int, T, T, T, T, String],
                    hdr_override=Dict(:f=>"f(x)", :dual=>"π", :radius=>"Δ"))
   while !(optimal || tired || stalled || unbounded)
     # Current iteration
     xc .= x
     fc = fx
-    Δ = get_property(tr, :radius)
     H = hess_op!(nlp, xc, temp)
 
     αC, s, cauchy_status = cauchy(x, H, gx, Δ, αC, ℓ, u, μ₀=μ₀, μ₁=μ₁, σ=σ)
@@ -107,25 +108,14 @@ function tron(::Val{:Newton},
       obj(nlp, x)
     end
 
-    ared, pred, quad_min = aredpred(tr, nlp, fc, fx, qs, x, s, slope)
-    if pred ≥ 0
-      status = :neg_pred
-      stalled = true
-      continue
-    end
-    tr.ratio = ared / pred
-    tr.quad_min = quad_min
-    @info log_row([iter, fx, πx, Δ, tr.ratio, cginfo])
+    ϕ.fx = fc
+    tro = trust_region!(ϕ, xc, s, x, qs, Δ, method=tr_method, update_obj_at_x=false, update_obj_at_xt=false, ft=fx)
 
-    s_norm = nrm2(n, s)
-    if num_success_iters == 0
-      tr.radius = min(Δ, s_norm)
-    end
+    @info log_row([iter, fx, πx, Δ, tro.ρ, cginfo])
 
-    # Update the trust region
-    update!(tr, s_norm)
+    Δ = tro.Δ
 
-    if acceptable(tr)
+    if tro.success
       num_success_iters += 1
       if use_only_objgrad
         gx .= gt
@@ -141,11 +131,9 @@ function tron(::Val{:Newton},
         push!(nlp, s, gn)
         gn .= gx
       end
-    end
-
-    if !acceptable(tr)
-      fx = fc
+    else
       x .= xc
+      fx = fc
     end
 
     iter += 1
@@ -155,7 +143,7 @@ function tron(::Val{:Newton},
     unbounded = fx < fmin
 
   end
-  @info log_row(Any[iter, fx, πx, get_property(tr, :radius)])
+  @info log_row(Any[iter, fx, πx, Δ])
 
   if tired
     if el_time > max_time
