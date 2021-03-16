@@ -14,7 +14,7 @@ SolverTools = "b5612192-2639-5dc1-abfe-fbedd65fab29"
 [compat]
 Krylov = "0.4, 0.5"
 LinearOperators = "1.1"
-NLPModels = "0.13"
+NLPModels = "0.13, 0.14"
 SolverTools = "0.2, 0.3"
 julia = "1.3"
 
