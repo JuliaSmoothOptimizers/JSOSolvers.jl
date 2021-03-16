@@ -2,7 +2,7 @@
 using Printf, LinearAlgebra, Logging, SparseArrays, Test
 
 # additional packages
-using Krylov, LinearOperators, NLPModels, SolverTools
+using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverTools
 
 # this package
 using JSOSolvers

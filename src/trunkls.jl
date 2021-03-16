@@ -85,11 +85,13 @@ function trunk(::Val{:GaussNewton},
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
     cgtol = max(rtol, min(T(0.1), 9 * cgtol / 10, sqrt(∇fNorm2)))
-    (s, cg_stats) = trsolver(A, -r,
-                             atol=atol, rtol=cgtol,
-                             radius=get_property(tr, :radius),
-                             itmax=max(2 * (n + m), 50), verbose=false;
-                             trsolver_args...)
+    (s, cg_stats) = with_logger(NullLogger()) do
+      trsolver(A, -r,
+               atol=atol, rtol=cgtol,
+               radius=get_property(tr, :radius),
+               itmax=max(2 * (n + m), 50);
+               trsolver_args...)
+    end
 
     # Compute actual vs. predicted reduction.
     sNorm = nrm2(n, s)
