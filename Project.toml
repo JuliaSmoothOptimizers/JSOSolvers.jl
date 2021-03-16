@@ -12,7 +12,7 @@ Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 SolverTools = "b5612192-2639-5dc1-abfe-fbedd65fab29"
 
 [compat]
-Krylov = "0.4, 0.5"
+Krylov = "0.4, 0.5, 0.6"
 LinearOperators = "1.1"
 NLPModels = "0.13"
 SolverTools = "0.2, 0.3"
