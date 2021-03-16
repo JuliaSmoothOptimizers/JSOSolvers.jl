@@ -4,7 +4,7 @@ module JSOSolvers
 using LinearAlgebra, Logging, Printf
 
 # JSO packages
-using Krylov, LinearOperators, NLPModels, SolverTools
+using Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverTools
 
 # Unconstrained solvers
 include("lbfgs.jl")
