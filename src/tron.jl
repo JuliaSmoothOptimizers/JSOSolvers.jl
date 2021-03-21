@@ -27,7 +27,7 @@ function tron(::Val{:Newton},
               σ :: Real=eltype(x)(10),
               max_eval :: Int=-1,
               max_time :: Real=30.0,
-              max_cgiter :: Int=nlp.meta.nvar,
+              max_cgiter :: Int=50,
               use_only_objgrad :: Bool=false,
               cgtol :: Real=eltype(x)(0.1),
               atol :: Real=√eps(eltype(x)),
@@ -305,7 +305,7 @@ projected on the active bounds.
 function projected_newton!(x::AbstractVector{T}, H::Union{AbstractMatrix,AbstractLinearOperator},
                            g::AbstractVector{T}, Δ::Real, cgtol::Real, s::AbstractVector{T},
                            ℓ::AbstractVector{T}, u::AbstractVector{T};
-                           max_cgiter::Int = max(50, length(x))) where T <: Real
+                           max_cgiter::Int = 50) where T <: Real
   n = length(x)
   status = ""
 
@@ -330,9 +330,8 @@ function projected_newton!(x::AbstractVector{T}, H::Union{AbstractMatrix,Abstrac
     gfnorm = norm(wa)
 
     ZHZ = Z' * H * Z
-    st, stats = Krylov.cg(ZHZ, -gfree, radius=Δ, rtol=cgtol, atol=zero(T),
-                          itmax=max_cgiter)
-    iters += length(stats.residuals)
+    st, stats = Krylov.cg(ZHZ, -gfree, radius=Δ, rtol=cgtol, atol=zero(T))
+    iters += 1
     status = stats.status
 
     # Projected line search

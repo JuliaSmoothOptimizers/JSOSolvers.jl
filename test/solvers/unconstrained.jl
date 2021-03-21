@@ -46,7 +46,7 @@ function test_unconstrained_solver(solver)
       stats = with_logger(NullLogger()) do
         solver(nlp, max_eval=-1)
       end
-      @test isapprox(stats.solution, ones(2), atol=1e-6)
+      @test isapprox(stats.solution, ones(2), atol=1e-4)
       @test isapprox(stats.objective, 0.0, atol=1e-6)
       @test stats.dual_feas < 1e-6
       @test stats.status == :first_order

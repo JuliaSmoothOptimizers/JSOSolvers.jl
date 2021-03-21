@@ -38,7 +38,7 @@ function tron(::Val{:GaussNewton},
               σ :: Real=eltype(x)(10),
               max_eval :: Int=-1,
               max_time :: Real=30.0,
-              max_cgiter :: Int=nlp.meta.nvar,
+              max_cgiter :: Int=50,
               cgtol :: Real=eltype(x)(0.1),
               atol :: Real=√eps(eltype(x)),
               rtol :: Real=√eps(eltype(x)),
@@ -313,7 +313,7 @@ function projected_gauss_newton!(x::AbstractVector{T}, A::Union{AbstractMatrix,A
                                  Fx::AbstractVector{T}, Δ::Real, cgtol::Real, s::AbstractVector{T},
                                  ℓ::AbstractVector{T}, u::AbstractVector{T};
                                  subsolver :: Symbol=:lsmr,
-                                 max_cgiter::Int = max(50, length(x))) where T <: Real
+                                 max_cgiter::Int = 50) where T <: Real
   n = length(x)
   status = ""
   subsolver in tronls_allowed_subsolvers || error("subproblem solver must be one of $tronls_allowed_subsolvers")
@@ -340,9 +340,8 @@ function projected_gauss_newton!(x::AbstractVector{T}, A::Union{AbstractMatrix,A
     wanorm = norm(wa)
 
     AZ = A * Z
-    st, stats = lssolver(AZ, -Ffree, radius=Δ, rtol=cgtol, atol=zero(T),
-                         itmax=max_cgiter)
-    iters += length(stats.residuals)
+    st, stats = lssolver(AZ, -Ffree, radius=Δ, rtol=cgtol, atol=zero(T))
+    iters += 1
     status = stats.status
 
     # Projected line search
