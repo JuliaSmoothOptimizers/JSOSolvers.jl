@@ -1,19 +1,19 @@
-include("solvers/unconstrained.jl")
-include("solvers/bound-constrained.jl")
-include("solvers/unconstrained-nls.jl")
-include("solvers/bound-constrained-nls.jl")
+using SolverTest
 
-function test_solvers()
+function tests()
   @info "Testing NLP solvers"
   @info "  unconstrained solvers"
   for solver in [trunk, lbfgs, tron]
     @info "    $solver"
-    test_unconstrained_solver(solver)
+    unconstrained_nlp(solver)
+    multiprecision_nlp(solver, :unc)
   end
   @info "  bound-constrained solvers"
   for solver in [tron]
     @info "    $solver"
-    test_bound_constrained_solver(solver)
+    bound_constrained_nlp(solver)
+    multiprecision_nlp(solver, :unc)
+    multiprecision_nlp(solver, :bnd)
   end
 
   @info "Testing NLS solvers"
@@ -25,7 +25,8 @@ function test_solvers()
          ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant=:Newton; kwargs...))
        ]
     @info "    $name"
-    test_unconstrained_nls_solver(solver)
+    unconstrained_nls(solver)
+    multiprecision_nls(solver, :unc)
   end
   @info "  bound-constrained solvers"
   for (name,solver) in [
@@ -33,11 +34,13 @@ function test_solvers()
          ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant=:Newton; kwargs...))
         ]
     @info "    $name"
-    test_bound_constrained_nls_solver(solver)
+    bound_constrained_nls(solver)
+    multiprecision_nls(solver, :unc)
+    multiprecision_nls(solver, :bnd)
   end
 end
 
-test_solvers()
+tests()
 
 @info "Specific solver tests"
 include("solvers/trunkls.jl")
