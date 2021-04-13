@@ -3,7 +3,7 @@
 
 export tron
 
-tron(nlp :: AbstractNLPModel; variant=:Newton, kwargs...) = tron(Val(variant), nlp; kwargs...)
+tron(nlp::AbstractNLPModel; variant=:Newton, kwargs...) = tron(Val(variant), nlp; kwargs...)
 
 """
     tron(nlp)
@@ -19,21 +19,21 @@ Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
 Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
 """
 function tron(::Val{:Newton},
-              nlp :: AbstractNLPModel;
-              subsolver_logger :: AbstractLogger=NullLogger(),
-              x :: AbstractVector=copy(nlp.meta.x0),
-              μ₀ :: Real=eltype(x)(1e-2),
-              μ₁ :: Real=one(eltype(x)),
-              σ :: Real=eltype(x)(10),
-              max_eval :: Int=-1,
-              max_time :: Real=30.0,
-              max_cgiter :: Int=50,
-              use_only_objgrad :: Bool=false,
-              cgtol :: Real=eltype(x)(0.1),
-              atol :: Real=√eps(eltype(x)),
-              rtol :: Real=√eps(eltype(x)),
-              fatol :: Real=zero(eltype(x)),
-              frtol :: Real=eps(eltype(x))^eltype(x)(2/3)
+              nlp::AbstractNLPModel;
+              subsolver_logger::AbstractLogger=NullLogger(),
+              x::AbstractVector=copy(nlp.meta.x0),
+              μ₀::Real=eltype(x)(1e-2),
+              μ₁::Real=one(eltype(x)),
+              σ::Real=eltype(x)(10),
+              max_eval::Int=-1,
+              max_time::Real=30.0,
+              max_cgiter::Int=50,
+              use_only_objgrad::Bool=false,
+              cgtol::Real=eltype(x)(0.1),
+              atol::Real=√eps(eltype(x)),
+              rtol::Real=√eps(eltype(x)),
+              fatol::Real=zero(eltype(x)),
+              frtol::Real=eps(eltype(x))^eltype(x)(2 / 3)
              )
 
   if !(unconstrained(nlp) || bound_constrained(nlp))
@@ -80,7 +80,7 @@ function tron(::Val{:Newton},
   αC = one(T)
   tr = TRONTrustRegion(min(max(one(T), πx / 10), 100))
   @info log_header([:iter, :f, :dual, :radius, :ratio, :cgstatus], [Int, T, T, T, T, String],
-                   hdr_override=Dict(:f=>"f(x)", :dual=>"π", :radius=>"Δ"))
+                   hdr_override=Dict(:f => "f(x)", :dual => "π", :radius => "Δ"))
   while !(optimal || tired || stalled || unbounded)
     # Current iteration
     xc .= x
@@ -147,7 +147,7 @@ function tron(::Val{:Newton},
       fx = fc
       x .= xc
     end
-
+        
     iter += 1
     el_time = time() - start_time
     tired = el_time > max_time || neval_obj(nlp) > max_eval ≥ 0
@@ -187,7 +187,7 @@ function projected_line_search!(x::AbstractVector{T},
                                 g::AbstractVector{T},
                                 d::AbstractVector{T},
                                 ℓ::AbstractVector{T},
-                                u::AbstractVector{T}; μ₀::Real = T(1e-2)) where T <: Real
+                                u::AbstractVector{T}; μ₀::Real=T(1e-2)) where T <: Real
   α = one(T)
   _, brkmin, _ = breakpoints(x, d, ℓ, u)
   nsteps = 0
@@ -233,10 +233,10 @@ function cauchy(x::AbstractVector{T},
                 H::Union{AbstractMatrix,AbstractLinearOperator},
                 g::AbstractVector{T},
                 Δ::Real, α::Real, ℓ::AbstractVector{T}, u::AbstractVector{T};
-                μ₀::Real = T(1e-2), μ₁::Real = one(T), σ::Real = T(10)) where T <: Real
+                μ₀::Real=T(1e-2), μ₁::Real=one(T), σ::Real=T(10)) where T <: Real
   # TODO: Use brkmin to care for g direction
   _, _, brkmax = breakpoints(x, -g, ℓ, u)
-  n = length(x)
+    n = length(x)
   s = zeros(T, n)
   Hs = zeros(T, n)
 
@@ -247,7 +247,7 @@ function cauchy(x::AbstractVector{T},
   # Interpolate or extrapolate
   s_norm = nrm2(n, s)
   if s_norm > μ₁ * Δ
-    interp = true
+        interp = true
   else
     slope, qs = compute_Hs_slope_qs!(Hs, H, s, g)
     interp = qs >= μ₀ * slope
@@ -270,7 +270,7 @@ function cauchy(x::AbstractVector{T},
         status = :small_step
       end
     end
-  else
+            else
     search = true
     αs = α
     while search && α <= brkmax
@@ -305,9 +305,9 @@ projected on the active bounds.
 function projected_newton!(x::AbstractVector{T}, H::Union{AbstractMatrix,AbstractLinearOperator},
                            g::AbstractVector{T}, Δ::Real, cgtol::Real, s::AbstractVector{T},
                            ℓ::AbstractVector{T}, u::AbstractVector{T};
-                           max_cgiter::Int = 50) where T <: Real
+                           max_cgiter::Int=50) where T <: Real
   n = length(x)
-  status = ""
+    status = ""
 
   Hs = H * s
 
@@ -323,15 +323,15 @@ function projected_newton!(x::AbstractVector{T}, H::Union{AbstractMatrix,Abstrac
     if length(ifree) == 0
       exit_optimal = true
       continue
-    end
+        end
     Z = opExtension(ifree, n)
     @views wa = g[ifree]
     @views gfree = Hs[ifree] + wa
     gfnorm = norm(wa)
 
-    ZHZ = Z' * H * Z
+        ZHZ = Z' * H * Z
     st, stats = Krylov.cg(ZHZ, -gfree, radius=Δ, rtol=cgtol, atol=zero(T))
-    iters += 1
+        iters += 1
     status = stats.status
 
     # Projected line search

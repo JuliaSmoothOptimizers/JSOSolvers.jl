@@ -1,6 +1,6 @@
 const tronls_allowed_subsolvers = [:cgls, :crls, :lsqr, :lsmr]
 
-tron(nls :: AbstractNLSModel; variant=:GaussNewton, kwargs...) = tron(Val(variant), nls; kwargs...)
+tron(nls::AbstractNLSModel; variant=:GaussNewton, kwargs...) = tron(Val(variant), nls; kwargs...)
 
 """
     slope, qs = compute_As_slope_qs!(As, A, s, Fx)
@@ -9,10 +9,10 @@ Compute `slope = dot(As, Fx)` and `qs = dot(As, As) / 2 + slope`. Use `As` to st
 """
 function compute_As_slope_qs!(As::AbstractVector{T}, A::Union{AbstractMatrix,AbstractLinearOperator},
                               s::AbstractVector{T}, Fx::AbstractVector{T}) where {T <: Real}
-  As .= A * s
-  slope = dot(As, Fx)
-  qs = dot(As, As) / 2 + slope
-  return slope, qs
+    As .= A * s
+    slope = dot(As, Fx)
+    qs = dot(As, As) / 2 + slope
+    return slope, qs
 end
 
 """
@@ -29,21 +29,21 @@ Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
 Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
 """
 function tron(::Val{:GaussNewton},
-              nlp :: AbstractNLSModel;
-              subsolver_logger :: AbstractLogger=NullLogger(),
-              x :: AbstractVector=copy(nlp.meta.x0),
-              subsolver :: Symbol=:lsmr,
-              μ₀ :: Real=eltype(x)(1e-2),
-              μ₁ :: Real=one(eltype(x)),
-              σ :: Real=eltype(x)(10),
-              max_eval :: Int=-1,
-              max_time :: Real=30.0,
-              max_cgiter :: Int=50,
-              cgtol :: Real=eltype(x)(0.1),
-              atol :: Real=√eps(eltype(x)),
-              rtol :: Real=√eps(eltype(x)),
-              fatol :: Real=zero(eltype(x)),
-              frtol :: Real=eps(eltype(x))^eltype(x)(2/3)
+              nlp::AbstractNLSModel;
+              subsolver_logger::AbstractLogger=NullLogger(),
+              x::AbstractVector=copy(nlp.meta.x0),
+              subsolver::Symbol=:lsmr,
+              μ₀::Real=eltype(x)(1e-2),
+              μ₁::Real=one(eltype(x)),
+              σ::Real=eltype(x)(10),
+              max_eval::Int=-1,
+              max_time::Real=30.0,
+              max_cgiter::Int=50,
+              cgtol::Real=eltype(x)(0.1),
+              atol::Real=√eps(eltype(x)),
+              rtol::Real=√eps(eltype(x)),
+              fatol::Real=zero(eltype(x)),
+              frtol::Real=eps(eltype(x))^eltype(x)(2 / 3)
              )
 
   if !(unconstrained(nlp) || bound_constrained(nlp))
@@ -89,10 +89,10 @@ function tron(::Val{:GaussNewton},
   stalled = false
   status = :unknown
 
-  αC = one(T)
+    αC = one(T)
   tr = TRONTrustRegion(min(max(one(T), πx / 10), 100))
   @info log_header([:iter, :f, :dual, :radius, :ratio, :cgstatus], [Int, T, T, T, T, String],
-                   hdr_override=Dict(:f=>"f(x)", :dual=>"π", :radius=>"Δ"))
+                   hdr_override=Dict(:f => "f(x)", :dual => "π", :radius => "Δ"))
   while !(optimal || tired || stalled || unbounded)
     # Current iteration
     xc .= x
@@ -145,7 +145,7 @@ function tron(::Val{:GaussNewton},
     # No post-iteration
 
     if !acceptable(tr)
-      Fx .= Fc
+            Fx .= Fc
       fx = fc
       x .= xc
     end
@@ -189,14 +189,14 @@ function projected_line_search_ls!(x::AbstractVector{T},
                                    Fx::AbstractVector{T},
                                    d::AbstractVector{T},
                                    ℓ::AbstractVector{T},
-                                   u::AbstractVector{T}; μ₀::Real = T(1e-2)) where T <: Real
+                                   u::AbstractVector{T}; μ₀::Real=T(1e-2)) where T <: Real
   α = one(T)
   _, brkmin, _ = breakpoints(x, d, ℓ, u)
   nsteps = 0
   n = length(x)
   m = length(Fx)
 
-  s = zeros(T, n)
+    s = zeros(T, n)
   As = zeros(T, m)
 
   search = true
@@ -239,7 +239,7 @@ function cauchy_ls(x::AbstractVector{T},
                    Fx::AbstractVector{T},
                    g::AbstractVector{T},
                    Δ::Real, α::Real, ℓ::AbstractVector{T}, u::AbstractVector{T};
-                   μ₀::Real = T(1e-2), μ₁::Real = one(T), σ::Real = T(10)) where T <: Real
+                   μ₀::Real=T(1e-2), μ₁::Real=one(T), σ::Real=T(10)) where T <: Real
   # TODO: Use brkmin to care for g direction
   _, _, brkmax = breakpoints(x, -g, ℓ, u)
   n = length(x)
@@ -312,11 +312,11 @@ projected on the active bounds.
 function projected_gauss_newton!(x::AbstractVector{T}, A::Union{AbstractMatrix,AbstractLinearOperator},
                                  Fx::AbstractVector{T}, Δ::Real, cgtol::Real, s::AbstractVector{T},
                                  ℓ::AbstractVector{T}, u::AbstractVector{T};
-                                 subsolver :: Symbol=:lsmr,
-                                 max_cgiter::Int = 50) where T <: Real
+                                 subsolver::Symbol=:lsmr,
+                                 max_cgiter::Int=50) where T <: Real
   n = length(x)
   status = ""
-  subsolver in tronls_allowed_subsolvers || error("subproblem solver must be one of $tronls_allowed_subsolvers")
+    subsolver in tronls_allowed_subsolvers || error("subproblem solver must be one of $tronls_allowed_subsolvers")
   lssolver = eval(subsolver)
 
   As = A * s
@@ -345,7 +345,7 @@ function projected_gauss_newton!(x::AbstractVector{T}, A::Union{AbstractMatrix,A
     status = stats.status
 
     # Projected line search
-    xfree = @view xt[ifree]
+        xfree = @view xt[ifree]
     @views w = projected_line_search_ls!(xfree, AZ, Ffree, st, ℓ[ifree], u[ifree])
     @views s[ifree] .+= w
 
