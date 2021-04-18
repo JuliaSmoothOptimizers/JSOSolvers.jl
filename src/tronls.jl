@@ -1,22 +1,26 @@
 const tronls_allowed_subsolvers = [:cgls, :crls, :lsqr, :lsmr]
 
-tron(nls :: AbstractNLSModel; variant=:GaussNewton, kwargs...) = tron(Val(variant), nls; kwargs...)
+export TronNLSSolver
 
-"""
-    slope, qs = compute_As_slope_qs!(As, A, s, Fx)
-
-Compute `slope = dot(As, Fx)` and `qs = dot(As, As) / 2 + slope`. Use `As` to store `A * s`.
-"""
-function compute_As_slope_qs!(As::AbstractVector{T}, A::Union{AbstractMatrix,AbstractLinearOperator},
-                              s::AbstractVector{T}, Fx::AbstractVector{T}) where {T <: Real}
-  As .= A * s
-  slope = dot(As, Fx)
-  qs = dot(As, As) / 2 + slope
-  return slope, qs
+mutable struct TronNLSSolver{T, S} <: AbstractOptSolver{T, S}
+  initialized::Bool
+  params::Dict
+  workspace
 end
 
+function SolverCore.parameters(::Type{TronNLSSolver{T, S}}) where {T, S}
+  (
+    μ₀ = (default = T(1e-2), type = T, scale = :log, min = √√eps(T), max = one(T)),
+    μ₁ = (default = one(T), type = T, min = T(0.5), max = one(T)),
+    σ = (default = T(10), type = T, min = T(1.0), max = T(100)),
+    subsolver = (default = :lsmr, type = Symbol, options = tronls_allowed_subsolvers),
+  )
+end
+
+SolverCore.are_valid_parameters(::Type{TronNLSSolver}, _, _, _, _) = true
+
 """
-    tron(nls)
+    TronNLSSolver(nlp)
 
 A pure Julia implementation of a trust-region solver for bound-constrained
 nonlinear least squares optimization:
@@ -28,33 +32,58 @@ This is an adaptation of the TRON method described in
 Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
 Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
 """
-function tron(::Val{:GaussNewton},
-              nlp :: AbstractNLSModel;
-              subsolver_logger :: AbstractLogger=NullLogger(),
-              x :: AbstractVector=copy(nlp.meta.x0),
-              subsolver :: Symbol=:lsmr,
-              μ₀ :: Real=eltype(x)(1e-2),
-              μ₁ :: Real=one(eltype(x)),
-              σ :: Real=eltype(x)(10),
-              max_eval :: Int=-1,
-              max_time :: Real=30.0,
-              max_cgiter :: Int=50,
-              cgtol :: Real=eltype(x)(0.1),
-              atol :: Real=√eps(eltype(x)),
-              rtol :: Real=√eps(eltype(x)),
-              fatol :: Real=zero(eltype(x)),
-              frtol :: Real=eps(eltype(x))^eltype(x)(2/3)
-             )
+function TronNLSSolver(
+  meta::AbstractNLPModelMeta;
+  x0::S = meta.x0,
+  kwargs...,
+) where {S}
+  T = eltype(x0)
+  nvar, ncon = meta.nvar, meta.ncon
+  params = parameters(TronNLSSolver{T, S})
+  solver = TronNLSSolver{T, S}(
+    true,
+    Dict(k => v[:default] for (k, v) in pairs(params)),
+    ( # workspace
+      x = S(undef, nvar),
+    ),
+  )
+  for (k, v) in kwargs
+    solver.params[k] = v
+  end
+  solver
+end
+
+function SolverCore.solve!(
+  solver :: TronNLSSolver{T, S},
+  nlp :: AbstractNLPModel;
+  subsolver_logger :: AbstractLogger=NullLogger(),
+  x0 :: S=nlp.meta.x0,
+  atol :: T=√eps(T),
+  rtol :: T=√eps(T),
+  max_eval :: Int=-1,
+  max_time :: Float64=30.0,
+  verbose :: Bool=true,
+  max_cgiter :: Int=50,
+  use_only_objgrad :: Bool=false,
+  cgtol :: Real=T(0.1),
+  fatol :: Real=zero(T),
+  frtol :: Real=eps(T)^T(2/3),
+  kwargs...
+) where {T, S}
 
   if !(unconstrained(nlp) || bound_constrained(nlp))
     error("tron should only be called for unconstrained or bound-constrained problems")
   end
 
-  T = eltype(x)
   ℓ = T.(nlp.meta.lvar)
   u = T.(nlp.meta.uvar)
   n = nlp.meta.nvar
   m = nlp.nls_meta.nequ
+
+  μ₀ = solver.params[:μ₀]
+  μ₁ = solver.params[:μ₁]
+  σ = solver.params[:σ]
+  subsolver = solver.params[:subsolver]
 
   iter = 0
   start_time = time()
@@ -70,6 +99,7 @@ function tron(::Val{:GaussNewton},
   F(x) = residual(nlp, x)
   A(x) = jac_op_residual!(nlp, x, Av, Atv)
 
+  x = solver.workspace.x .= x0
   x .= max.(ℓ, min.(x, u))
   Fx = F(x)
   fx = dot(Fx, Fx) / 2
@@ -171,8 +201,8 @@ function tron(::Val{:GaussNewton},
     status = :unbounded
   end
 
-  return GenericExecutionStats(status, nlp, solution=x, objective=fx, dual_feas=πx,
-                               iter=iter, elapsed_time=el_time)
+  return OptSolverOutput(status, x, nlp, objective=fx, dual_feas=πx,
+                         iter=iter, elapsed_time=el_time)
 end
 
 """`s = projected_line_search_ls!(x, A, g, d, ℓ, u; μ₀ = 1e-2)`
@@ -371,4 +401,18 @@ function projected_gauss_newton!(x::AbstractVector{T}, A::Union{AbstractMatrix,A
   x .= xt
 
   return s, As, iters, status
+end
+
+
+"""
+    slope, qs = compute_As_slope_qs!(As, A, s, Fx)
+
+Compute `slope = dot(As, Fx)` and `qs = dot(As, As) / 2 + slope`. Use `As` to store `A * s`.
+"""
+function compute_As_slope_qs!(As::AbstractVector{T}, A::Union{AbstractMatrix,AbstractLinearOperator},
+                              s::AbstractVector{T}, Fx::AbstractVector{T}) where {T <: Real}
+  As .= A * s
+  slope = dot(As, Fx)
+  qs = dot(As, As) / 2 + slope
+  return slope, qs
 end

@@ -1,9 +1,26 @@
 const trunkls_allowed_subsolvers = [:cgls, :crls, :lsqr, :lsmr]
 
-trunk(nlp :: AbstractNLSModel; variant=:GaussNewton, kwargs...) = trunk(Val(variant), nlp; kwargs...)
+export TrunkNLSSolver
+
+mutable struct TrunkNLSSolver{T, S} <: AbstractOptSolver{T, S}
+  initialized::Bool
+  params::Dict
+  workspace
+end
+
+function SolverCore.parameters(::Type{TrunkNLSSolver{T, S}}) where {T, S}
+  (
+    bk_max = (default = 10, type = Int, min = 1, max = 50),
+    monotone = (default = true, type = Bool),
+    nm_itmax = (default = 25, type = Int, min = 1, max = 50),
+    subsolver = (default = :lsmr, type = Symbol, options = trunkls_allowed_subsolvers),
+  )
+end
+
+SolverCore.are_valid_parameters(::Type{TrunkNLSSolver}, _, _, _, _) = true
 
 """
-    trunk(nls)
+    TrunkNLSSolver(nlp)
 
 A trust-region solver for nonlinear least squares.
 
@@ -17,17 +34,40 @@ The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
     SIAM, Philadelphia, USA, 2000.
     DOI: 10.1137/1.9780898719857.
 """
-function trunk(::Val{:GaussNewton},
-               nlp :: AbstractNLSModel;
-               x :: AbstractVector=copy(nlp.meta.x0),
-               subsolver :: Symbol=:lsmr,
-               atol :: Real=√eps(eltype(x)), rtol :: Real=√eps(eltype(x)),
-               max_eval :: Int=-1,
-               max_time :: Float64=30.0,
-               bk_max :: Int=10,
-               monotone :: Bool=true,
-               nm_itmax :: Int=25,
-               trsolver_args :: Dict{Symbol,Any}=Dict{Symbol,Any}())
+function TrunkNLSSolver(
+  meta::AbstractNLPModelMeta;
+  x0::S = meta.x0,
+  kwargs...,
+) where {S}
+  T = eltype(x0)
+  nvar, ncon = meta.nvar, meta.ncon
+  params = parameters(TrunkNLSSolver{T, S})
+  solver = TrunkNLSSolver{T, S}(
+    true,
+    Dict(k => v[:default] for (k, v) in pairs(params)),
+    ( # workspace
+      x = S(undef, nvar),
+    ),
+  )
+  for (k, v) in kwargs
+    solver.params[k] = v
+  end
+  solver
+end
+
+function SolverCore.solve!(
+  solver :: TrunkNLSSolver{T, S},
+  nlp :: AbstractNLPModel;
+  subsolver_logger :: AbstractLogger=NullLogger(),
+  x0 :: S=nlp.meta.x0,
+  atol :: T=√eps(T),
+  rtol :: T=√eps(T),
+  max_eval :: Int=-1,
+  max_time :: Float64=30.0,
+  verbose :: Bool=true,
+  trsolver_args :: Dict{Symbol,Any}=Dict{Symbol,Any}(),
+  kwargs...
+) where {T, S}
 
   if !unconstrained(nlp)
     error("trunk should only be called for unconstrained problems. Try tron instead")
@@ -36,11 +76,16 @@ function trunk(::Val{:GaussNewton},
   start_time = time()
   elapsed_time = 0.0
 
+  bk_max = solver.params[:bk_max]
+  monotone = solver.params[:monotone]
+  nm_itmax = solver.params[:nm_itmax]
+  subsolver = solver.params[:subsolver]
+
   subsolver in trunkls_allowed_subsolvers || error("subproblem solver must be one of $(trunkls_allowed_subsolvers)")
   trsolver = eval(subsolver)
   n = nlp.nls_meta.nvar
   m = nlp.nls_meta.nequ
-  T = eltype(x)
+  x = solver.workspace.x .= x0
   cgtol = one(T)  # Must be ≤ 1.
 
   # Armijo linesearch parameter.
@@ -230,6 +275,6 @@ function trunk(::Val{:GaussNewton},
     end
   end
 
-  return GenericExecutionStats(status, nlp, solution=x, objective=f, dual_feas=∇fNorm2,
-                               iter=iter, elapsed_time=elapsed_time)
+  return OptSolverOutput(status, x, nlp, objective=f, dual_feas=∇fNorm2,
+                         iter=iter, elapsed_time=elapsed_time)
 end

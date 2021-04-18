@@ -1,18 +1,59 @@
-export lbfgs
+export LBFGSSolver
+
+mutable struct LBFGSSolver{T, S} <: AbstractOptSolver{T, S}
+  initialized::Bool
+  params::Dict
+  workspace
+end
+
+function SolverCore.parameters(::Type{LBFGSSolver{T, S}}) where {T, S}
+  (
+    mem = (default = 5, type = Int, min = 1, max = 10),
+  )
+end
+
+function SolverCore.are_valid_parameters(::Type{LBFGSSolver}, mem)
+  return mem ≥ 1
+end
 
 """
-    lbfgs(nlp)
+    LBFGSSolver(nlp)
 
 An implementation of a limited memory BFGS line-search method for unconstrained
 minimization.
 """
-function lbfgs(nlp :: AbstractNLPModel;
-               x :: AbstractVector=copy(nlp.meta.x0),
-               atol :: Real=√eps(eltype(x)), rtol :: Real=√eps(eltype(x)),
-               max_eval :: Int=-1,
-               max_time :: Float64=30.0,
-               verbose :: Bool=true,
-               mem :: Int=5)
+function LBFGSSolver(
+  meta::AbstractNLPModelMeta;
+  x0::S = meta.x0,
+  kwargs...,
+) where {S}
+  T = eltype(x0)
+  nvar, ncon = meta.nvar, meta.ncon
+  params = parameters(LBFGSSolver{T, S})
+  solver = LBFGSSolver{T, S}(
+    true,
+    Dict(k => v[:default] for (k, v) in pairs(params)),
+    ( # workspace
+      x = S(undef, nvar),
+    ),
+  )
+  for (k, v) in kwargs
+    solver.params[k] = v
+  end
+  solver
+end
+
+function SolverCore.solve!(
+  solver :: LBFGSSolver{T, S},
+  nlp :: AbstractNLPModel;
+  x0 :: S=nlp.meta.x0,
+  atol :: T=√eps(T),
+  rtol :: T=√eps(T),
+  max_eval :: Int=-1,
+  max_time :: Float64=30.0,
+  verbose :: Bool=true,
+  kwargs...
+) where {T, S}
 
   if !unconstrained(nlp)
     error("lbfgs should only be called for unconstrained problems. Try tron instead")
@@ -21,9 +62,11 @@ function lbfgs(nlp :: AbstractNLPModel;
   start_time = time()
   elapsed_time = 0.0
 
-  T = eltype(x)
+  mem = solver.params[:mem]
+
   n = nlp.meta.nvar
 
+  x = solver.workspace.x .= x0
   xt = zeros(T, n)
   ∇ft = zeros(T, n)
 
@@ -91,6 +134,6 @@ function lbfgs(nlp :: AbstractNLPModel;
     end
   end
 
-  return GenericExecutionStats(status, nlp, solution=x, objective=f, dual_feas=∇fNorm,
-                               iter=iter, elapsed_time=elapsed_time)
+  return OptSolverOutput(status, x, nlp, objective=f, dual_feas=∇fNorm,
+                         iter=iter, elapsed_time=elapsed_time)
 end

@@ -1,12 +1,26 @@
 #  Some parts of this code were adapted from
 # https://github.com/PythonOptimizers/NLP.py/blob/develop/nlp/optimize/tron.py
 
-export tron
+export TronSolver
 
-tron(nlp :: AbstractNLPModel; variant=:Newton, kwargs...) = tron(Val(variant), nlp; kwargs...)
+mutable struct TronSolver{T, S} <: AbstractOptSolver{T, S}
+  initialized::Bool
+  params::Dict
+  workspace
+end
+
+function SolverCore.parameters(::Type{TronSolver{T, S}}) where {T, S}
+  (
+    μ₀ = (default = T(1e-2), type = T, scale = :log, min = √√eps(T), max = one(T)),
+    μ₁ = (default = one(T), type = T, min = T(0.5), max = one(T)),
+    σ = (default = T(10), type = T, min = T(1.0), max = T(100)),
+  )
+end
+
+SolverCore.are_valid_parameters(::Type{TronSolver}, _, _, _) = true
 
 """
-    tron(nlp)
+    TronSolver(nlp)
 
 A pure Julia implementation of a trust-region solver for bound-constrained
 optimization:
@@ -18,32 +32,56 @@ TRON is described in
 Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
 Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
 """
-function tron(::Val{:Newton},
-              nlp :: AbstractNLPModel;
-              subsolver_logger :: AbstractLogger=NullLogger(),
-              x :: AbstractVector=copy(nlp.meta.x0),
-              μ₀ :: Real=eltype(x)(1e-2),
-              μ₁ :: Real=one(eltype(x)),
-              σ :: Real=eltype(x)(10),
-              max_eval :: Int=-1,
-              max_time :: Real=30.0,
-              max_cgiter :: Int=50,
-              use_only_objgrad :: Bool=false,
-              cgtol :: Real=eltype(x)(0.1),
-              atol :: Real=√eps(eltype(x)),
-              rtol :: Real=√eps(eltype(x)),
-              fatol :: Real=zero(eltype(x)),
-              frtol :: Real=eps(eltype(x))^eltype(x)(2/3)
-             )
+function TronSolver(
+  meta::AbstractNLPModelMeta;
+  x0::S = meta.x0,
+  kwargs...,
+) where {S}
+  T = eltype(x0)
+  nvar, ncon = meta.nvar, meta.ncon
+  params = parameters(TronSolver{T, S})
+  solver = TronSolver{T, S}(
+    true,
+    Dict(k => v[:default] for (k, v) in pairs(params)),
+    ( # workspace
+      x = S(undef, nvar),
+    ),
+  )
+  for (k, v) in kwargs
+    solver.params[k] = v
+  end
+  solver
+end
+
+function SolverCore.solve!(
+  solver :: TronSolver{T, S},
+  nlp :: AbstractNLPModel;
+  subsolver_logger :: AbstractLogger=NullLogger(),
+  x0 :: S=nlp.meta.x0,
+  atol :: T=√eps(T),
+  rtol :: T=√eps(T),
+  max_eval :: Int=-1,
+  max_time :: Float64=30.0,
+  verbose :: Bool=true,
+  max_cgiter :: Int=50,
+  use_only_objgrad :: Bool=false,
+  cgtol :: Real=T(0.1),
+  fatol :: Real=zero(T),
+  frtol :: Real=eps(T)^T(2/3),
+  kwargs...
+) where {T, S}
 
   if !(unconstrained(nlp) || bound_constrained(nlp))
     error("tron should only be called for unconstrained or bound-constrained problems")
   end
 
-  T = eltype(x)
   ℓ = T.(nlp.meta.lvar)
   u = T.(nlp.meta.uvar)
   n = nlp.meta.nvar
+
+  μ₀ = solver.params[:μ₀]
+  μ₁ = solver.params[:μ₁]
+  σ = solver.params[:σ]
 
   iter = 0
   start_time = time()
@@ -55,6 +93,7 @@ function tron(::Val{:Newton},
   xc = zeros(T, n)
   Hs = zeros(T, n)
 
+  x = solver.workspace.x .= x0
   x .= max.(ℓ, min.(x, u))
   gx = zeros(T, n)
   fx, _ = objgrad!(nlp, x, gx)
@@ -65,7 +104,7 @@ function tron(::Val{:Newton},
   project_step!(gpx, x, gx, ℓ, u, -one(T))
   πx = nrm2(n, gpx)
   ϵ = atol + rtol * πx
-  fmin = min(-one(T), fx) / eps(eltype(x))
+  fmin = min(-one(T), fx) / eps(T)
   optimal = πx <= ϵ
   tired = el_time > max_time || neval_obj(nlp) > max_eval ≥ 0
   unbounded = fx < fmin
@@ -169,8 +208,8 @@ function tron(::Val{:Newton},
     status = :unbounded
   end
 
-  return GenericExecutionStats(status, nlp, solution=x, objective=fx, dual_feas=πx,
-                               primal_feas=zero(eltype(x)), iter=iter, elapsed_time=el_time)
+  return OptSolverOutput(status, x, nlp, objective=fx, dual_feas=πx,
+                         primal_feas=zero(T), iter=iter, elapsed_time=el_time)
 end
 
 """`s = projected_line_search!(x, H, g, d, ℓ, u; μ₀ = 1e-2)`

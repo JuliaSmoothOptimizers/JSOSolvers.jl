@@ -6,31 +6,45 @@ function consistency()
     args = Pair{Symbol,Number}[:atol => 1e-6, :rtol => 1e-6, :max_eval => 1000, :max_time => 60.0]
 
     @testset "NLP" begin
-      for mtd in [trunk, lbfgs, tron]
+      for Solver in [LBFGSSolver, TronSolver, TrunkSolver]
         with_logger(NullLogger()) do
-          stats = mtd(unlp; args...)
-          @test stats isa GenericExecutionStats
-          @test stats.status == :first_order
-          reset!(unlp); stats = mtd(unlp; max_eval=1)
-          @test stats.status == :max_eval
+          solver = Solver(unlp)
+          output = solve!(solver, unlp; args...)
+          @test output isa OptSolverOutput
+          @test output.status == :first_order
+
+          reset!(unlp)
+          obj(unlp, unlp.meta.x0)
+          obj(unlp, unlp.meta.x0)
+          output = solve!(solver, unlp; max_eval=1)
+          @test output.status == :max_eval
+
           slow_nlp = ADNLPModel(x -> begin sleep(0.1); unlp.f(x); end, unlp.meta.x0)
-          stats = mtd(slow_nlp; max_time=0.0)
-          @test stats.status == :max_time
+          solver = Solver(slow_nlp)
+          output = solve!(solver, slow_nlp; max_time=0.0)
+          @test output.status == :max_time
         end
       end
     end
 
     @testset "NLS" begin
-      for mtd in [trunk]
+      for Solver in [TronNLSSolver, TrunkNLSSolver]
         with_logger(NullLogger()) do
-          stats = mtd(unls; args...)
-          @test stats isa GenericExecutionStats
-          @test stats.status == :first_order
-          reset!(unls); stats = mtd(unls; max_eval=1)
-          @test stats.status == :max_eval
+          solver = Solver(unls)
+          output = solve!(solver, unls; args...)
+          @test output isa OptSolverOutput
+          @test output.status == :first_order
+
+          reset!(unls)
+          obj(unls, unls.meta.x0)
+          obj(unls, unls.meta.x0)
+          output = solve!(solver, unls; max_eval=1)
+          @test output.status == :max_eval
+
           slow_nls = ADNLSModel(x -> begin sleep(0.1); unls.F(x); end, unls.meta.x0, nls_meta(unls).nequ)
-          stats = mtd(slow_nls; max_time=0.0)
-          @test stats.status == :max_time
+          solver = Solver(slow_nls)
+          output = solve!(solver, slow_nls; max_time=0.0)
+          @test output.status == :max_time
         end
       end
     end

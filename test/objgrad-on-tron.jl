@@ -28,10 +28,11 @@
   end
 
   nlp = MyProblem()
-  output = tron(nlp, use_only_objgrad=true)
+  solver = TronSolver(nlp)
+  output = solve!(solver, nlp, use_only_objgrad=true)
   @test isapprox(output.solution, ones(2), rtol=1e-4)
   @test output.dual_feas < 1e-4
   @test output.objective< 1e-4
 
-  @test_throws MethodError tron(nlp, use_only_objgrad=false)
+  @test_throws MethodError solve!(solver, nlp, use_only_objgrad=false)
 end

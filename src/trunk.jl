@@ -1,9 +1,23 @@
-export trunk
+export TrunkSolver
 
-trunk(nlp :: AbstractNLPModel; variant=:Newton, kwargs...) = trunk(Val(variant), nlp; kwargs...)
+mutable struct TrunkSolver{T, S} <: AbstractOptSolver{T, S}
+  initialized::Bool
+  params::Dict
+  workspace
+end
+
+function SolverCore.parameters(::Type{TrunkSolver{T, S}}) where {T, S}
+  (
+    bk_max = (default = 10, type = Int, min = 1, max = 50),
+    monotone = (default = true, type = Bool),
+    nm_itmax = (default = 25, type = Int, min = 1, max = 50),
+  )
+end
+
+SolverCore.are_valid_parameters(::Type{TrunkSolver}, _, _, _) = true
 
 """
-    trunk(nlp)
+    TrunkSolver(nlp)
 
 A trust-region solver for unconstrained optimization using exact second derivatives.
 
@@ -17,16 +31,39 @@ The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
     SIAM, Philadelphia, USA, 2000.
     DOI: 10.1137/1.9780898719857.
 """
-function trunk(::Val{:Newton},
-               nlp :: AbstractNLPModel;
-               subsolver_logger :: AbstractLogger=NullLogger(),
-               x :: AbstractVector=copy(nlp.meta.x0),
-               atol :: Real=√eps(eltype(x)), rtol :: Real=√eps(eltype(x)),
-               max_eval :: Int=-1,
-               max_time :: Float64=30.0,
-               bk_max :: Int=10,
-               monotone :: Bool=true,
-               nm_itmax :: Int=25)
+function TrunkSolver(
+  meta::AbstractNLPModelMeta;
+  x0::S = meta.x0,
+  kwargs...,
+) where {S}
+  T = eltype(x0)
+  nvar, ncon = meta.nvar, meta.ncon
+  params = parameters(TrunkSolver{T, S})
+  solver = TrunkSolver{T, S}(
+    true,
+    Dict(k => v[:default] for (k, v) in pairs(params)),
+    ( # workspace
+      x = S(undef, nvar),
+    ),
+  )
+  for (k, v) in kwargs
+    solver.params[k] = v
+  end
+  solver
+end
+
+function SolverCore.solve!(
+  solver :: TrunkSolver{T, S},
+  nlp :: AbstractNLPModel;
+  subsolver_logger :: AbstractLogger=NullLogger(),
+  x0 :: S=nlp.meta.x0,
+  atol :: T=√eps(T),
+  rtol :: T=√eps(T),
+  max_eval :: Int=-1,
+  max_time :: Float64=30.0,
+  verbose :: Bool=true,
+  kwargs...
+) where {T, S}
 
   if !unconstrained(nlp)
     error("trunk should only be called for unconstrained problems. Try tron instead")
@@ -35,8 +72,12 @@ function trunk(::Val{:Newton},
   start_time = time()
   elapsed_time = 0.0
 
-  T = eltype(x)
+  bk_max = solver.params[:bk_max]
+  monotone = solver.params[:monotone]
+  nm_itmax = solver.params[:nm_itmax]
+
   n = nlp.meta.nvar
+  x = solver.workspace.x .= x0
 
   cgtol = one(T)  # Must be ≤ 1.
 
@@ -225,6 +266,6 @@ function trunk(::Val{:Newton},
     end
   end
 
-  return GenericExecutionStats(status, nlp, solution=x, objective=f, dual_feas=∇fNorm2,
-                               iter=iter, elapsed_time=elapsed_time)
+  return OptSolverOutput(status, x, nlp, objective=f, dual_feas=∇fNorm2,
+                         iter=iter, elapsed_time=elapsed_time)
 end
