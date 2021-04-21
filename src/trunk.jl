@@ -31,12 +31,11 @@ The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
     SIAM, Philadelphia, USA, 2000.
     DOI: 10.1137/1.9780898719857.
 """
-function TrunkSolver(
+function TrunkSolver{T, S}(
   meta::AbstractNLPModelMeta;
   x0::S = meta.x0,
   kwargs...,
-) where {S}
-  T = eltype(x0)
+) where {T, S}
   nvar, ncon = meta.nvar, meta.ncon
   params = parameters(TrunkSolver{T, S})
   solver = TrunkSolver{T, S}(
@@ -114,21 +113,25 @@ function SolverCore.solve!(
     ∇fn = copy(∇f)
   end
 
+  
   @info log_header([:iter, :f, :dual, :radius, :ratio, :inner, :bk, :cgstatus], [Int, T, T, T, T, Int, Int, String],
-                   hdr_override=Dict(:f=>"f(x)", :dual=>"π", :radius=>"Δ"))
-
+  hdr_override=Dict(:f=>"f(x)", :dual=>"π", :radius=>"Δ"))
+  
   while !(solved || tired || stalled)
     # Compute inexact solution to trust-region subproblem
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
     H = hess_op!(nlp, x, temp)
     cgtol = max(rtol, min(T(0.1), 9 * cgtol / 10, sqrt(∇fNorm2)))
-    (s, cg_stats) = with_logger(subsolver_logger) do
-      cg(H, -∇f,
-         atol=T(atol), rtol=cgtol,
-         radius=get_property(tr, :radius),
-         itmax=max(2 * n, 50))
+    # TODO: Reuse the solver
+    cg_solver = CgSolver(H, -∇f)
+    cg_output = with_logger(subsolver_logger) do
+      solve!(cg_solver, LinAlgProblem(H, -∇f),
+              atol=T(atol), rtol=cgtol,
+              radius=get_property(tr, :radius),
+              itmax=max(2 * n, 50))
     end
+    s = cg_output.solution
 
     # Compute actual vs. predicted reduction.
     sNorm = nrm2(n, s)
@@ -204,7 +207,7 @@ function SolverCore.solve!(
     end
 
     @info log_row([iter, f, ∇fNorm2, get_property(tr, :radius), get_property(tr, :ratio),
-                   length(cg_stats.residuals), bk, cg_stats.status])
+                   -1, bk, cg_output.status])
     iter = iter + 1
 
     if acceptable(tr)

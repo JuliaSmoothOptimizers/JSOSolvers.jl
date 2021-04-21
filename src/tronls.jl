@@ -32,12 +32,11 @@ This is an adaptation of the TRON method described in
 Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
 Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
 """
-function TronNLSSolver(
+function TronNLSSolver{T, S}(
   meta::AbstractNLPModelMeta;
   x0::S = meta.x0,
   kwargs...,
-) where {S}
-  T = eltype(x0)
+) where {T, S}
   nvar, ncon = meta.nvar, meta.ncon
   params = parameters(TronNLSSolver{T, S})
   solver = TronNLSSolver{T, S}(

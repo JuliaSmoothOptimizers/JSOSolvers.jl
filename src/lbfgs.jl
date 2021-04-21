@@ -22,12 +22,11 @@ end
 An implementation of a limited memory BFGS line-search method for unconstrained
 minimization.
 """
-function LBFGSSolver(
+function LBFGSSolver{T, S}(
   meta::AbstractNLPModelMeta;
   x0::S = meta.x0,
   kwargs...,
-) where {S}
-  T = eltype(x0)
+) where {T, S}
   nvar, ncon = meta.nvar, meta.ncon
   params = parameters(LBFGSSolver{T, S})
   solver = LBFGSSolver{T, S}(

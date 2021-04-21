@@ -34,12 +34,11 @@ The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
     SIAM, Philadelphia, USA, 2000.
     DOI: 10.1137/1.9780898719857.
 """
-function TrunkNLSSolver(
+function TrunkNLSSolver{T, S}(
   meta::AbstractNLPModelMeta;
   x0::S = meta.x0,
   kwargs...,
-) where {S}
-  T = eltype(x0)
+) where {T, S}
   nvar, ncon = meta.nvar, meta.ncon
   params = parameters(TrunkNLSSolver{T, S})
   solver = TrunkNLSSolver{T, S}(
