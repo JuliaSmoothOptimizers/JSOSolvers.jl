@@ -21,8 +21,8 @@ jobs:
         uses: peter-evans/create-pull-request@v3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: Format .jl files
-          title: 'Automatic JuliaFormatter.jl run'
+          commit-message: ":robot: Format .jl files"
+          title: '[AUTO] JuliaFormatter.jl run'
           branch: auto-juliaformatter-pr
           delete-branch: true
           labels: formatting, automated pr, no changelog
