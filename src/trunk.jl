@@ -1,6 +1,6 @@
 export trunk
 
-trunk(nlp :: AbstractNLPModel; variant=:Newton, kwargs...) = trunk(Val(variant), nlp; kwargs...)
+trunk(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = trunk(Val(variant), nlp; kwargs...)
 
 """
     trunk(nlp)
@@ -17,17 +17,19 @@ The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
     SIAM, Philadelphia, USA, 2000.
     DOI: 10.1137/1.9780898719857.
 """
-function trunk(::Val{:Newton},
-               nlp :: AbstractNLPModel;
-               subsolver_logger :: AbstractLogger=NullLogger(),
-               x :: AbstractVector=copy(nlp.meta.x0),
-               atol :: Real=√eps(eltype(x)), rtol :: Real=√eps(eltype(x)),
-               max_eval :: Int=-1,
-               max_time :: Float64=30.0,
-               bk_max :: Int=10,
-               monotone :: Bool=true,
-               nm_itmax :: Int=25)
-
+function trunk(
+  ::Val{:Newton},
+  nlp::AbstractNLPModel;
+  subsolver_logger::AbstractLogger = NullLogger(),
+  x::AbstractVector = copy(nlp.meta.x0),
+  atol::Real = √eps(eltype(x)),
+  rtol::Real = √eps(eltype(x)),
+  max_eval::Int = -1,
+  max_time::Float64 = 30.0,
+  bk_max::Int = 10,
+  monotone::Bool = true,
+  nm_itmax::Int = 25,
+)
   if !unconstrained(nlp)
     error("trunk should only be called for unconstrained problems. Try tron instead")
   end
@@ -41,7 +43,7 @@ function trunk(::Val{:Newton},
   cgtol = one(T)  # Must be ≤ 1.
 
   # Armijo linesearch parameter.
-  β = eps(T)^T(1/4)
+  β = eps(T)^T(1 / 4)
 
   iter = 0
   f = obj(nlp, x)
@@ -73,8 +75,11 @@ function trunk(::Val{:Newton},
     ∇fn = copy(∇f)
   end
 
-  @info log_header([:iter, :f, :dual, :radius, :ratio, :inner, :bk, :cgstatus], [Int, T, T, T, T, Int, Int, String],
-                   hdr_override=Dict(:f=>"f(x)", :dual=>"π", :radius=>"Δ"))
+  @info log_header(
+    [:iter, :f, :dual, :radius, :ratio, :inner, :bk, :cgstatus],
+    [Int, T, T, T, T, Int, Int, String],
+    hdr_override = Dict(:f => "f(x)", :dual => "π", :radius => "Δ"),
+  )
 
   while !(solved || tired || stalled)
     # Compute inexact solution to trust-region subproblem
@@ -83,10 +88,14 @@ function trunk(::Val{:Newton},
     H = hess_op!(nlp, x, temp)
     cgtol = max(rtol, min(T(0.1), 9 * cgtol / 10, sqrt(∇fNorm2)))
     (s, cg_stats) = with_logger(subsolver_logger) do
-      cg(H, -∇f,
-         atol=T(atol), rtol=cgtol,
-         radius=get_property(tr, :radius),
-         itmax=max(2 * n, 50))
+      cg(
+        H,
+        -∇f,
+        atol = T(atol),
+        rtol = cgtol,
+        radius = get_property(tr, :radius),
+        itmax = max(2 * n, 50),
+      )
     end
 
     # Compute actual vs. predicted reduction.
@@ -162,8 +171,16 @@ function trunk(::Val{:Newton},
       end
     end
 
-    @info log_row([iter, f, ∇fNorm2, get_property(tr, :radius), get_property(tr, :ratio),
-                   length(cg_stats.residuals), bk, cg_stats.status])
+    @info log_row([
+      iter,
+      f,
+      ∇fNorm2,
+      get_property(tr, :radius),
+      get_property(tr, :ratio),
+      length(cg_stats.residuals),
+      bk,
+      cg_stats.status,
+    ])
     iter = iter + 1
 
     if acceptable(tr)
@@ -225,6 +242,13 @@ function trunk(::Val{:Newton},
     end
   end
 
-  return GenericExecutionStats(status, nlp, solution=x, objective=f, dual_feas=∇fNorm2,
-                               iter=iter, elapsed_time=elapsed_time)
+  return GenericExecutionStats(
+    status,
+    nlp,
+    solution = x,
+    objective = f,
+    dual_feas = ∇fNorm2,
+    iter = iter,
+    elapsed_time = elapsed_time,
+  )
 end

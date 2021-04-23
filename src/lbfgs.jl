@@ -6,14 +6,16 @@ export lbfgs
 An implementation of a limited memory BFGS line-search method for unconstrained
 minimization.
 """
-function lbfgs(nlp :: AbstractNLPModel;
-               x :: AbstractVector=copy(nlp.meta.x0),
-               atol :: Real=√eps(eltype(x)), rtol :: Real=√eps(eltype(x)),
-               max_eval :: Int=-1,
-               max_time :: Float64=30.0,
-               verbose :: Bool=true,
-               mem :: Int=5)
-
+function lbfgs(
+  nlp::AbstractNLPModel;
+  x::AbstractVector = copy(nlp.meta.x0),
+  atol::Real = √eps(eltype(x)),
+  rtol::Real = √eps(eltype(x)),
+  max_eval::Int = -1,
+  max_time::Float64 = 30.0,
+  verbose::Bool = true,
+  mem::Int = 5,
+)
   if !unconstrained(nlp)
     error("lbfgs should only be called for unconstrained problems. Try tron instead")
   end
@@ -29,14 +31,17 @@ function lbfgs(nlp :: AbstractNLPModel;
 
   f = obj(nlp, x)
   ∇f = grad(nlp, x)
-  H = InverseLBFGSOperator(T, n, mem, scaling=true)
+  H = InverseLBFGSOperator(T, n, mem, scaling = true)
 
   ∇fNorm = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm
   iter = 0
 
-  @info log_header([:iter, :f, :dual, :slope, :bk], [Int, T, T, T, Int],
-                   hdr_override=Dict(:f=>"f(x)", :dual=>"‖∇f‖", :slope=>"∇fᵀd"))
+  @info log_header(
+    [:iter, :f, :dual, :slope, :bk],
+    [Int, T, T, T, Int],
+    hdr_override = Dict(:f => "f(x)", :dual => "‖∇f‖", :slope => "∇fᵀd"),
+  )
 
   optimal = ∇fNorm ≤ ϵ
   tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
@@ -46,7 +51,7 @@ function lbfgs(nlp :: AbstractNLPModel;
   h = LineModel(nlp, x, ∇f)
 
   while !(optimal || tired || stalled)
-    d = - H * ∇f
+    d = -H * ∇f
     slope = dot(n, d, ∇f)
     if slope ≥ 0
       @error "not a descent direction" slope
@@ -57,7 +62,8 @@ function lbfgs(nlp :: AbstractNLPModel;
 
     redirect!(h, x, d)
     # Perform improved Armijo linesearch.
-    t, good_grad, ft, nbk, nbW = armijo_wolfe(h, f, slope, ∇ft, τ₁=T(0.9999), bk_max=25, verbose=false)
+    t, good_grad, ft, nbk, nbW =
+      armijo_wolfe(h, f, slope, ∇ft, τ₁ = T(0.9999), bk_max = 25, verbose = false)
 
     @info log_row(Any[iter, f, ∇fNorm, slope, nbk])
 
@@ -91,6 +97,13 @@ function lbfgs(nlp :: AbstractNLPModel;
     end
   end
 
-  return GenericExecutionStats(status, nlp, solution=x, objective=f, dual_feas=∇fNorm,
-                               iter=iter, elapsed_time=elapsed_time)
+  return GenericExecutionStats(
+    status,
+    nlp,
+    solution = x,
+    objective = f,
+    dual_feas = ∇fNorm,
+    iter = iter,
+    elapsed_time = elapsed_time,
+  )
 end

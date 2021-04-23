@@ -1,6 +1,7 @@
 const trunkls_allowed_subsolvers = [:cgls, :crls, :lsqr, :lsmr]
 
-trunk(nlp :: AbstractNLSModel; variant=:GaussNewton, kwargs...) = trunk(Val(variant), nlp; kwargs...)
+trunk(nlp::AbstractNLSModel; variant = :GaussNewton, kwargs...) =
+  trunk(Val(variant), nlp; kwargs...)
 
 """
     trunk(nls)
@@ -17,18 +18,20 @@ The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
     SIAM, Philadelphia, USA, 2000.
     DOI: 10.1137/1.9780898719857.
 """
-function trunk(::Val{:GaussNewton},
-               nlp :: AbstractNLSModel;
-               x :: AbstractVector=copy(nlp.meta.x0),
-               subsolver :: Symbol=:lsmr,
-               atol :: Real=√eps(eltype(x)), rtol :: Real=√eps(eltype(x)),
-               max_eval :: Int=-1,
-               max_time :: Float64=30.0,
-               bk_max :: Int=10,
-               monotone :: Bool=true,
-               nm_itmax :: Int=25,
-               trsolver_args :: Dict{Symbol,Any}=Dict{Symbol,Any}())
-
+function trunk(
+  ::Val{:GaussNewton},
+  nlp::AbstractNLSModel;
+  x::AbstractVector = copy(nlp.meta.x0),
+  subsolver::Symbol = :lsmr,
+  atol::Real = √eps(eltype(x)),
+  rtol::Real = √eps(eltype(x)),
+  max_eval::Int = -1,
+  max_time::Float64 = 30.0,
+  bk_max::Int = 10,
+  monotone::Bool = true,
+  nm_itmax::Int = 25,
+  trsolver_args::Dict{Symbol, Any} = Dict{Symbol, Any}(),
+)
   if !unconstrained(nlp)
     error("trunk should only be called for unconstrained problems. Try tron instead")
   end
@@ -36,7 +39,8 @@ function trunk(::Val{:GaussNewton},
   start_time = time()
   elapsed_time = 0.0
 
-  subsolver in trunkls_allowed_subsolvers || error("subproblem solver must be one of $(trunkls_allowed_subsolvers)")
+  subsolver in trunkls_allowed_subsolvers ||
+    error("subproblem solver must be one of $(trunkls_allowed_subsolvers)")
   trsolver = eval(subsolver)
   n = nlp.nls_meta.nvar
   m = nlp.nls_meta.nequ
@@ -44,7 +48,7 @@ function trunk(::Val{:GaussNewton},
   cgtol = one(T)  # Must be ≤ 1.
 
   # Armijo linesearch parameter.
-  β = eps(T)^T(1/4)
+  β = eps(T)^T(1 / 4)
 
   iter = 0
   r = residual(nlp, x)
@@ -77,8 +81,11 @@ function trunk(::Val{:GaussNewton},
   stalled = false
   status = :unknown
 
-  @info log_header([:iter, :f, :dual, :radius, :step, :ratio, :inner, :bk, :cgstatus], [Int, T, T, T, T, T, Int, Int, String],
-                   hdr_override=Dict(:f=>"f(x)", :dual=>"‖∇f‖", :radius=>"Δ"))
+  @info log_header(
+    [:iter, :f, :dual, :radius, :step, :ratio, :inner, :bk, :cgstatus],
+    [Int, T, T, T, T, T, Int, Int, String],
+    hdr_override = Dict(:f => "f(x)", :dual => "‖∇f‖", :radius => "Δ"),
+  )
 
   while !(optimal || tired || stalled)
     # Compute inexact solution to trust-region subproblem
@@ -86,11 +93,15 @@ function trunk(::Val{:GaussNewton},
     # In this particular case, we may use an operator with preallocation.
     cgtol = max(rtol, min(T(0.1), 9 * cgtol / 10, sqrt(∇fNorm2)))
     (s, cg_stats) = with_logger(NullLogger()) do
-      trsolver(A, -r,
-               atol=atol, rtol=cgtol,
-               radius=get_property(tr, :radius),
-               itmax=max(2 * (n + m), 50);
-               trsolver_args...)
+      trsolver(
+        A,
+        -r,
+        atol = atol,
+        rtol = cgtol,
+        radius = get_property(tr, :radius),
+        itmax = max(2 * (n + m), 50);
+        trsolver_args...,
+      )
     end
 
     # Compute actual vs. predicted reduction.
@@ -173,8 +184,17 @@ function trunk(::Val{:GaussNewton},
       end
     end
 
-    @info log_row([iter, f, ∇fNorm2, get_property(tr, :radius), sNorm,
-                   get_property(tr, :ratio), length(cg_stats.residuals), bk, cg_stats.status])
+    @info log_row([
+      iter,
+      f,
+      ∇fNorm2,
+      get_property(tr, :radius),
+      sNorm,
+      get_property(tr, :ratio),
+      length(cg_stats.residuals),
+      bk,
+      cg_stats.status,
+    ])
     iter = iter + 1
 
     if acceptable(tr)
@@ -230,6 +250,13 @@ function trunk(::Val{:GaussNewton},
     end
   end
 
-  return GenericExecutionStats(status, nlp, solution=x, objective=f, dual_feas=∇fNorm2,
-                               iter=iter, elapsed_time=elapsed_time)
+  return GenericExecutionStats(
+    status,
+    nlp,
+    solution = x,
+    objective = f,
+    dual_feas = ∇fNorm2,
+    iter = iter,
+    elapsed_time = elapsed_time,
+  )
 end
