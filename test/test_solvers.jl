@@ -18,21 +18,21 @@ function tests()
 
   @info "Testing NLS solvers"
   @info "  unconstrained solvers"
-  for (name,solver) in [
-         ("trunk+cgls", (nls; kwargs...) -> trunk(nls, subsolver=:cgls; kwargs...)), # trunk with cgls due to multiprecision
-         ("trunk full Hessian", (nls; kwargs...) -> trunk(nls, variant=:Newton; kwargs...)),
-         ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver=:cgls; kwargs...)),
-         ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant=:Newton; kwargs...))
-       ]
+  for (name, solver) in [
+    ("trunk+cgls", (nls; kwargs...) -> trunk(nls, subsolver = :cgls; kwargs...)), # trunk with cgls due to multiprecision
+    ("trunk full Hessian", (nls; kwargs...) -> trunk(nls, variant = :Newton; kwargs...)),
+    ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver = :cgls; kwargs...)),
+    ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant = :Newton; kwargs...)),
+  ]
     @info "    $name"
     unconstrained_nls(solver)
     multiprecision_nls(solver, :unc)
   end
   @info "  bound-constrained solvers"
-  for (name,solver) in [
-         ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver=:cgls; kwargs...)),
-         ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant=:Newton; kwargs...))
-        ]
+  for (name, solver) in [
+    ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver = :cgls; kwargs...)),
+    ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant = :Newton; kwargs...)),
+  ]
     @info "    $name"
     bound_constrained_nls(solver)
     multiprecision_nls(solver, :unc)

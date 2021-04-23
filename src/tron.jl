@@ -3,7 +3,7 @@
 
 export tron
 
-tron(nlp :: AbstractNLPModel; variant=:Newton, kwargs...) = tron(Val(variant), nlp; kwargs...)
+tron(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = tron(Val(variant), nlp; kwargs...)
 
 """
     tron(nlp)
@@ -18,24 +18,24 @@ TRON is described in
 Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
 Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
 """
-function tron(::Val{:Newton},
-              nlp :: AbstractNLPModel;
-              subsolver_logger :: AbstractLogger=NullLogger(),
-              x :: AbstractVector=copy(nlp.meta.x0),
-              μ₀ :: Real=eltype(x)(1e-2),
-              μ₁ :: Real=one(eltype(x)),
-              σ :: Real=eltype(x)(10),
-              max_eval :: Int=-1,
-              max_time :: Real=30.0,
-              max_cgiter :: Int=50,
-              use_only_objgrad :: Bool=false,
-              cgtol :: Real=eltype(x)(0.1),
-              atol :: Real=√eps(eltype(x)),
-              rtol :: Real=√eps(eltype(x)),
-              fatol :: Real=zero(eltype(x)),
-              frtol :: Real=eps(eltype(x))^eltype(x)(2/3)
-             )
-
+function tron(
+  ::Val{:Newton},
+  nlp::AbstractNLPModel;
+  subsolver_logger::AbstractLogger = NullLogger(),
+  x::AbstractVector = copy(nlp.meta.x0),
+  μ₀::Real = eltype(x)(1e-2),
+  μ₁::Real = one(eltype(x)),
+  σ::Real = eltype(x)(10),
+  max_eval::Int = -1,
+  max_time::Real = 30.0,
+  max_cgiter::Int = 50,
+  use_only_objgrad::Bool = false,
+  cgtol::Real = eltype(x)(0.1),
+  atol::Real = √eps(eltype(x)),
+  rtol::Real = √eps(eltype(x)),
+  fatol::Real = zero(eltype(x)),
+  frtol::Real = eps(eltype(x))^eltype(x)(2 / 3),
+)
   if !(unconstrained(nlp) || bound_constrained(nlp))
     error("tron should only be called for unconstrained or bound-constrained problems")
   end
@@ -79,8 +79,11 @@ function tron(::Val{:Newton},
 
   αC = one(T)
   tr = TRONTrustRegion(min(max(one(T), πx / 10), 100))
-  @info log_header([:iter, :f, :dual, :radius, :ratio, :cgstatus], [Int, T, T, T, T, String],
-                   hdr_override=Dict(:f=>"f(x)", :dual=>"π", :radius=>"Δ"))
+  @info log_header(
+    [:iter, :f, :dual, :radius, :ratio, :cgstatus],
+    [Int, T, T, T, T, String],
+    hdr_override = Dict(:f => "f(x)", :dual => "π", :radius => "Δ"),
+  )
   while !(optimal || tired || stalled || unbounded)
     # Current iteration
     xc .= x
@@ -88,7 +91,7 @@ function tron(::Val{:Newton},
     Δ = get_property(tr, :radius)
     H = hess_op!(nlp, xc, temp)
 
-    αC, s, cauchy_status = cauchy(x, H, gx, Δ, αC, ℓ, u, μ₀=μ₀, μ₁=μ₁, σ=σ)
+    αC, s, cauchy_status = cauchy(x, H, gx, Δ, αC, ℓ, u, μ₀ = μ₀, μ₁ = μ₁, σ = σ)
 
     if cauchy_status != :success
       @error "Cauchy step returned: $cauchy_status"
@@ -97,7 +100,7 @@ function tron(::Val{:Newton},
       continue
     end
     s, Hs, cgits, cginfo = with_logger(subsolver_logger) do
-      projected_newton!(x, H, gx, Δ, cgtol, s, ℓ, u, max_cgiter=max_cgiter)
+      projected_newton!(x, H, gx, Δ, cgtol, s, ℓ, u, max_cgiter = max_cgiter)
     end
     slope = dot(n, gx, s)
     qs = dot(n, s, Hs) / 2 + slope
@@ -153,7 +156,6 @@ function tron(::Val{:Newton},
     tired = el_time > max_time || neval_obj(nlp) > max_eval ≥ 0
     optimal = πx <= ϵ
     unbounded = fx < fmin
-
   end
   @info log_row(Any[iter, fx, πx, get_property(tr, :radius)])
 
@@ -169,8 +171,16 @@ function tron(::Val{:Newton},
     status = :unbounded
   end
 
-  return GenericExecutionStats(status, nlp, solution=x, objective=fx, dual_feas=πx,
-                               primal_feas=zero(eltype(x)), iter=iter, elapsed_time=el_time)
+  return GenericExecutionStats(
+    status,
+    nlp,
+    solution = x,
+    objective = fx,
+    dual_feas = πx,
+    primal_feas = zero(eltype(x)),
+    iter = iter,
+    elapsed_time = el_time,
+  )
 end
 
 """`s = projected_line_search!(x, H, g, d, ℓ, u; μ₀ = 1e-2)`
@@ -182,12 +192,15 @@ Performs a projected line search, searching for a step size `t` such that
 where `s = P(x + t * d) - x`, while remaining on the same face as `x + d`.
 Backtracking is performed from t = 1.0. `x` is updated in place.
 """
-function projected_line_search!(x::AbstractVector{T},
-                                H::Union{AbstractMatrix,AbstractLinearOperator},
-                                g::AbstractVector{T},
-                                d::AbstractVector{T},
-                                ℓ::AbstractVector{T},
-                                u::AbstractVector{T}; μ₀::Real = T(1e-2)) where T <: Real
+function projected_line_search!(
+  x::AbstractVector{T},
+  H::Union{AbstractMatrix, AbstractLinearOperator},
+  g::AbstractVector{T},
+  d::AbstractVector{T},
+  ℓ::AbstractVector{T},
+  u::AbstractVector{T};
+  μ₀::Real = T(1e-2),
+) where {T <: Real}
   α = one(T)
   _, brkmin, _ = breakpoints(x, d, ℓ, u)
   nsteps = 0
@@ -229,11 +242,18 @@ with the sufficient decrease condition
 
     q(s) ≦ μ₀sᵀg.
 """
-function cauchy(x::AbstractVector{T},
-                H::Union{AbstractMatrix,AbstractLinearOperator},
-                g::AbstractVector{T},
-                Δ::Real, α::Real, ℓ::AbstractVector{T}, u::AbstractVector{T};
-                μ₀::Real = T(1e-2), μ₁::Real = one(T), σ::Real = T(10)) where T <: Real
+function cauchy(
+  x::AbstractVector{T},
+  H::Union{AbstractMatrix, AbstractLinearOperator},
+  g::AbstractVector{T},
+  Δ::Real,
+  α::Real,
+  ℓ::AbstractVector{T},
+  u::AbstractVector{T};
+  μ₀::Real = T(1e-2),
+  μ₁::Real = one(T),
+  σ::Real = T(10),
+) where {T <: Real}
   # TODO: Use brkmin to care for g direction
   _, _, brkmax = breakpoints(x, -g, ℓ, u)
   n = length(x)
@@ -302,10 +322,17 @@ min q(d) = ¹/₂dᵀHs + dᵀg    s.t.    ℓ ≦ x + d ≦ u,  ‖d‖ ≦ Δ
 starting from `s`.  The steps are computed using the conjugate gradient method
 projected on the active bounds.
 """
-function projected_newton!(x::AbstractVector{T}, H::Union{AbstractMatrix,AbstractLinearOperator},
-                           g::AbstractVector{T}, Δ::Real, cgtol::Real, s::AbstractVector{T},
-                           ℓ::AbstractVector{T}, u::AbstractVector{T};
-                           max_cgiter::Int = 50) where T <: Real
+function projected_newton!(
+  x::AbstractVector{T},
+  H::Union{AbstractMatrix, AbstractLinearOperator},
+  g::AbstractVector{T},
+  Δ::Real,
+  cgtol::Real,
+  s::AbstractVector{T},
+  ℓ::AbstractVector{T},
+  u::AbstractVector{T};
+  max_cgiter::Int = 50,
+) where {T <: Real}
   n = length(x)
   status = ""
 
@@ -330,7 +357,7 @@ function projected_newton!(x::AbstractVector{T}, H::Union{AbstractMatrix,Abstrac
     gfnorm = norm(wa)
 
     ZHZ = Z' * H * Z
-    st, stats = Krylov.cg(ZHZ, -gfree, radius=Δ, rtol=cgtol, atol=zero(T))
+    st, stats = Krylov.cg(ZHZ, -gfree, radius = Δ, rtol = cgtol, atol = zero(T))
     iters += 1
     status = stats.status
 
