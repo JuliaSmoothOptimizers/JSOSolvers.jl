@@ -1,11 +1,11 @@
 @testset "objgrad on tron" begin
-  struct MyProblem <: AbstractNLPModel
-    meta::NLPModelMeta
+  struct MyProblem <: AbstractNLPModel{Float64, Vector{Float64}}
+    meta::NLPModelMeta{Float64, Vector{Float64}}
     counters::Counters
   end
 
   function MyProblem()
-    meta = NLPModelMeta(
+    meta = NLPModelMeta{Float64, Vector{Float64}}(
       2, # nvar
       x0 = [0.1; 0.1],
       lvar = zeros(2),
