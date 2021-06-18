@@ -38,7 +38,7 @@ end
   n = 30
   model = ADNLSModel(
     x -> [[10 * (x[i + 1] - x[i]^2) for i = 1:(n - 1)]; [x[i] - 1 for i = 1:(n - 1)]],
-    (1:n) ./ (n + 1),
+    collect(1:n) ./ (n + 1),
     2n - 2,
   )
   for subsolver in JSOSolvers.trunkls_allowed_subsolvers
