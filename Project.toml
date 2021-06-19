@@ -16,7 +16,7 @@ SolverTools = "b5612192-2639-5dc1-abfe-fbedd65fab29"
 [compat]
 Krylov = "0.4, 0.5, 0.6, 0.7"
 LinearOperators = "1.1"
-NLPModels = "0.15"
+NLPModels = "0.15, 0.16"
 NLPModelsModifiers = "0.2"
 SolverCore = "0.2"
 SolverTools = "0.6"
