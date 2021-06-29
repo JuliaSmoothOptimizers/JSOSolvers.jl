@@ -50,6 +50,9 @@ function tron(
   fatol::Real = zero(eltype(x)),
   frtol::Real = eps(eltype(x))^eltype(x)(2 / 3),
 )
+  if !(nlp.meta.minimize)
+    error("tron only works for minimization problem")
+  end
   if !(unconstrained(nlp) || bound_constrained(nlp))
     error("tron should only be called for unconstrained or bound-constrained problems")
   end

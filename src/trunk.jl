@@ -30,6 +30,9 @@ function trunk(
   monotone::Bool = true,
   nm_itmax::Int = 25,
 )
+  if !(nlp.meta.minimize)
+    error("trunk only works for minimization problem")
+  end
   if !unconstrained(nlp)
     error("trunk should only be called for unconstrained problems. Try tron instead")
   end
