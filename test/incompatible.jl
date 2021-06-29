@@ -1,3 +1,7 @@
+mutable struct DummyModel{T, S} <: AbstractNLPModel{T, S}
+  meta::NLPModelMeta{T, S}
+end
+
 function test_incompatible()
   solvers = Dict(:lbfgs => [:unc], :trunk => [:unc], :tron => [:unc, :bnd])
   problems = Dict(
@@ -13,6 +17,10 @@ function test_incompatible()
         @test_throws ErrorException eval(solver)(problem)
       end
     end
+  end
+  nlp = DummyModel(NLPModelMeta(1, minimize = false))
+  @testset for solver in keys(solvers)
+    @test_throws ErrorException eval(solver)(nlp)
   end
 end
 

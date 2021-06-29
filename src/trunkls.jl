@@ -32,6 +32,9 @@ function trunk(
   nm_itmax::Int = 25,
   trsolver_args::Dict{Symbol, Any} = Dict{Symbol, Any}(),
 )
+  if !(nlp.meta.minimize)
+    error("trunk only works for minimization problem")
+  end
   if !unconstrained(nlp)
     error("trunk should only be called for unconstrained problems. Try tron instead")
   end

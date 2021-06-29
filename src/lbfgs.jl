@@ -16,6 +16,9 @@ function lbfgs(
   verbose::Bool = true,
   mem::Int = 5,
 )
+  if !(nlp.meta.minimize)
+    error("lbfgs only works for minimization problem")
+  end
   if !unconstrained(nlp)
     error("lbfgs should only be called for unconstrained problems. Try tron instead")
   end
