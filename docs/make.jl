@@ -18,4 +18,4 @@ makedocs(
   ],
 )
 
-deploydocs(repo = "github.com/JuliaSmoothOptimizers/JSOSolvers.jl.git")
+deploydocs(repo = "github.com/JuliaSmoothOptimizers/JSOSolvers.jl.git", devbranch = "main")
