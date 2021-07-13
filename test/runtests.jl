@@ -7,8 +7,12 @@ using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, Solve
 # this package
 using JSOSolvers
 
+include("simple_model.jl")
 include("consistency.jl")
 include("test_solvers.jl")
+if VERSION ≥ v"1.6"
+  include("allocs.jl")
+end
 
 nlp = ADNLPModel(x -> (x[1] - 1)^2 + 100 * (x[2] - x[1]^2)^2, [-1.2; 1.0])
 for solver in [lbfgs, tron, trunk]
