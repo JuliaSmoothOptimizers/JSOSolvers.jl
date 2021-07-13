@@ -12,19 +12,16 @@ An implementation of a limited memory BFGS line-search method for unconstrained
 minimization.
 """
 mutable struct LBFGSSolver{T, V, Op <: AbstractLinearOperator, M <: AbstractNLPModel}
-  x :: V
-  xt :: V
-  gx :: V
-  gt :: V
-  d :: V
-  H :: Op
-  h :: LineModel{T, V, M}
+  x::V
+  xt::V
+  gx::V
+  gt::V
+  d::V
+  H::Op
+  h::LineModel{T, V, M}
 end
 
-function LBFGSSolver(
-  nlp::M;
-  mem :: Int = 5,
-) where {T, V, M <: AbstractNLPModel{T, V}}
+function LBFGSSolver(nlp::M; mem::Int = 5) where {T, V, M <: AbstractNLPModel{T, V}}
   nvar = nlp.meta.nvar
   x = V(undef, nvar)
   d = V(undef, nvar)
@@ -37,14 +34,13 @@ function LBFGSSolver(
   return LBFGSSolver{T, V, Op, M}(x, xt, gx, gt, d, H, h)
 end
 
-@doc (@doc LBFGSSolver)
-function lbfgs(
+@doc (@doc LBFGSSolver) function lbfgs(
   nlp::AbstractNLPModel;
   x::V = nlp.meta.x0,
   kwargs...,
-) where V
+) where {V}
   solver = LBFGSSolver(nlp)
-  return solve!(solver, nlp; x=x, kwargs...)
+  return solve!(solver, nlp; x = x, kwargs...)
 end
 
 function solve!(

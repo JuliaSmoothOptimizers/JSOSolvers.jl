@@ -31,10 +31,10 @@ end
 @testset "Allocation tests" begin
   @testset "LBFGS" begin
     function al_stats(status, nlp, x)
-      GenericExecutionStats(status, nlp, solution=x)
-      @allocated GenericExecutionStats(status, nlp, solution=x)
+      GenericExecutionStats(status, nlp, solution = x)
+      @allocated GenericExecutionStats(status, nlp, solution = x)
     end
-    for n = [2, 20, 200, 2000]
+    for n in [2, 20, 200, 2000]
       nlp = SimpleModel(n)
       solver = LBFGSSolver(nlp)
       x = copy(nlp.meta.x0)
