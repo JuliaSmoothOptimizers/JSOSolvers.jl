@@ -28,25 +28,27 @@ macro wrappedallocs(expr)
   end
 end
 
-@testset "Allocation tests" begin
-  @testset "LBFGS" begin
-    function al_stats(status, nlp, x)
-      GenericExecutionStats(status, nlp, solution = x)
-      @allocated GenericExecutionStats(status, nlp, solution = x)
-    end
-    for n in [2, 20, 200, 2000]
-      nlp = SimpleModel(n)
-      solver = LBFGSSolver(nlp)
-      x = copy(nlp.meta.x0)
-      al_output = al_stats(:unknown, nlp, x)
-      al = 0
-      with_logger(NullLogger()) do
-        solve!(solver, nlp)
-        reset!(solver.H)
-        reset!(nlp)
-        al = @wrappedallocs solve!(solver, nlp)
+if Sys.isunix()
+  @testset "Allocation tests" begin
+    @testset "LBFGS" begin
+      function al_stats(status, nlp, x)
+        GenericExecutionStats(status, nlp, solution = x)
+        @allocated GenericExecutionStats(status, nlp, solution = x)
       end
-      @test al - al_output == 0
+      for n in [2, 20, 200, 2000]
+        nlp = SimpleModel(n)
+        solver = LBFGSSolver(nlp)
+        x = copy(nlp.meta.x0)
+        al_output = al_stats(:unknown, nlp, x)
+        al = 0
+        with_logger(NullLogger()) do
+          solve!(solver, nlp)
+          reset!(solver.H)
+          reset!(nlp)
+          al = @wrappedallocs solve!(solver, nlp)
+        end
+        @test al - al_output == 0
+      end
     end
   end
 end
