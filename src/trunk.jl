@@ -92,14 +92,7 @@ function trunk(
     H = hess_op!(nlp, x, temp)
     cgtol = max(rtol, min(T(0.1), 9 * cgtol / 10, sqrt(∇fNorm2)))
     (s, cg_stats) = with_logger(subsolver_logger) do
-      cg(
-        H,
-        -∇f,
-        atol = T(atol),
-        rtol = cgtol,
-        radius = tr.radius,
-        itmax = max(2 * n, 50),
-      )
+      cg(H, -∇f, atol = T(atol), rtol = cgtol, radius = tr.radius, itmax = max(2 * n, 50))
     end
 
     # Compute actual vs. predicted reduction.
