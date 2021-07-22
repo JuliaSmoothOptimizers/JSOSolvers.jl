@@ -61,7 +61,8 @@ function tron(
   x .= max.(ℓ, min.(x, u))
   gx = zeros(T, n)
   fx, _ = objgrad!(nlp, x, gx)
-  gt = use_only_objgrad ? zeros(T, n) : T[]
+  # gt = use_only_objgrad ? zeros(T, n) : T[]
+  gt = zeros(T, n)
   num_success_iters = 0
 
   # Optimality measure
@@ -81,7 +82,7 @@ function tron(
   end
 
   αC = one(T)
-  tr = TRONTrustRegion(min(max(one(T), πx / 10), 100))
+  tr = TRONTrustRegion(gt, min(max(one(T), πx / 10), 100))
   @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :cgstatus],
     [Int, T, T, T, T, String],
@@ -91,7 +92,7 @@ function tron(
     # Current iteration
     xc .= x
     fc = fx
-    Δ = get_property(tr, :radius)
+    Δ = tr.radius
     H = hess_op!(nlp, xc, temp)
 
     αC, s, cauchy_status = cauchy(x, H, gx, Δ, αC, ℓ, u, μ₀ = μ₀, μ₁ = μ₁, σ = σ)
@@ -113,14 +114,13 @@ function tron(
       obj(nlp, x)
     end
 
-    ared, pred, quad_min = aredpred(tr, nlp, fc, fx, qs, x, s, slope)
+    ared, pred = aredpred!(tr, nlp, fc, fx, qs, x, s, slope)
     if pred ≥ 0
       status = :neg_pred
       stalled = true
       continue
     end
     tr.ratio = ared / pred
-    tr.quad_min = quad_min
     @info log_row([iter, fx, πx, Δ, tr.ratio, cginfo])
 
     s_norm = nrm2(n, s)
@@ -160,7 +160,7 @@ function tron(
     optimal = πx <= ϵ
     unbounded = fx < fmin
   end
-  @info log_row(Any[iter, fx, πx, get_property(tr, :radius)])
+  @info log_row(Any[iter, fx, πx, tr.radius])
 
   if tired
     if el_time > max_time

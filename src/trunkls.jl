@@ -60,11 +60,12 @@ function trunk(
   # preallocate storage for products with A and A'
   Av = Vector{T}(undef, m)
   Atv = Vector{T}(undef, n)
+  gt = zeros(T, n)
   A = jac_op_residual!(nlp, x, Av, Atv)
   ∇f = A' * r
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
-  tr = TrustRegion(min(max(∇fNorm2 / 10, one(T)), T(100)))
+  tr = TrustRegion(gt, min(max(∇fNorm2 / 10, one(T)), T(100)))
 
   # Non-monotone mode parameters.
   # fmin: current best overall objective value
@@ -101,7 +102,7 @@ function trunk(
         -r,
         atol = atol,
         rtol = cgtol,
-        radius = get_property(tr, :radius),
+        radius = tr.radius,
         itmax = max(2 * (n + m), 50);
         trsolver_args...,
       )
@@ -119,7 +120,7 @@ function trunk(
     ft = dot(rt, rt) / 2
     @debug @sprintf("‖s‖ = %7.1e, slope = %8.1e, Δq = %15.7e", sNorm, slope, Δq)
 
-    ared, pred = aredpred(nlp, f, ft, Δq, xt, s, slope)
+    ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
     if pred ≥ 0
       status = :neg_pred
       stalled = true
@@ -128,14 +129,14 @@ function trunk(
     tr.ratio = ared / pred
 
     if !monotone
-      ared_hist, pred_hist = aredpred(nlp, fref, ft, σref + Δq, xt, s, slope)
+      ared_hist, pred_hist = aredpred!(tr, nlp, fref, ft, σref + Δq, xt, s, slope)
       if pred_hist ≥ 0
         status = :neg_pred
         stalled = true
         continue
       end
       ρ_hist = ared_hist / pred_hist
-      set_property!(tr, :ratio, max(get_property(tr, :ratio), ρ_hist))
+      tr.ratio = max(tr.ratio, ρ_hist)
     end
 
     bk = 0
@@ -144,9 +145,9 @@ function trunk(
       # Scaling s to the trust-region boundary, as recommended in
       # Algorithm 10.3.2 of the Trust-Region book
       # appears to deteriorate results.
-      # BLAS.scal!(n, get_property(tr, :radius) / sNorm, s, 1)
-      # slope *= get_property(tr, :radius) / sNorm
-      # sNorm = get_property(tr, :radius)
+      # BLAS.scal!(n, tr.radius / sNorm, s, 1)
+      # slope *= tr.radius / sNorm
+      # sNorm = tr.radius
 
       if slope ≥ 0
         @error "not a descent direction" slope ∇fNorm2 sNorm
@@ -168,7 +169,7 @@ function trunk(
       slope *= α
       Δq = slope + α * α * curv / 2
       @debug "" slope Δq
-      ared, pred = aredpred(nlp, f, ft, Δq, xt, s, slope)
+      ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
       if pred ≥ 0
         status = :neg_pred
         stalled = true
@@ -176,14 +177,14 @@ function trunk(
       end
       tr.ratio = ared / pred
       if !monotone
-        ared_hist, pred_hist = aredpred(nlp, fref, ft, σref + Δq, xt, s, slope)
+        ared_hist, pred_hist = aredpred!(tr, nlp, fref, ft, σref + Δq, xt, s, slope)
         if pred_hist ≥ 0
           status = :neg_pred
           stalled = true
           continue
         end
         ρ_hist = ared_hist / pred_hist
-        set_property!(tr, :ratio, max(get_property(tr, :ratio), ρ_hist))
+        tr.ratio = max(tr.ratio, ρ_hist)
       end
     end
 
@@ -191,9 +192,9 @@ function trunk(
       iter,
       f,
       ∇fNorm2,
-      get_property(tr, :radius),
+      tr.radius,
       sNorm,
-      get_property(tr, :ratio),
+      tr.ratio,
       length(cg_stats.residuals),
       bk,
       cg_stats.status,
@@ -230,7 +231,12 @@ function trunk(
       r = rt
       f = ft
       A = jac_op_residual!(nlp, x, Av, Atv)
-      ∇f = A' * r
+      if tr.good_grad
+        ∇f .= tr.gt
+        tr.good_grad = false
+      else
+        ∇f = A' * r
+      end
       ∇fNorm2 = nrm2(n, ∇f)
     end
 
@@ -241,7 +247,7 @@ function trunk(
     elapsed_time = time() - start_time
     tired = neval_residual(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   end
-  @info log_row(Any[iter, f, ∇fNorm2, get_property(tr, :radius)])
+  @info log_row(Any[iter, f, ∇fNorm2, tr.radius])
 
   if optimal
     status = :first_order

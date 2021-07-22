@@ -82,6 +82,8 @@ function tron(
   fx = dot(Fx, Fx) / 2
   Ax = A(x)
   gx = copy(Ax' * Fx)
+  gt = zeros(T, n)
+
   Fc = zeros(T, m)
   num_success_iters = 0
 
@@ -97,7 +99,7 @@ function tron(
   status = :unknown
 
   αC = one(T)
-  tr = TRONTrustRegion(min(max(one(T), πx / 10), 100))
+  tr = TRONTrustRegion(gt, min(max(one(T), πx / 10), 100))
   @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :cgstatus],
     [Int, T, T, T, T, String],
@@ -108,7 +110,7 @@ function tron(
     xc .= x
     fc = fx
     Fc .= Fx
-    Δ = get_property(tr, :radius)
+    Δ = tr.radius
 
     αC, s, cauchy_status = cauchy_ls(x, Ax, Fx, gx, Δ, αC, ℓ, u, μ₀ = μ₀, μ₁ = μ₁, σ = σ)
 
@@ -137,14 +139,13 @@ function tron(
     Fx = F(x)
     fx = dot(Fx, Fx) / 2
 
-    ared, pred, quad_min = aredpred(tr, nlp, fc, fx, qs, x, s, slope)
+    ared, pred = aredpred!(tr, nlp, fc, fx, qs, x, s, slope)
     if pred ≥ 0
       status = :neg_pred
       stalled = true
       continue
     end
     tr.ratio = ared / pred
-    tr.quad_min = quad_min
     @info log_row([iter, fx, πx, Δ, tr.ratio, cginfo])
 
     s_norm = nrm2(n, s)
@@ -158,7 +159,12 @@ function tron(
     if acceptable(tr)
       num_success_iters += 1
       Ax = A(x)
-      gx .= Ax' * Fx
+      if tr.good_grad
+        gx .= tr.gt
+        tr.good_grad = false
+      else
+        gx .= Ax' * Fx
+      end
       project_step!(gpx, x, gx, ℓ, u, -one(T))
       πx = nrm2(n, gpx)
     end
@@ -177,7 +183,7 @@ function tron(
     optimal = πx <= ϵ
     unbounded = fx < fmin
   end
-  @info log_row(Any[iter, fx, πx, get_property(tr, :radius)])
+  @info log_row(Any[iter, fx, πx, tr.radius])
 
   if tired
     if el_time > max_time
