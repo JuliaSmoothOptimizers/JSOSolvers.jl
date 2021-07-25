@@ -21,13 +21,6 @@
         :status,
       ],
     )
-    @info @sprintf(
-      "%8s  %5d  %5d  %s\n",
-      model.meta.name,
-      model.nls_meta.nvar,
-      model.nls_meta.nequ,
-      stline
-    )
     reset!(model)
   end
 
@@ -60,13 +53,6 @@ end
         :neval_jtprod_residual,
         :status,
       ],
-    )
-    @info @sprintf(
-      "%8s  %5d  %5d  %s\n",
-      model.meta.name,
-      model.nls_meta.nvar,
-      model.nls_meta.nequ,
-      stline
     )
     reset!(model)
   end
