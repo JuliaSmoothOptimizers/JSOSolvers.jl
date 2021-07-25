@@ -35,10 +35,14 @@
   end
 
   nlp = MyProblem()
-  output = tron(nlp, use_only_objgrad = true)
+  output = with_logger(NullLogger()) do
+    tron(nlp, use_only_objgrad = true)
+  end
   @test isapprox(output.solution, ones(2), rtol = 1e-4)
   @test output.dual_feas < 1e-4
   @test output.objective < 1e-4
 
-  @test_throws MethodError tron(nlp, use_only_objgrad = false)
+  with_logger(NullLogger()) do
+    @test_throws MethodError tron(nlp, use_only_objgrad = false)
+  end
 end
