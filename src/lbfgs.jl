@@ -21,7 +21,7 @@ mutable struct LBFGSSolver{T, V, Op <: AbstractLinearOperator, M <: AbstractNLPM
   h::LineModel{T, V, M}
 end
 
-function LBFGSSolver(nlp::M; mem::Int = 2) where {T, V, M <: AbstractNLPModel{T, V}}
+function LBFGSSolver(nlp::M; mem::Int = 5) where {T, V, M <: AbstractNLPModel{T, V}}
   nvar = nlp.meta.nvar
   x = V(undef, nvar)
   d = V(undef, nvar)
@@ -106,7 +106,7 @@ function solve!(
 
     # Perform improved Armijo linesearch.
     t, good_grad, ft, nbk, nbW =
-      armijo_wolfe(h, f, slope, ∇ft, τ₁ = T(0.969248), bk_max = 25, verbose = false)
+      armijo_wolfe(h, f, slope, ∇ft, τ₁ = T(0.9999), bk_max = 25, verbose = false)
 
     @info log_row(Any[iter, f, ∇fNorm, slope, nbk])
 
