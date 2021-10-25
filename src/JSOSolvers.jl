@@ -16,6 +16,8 @@ Solve `nlp` using `solver`.
 """
 function solve! end
 
+abstract type AbstractOptSolver{T, V} end
+
 # Unconstrained solvers
 include("lbfgs.jl")
 include("trunk.jl")

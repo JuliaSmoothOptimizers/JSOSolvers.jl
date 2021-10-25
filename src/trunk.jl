@@ -1,9 +1,14 @@
-export trunk
+export trunk, TrunkSolver
 
 trunk(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = trunk(Val(variant), nlp; kwargs...)
 
 """
     trunk(nlp)
+
+---
+
+    solver = TrunkSolver(nlp)
+    output = solve!(solver, nlp)
 
 A trust-region solver for unconstrained optimization using exact second derivatives.
 
@@ -17,19 +22,65 @@ The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
     SIAM, Philadelphia, USA, 2000.
     DOI: 10.1137/1.9780898719857.
 """
-function trunk(
+mutable struct TrunkSolver{T, V <: AbstractVector{T}, Sub <: KrylovSolver{T, V}, Op <: AbstractLinearOperator{T}} <: AbstractOptSolver{T, V}
+  x::V
+  xt::V
+  gx::V
+  gt::V
+  gn::V
+  Hs::V
+  subsolver::Sub
+  H::Op
+  tr::TrustRegion{T, V}
+end
+
+function TrunkSolver(
+  nlp::AbstractNLPModel{T, V};
+  subsolver_type::Type{<: KrylovSolver} = CgSolver,
+) where {T, V <: AbstractVector{T}}
+  nvar = nlp.meta.nvar
+  x = V(undef, nvar)
+  xt = V(undef, nvar)
+  gx = V(undef, nvar)
+  gt = V(undef, nvar)
+  gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
+  Hs = V(undef, nvar)
+  subsolver = subsolver_type(nvar, nvar, V)
+  Sub = typeof(subsolver)
+  H = hess_op!(nlp, x, Hs)
+  Op = typeof(H)
+  tr = TrustRegion(gt, one(T))
+  return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, gn, Hs, subsolver, H, tr)
+end
+
+function LinearOperators.reset!(::TrunkSolver)
+end
+
+@doc (@doc TrunkSolver) function trunk(
   ::Val{:Newton},
   nlp::AbstractNLPModel;
+  x::V = nlp.meta.x0,
+  subsolver_type::Type{<: KrylovSolver} = CgSolver,
+  kwargs...,
+) where {V}
+  solver = TrunkSolver(nlp, subsolver_type=subsolver_type)
+  return solve!(solver, nlp; x = x, kwargs...)
+end
+
+function solve!(
+  solver::TrunkSolver{T, V},
+  nlp::AbstractNLPModel{T, V};
   subsolver_logger::AbstractLogger = NullLogger(),
-  x::AbstractVector = copy(nlp.meta.x0),
-  atol::Real = √eps(eltype(x)),
-  rtol::Real = √eps(eltype(x)),
+  x::V = nlp.meta.x0,
+  atol::T = √eps(T),
+  rtol::T = √eps(T),
   max_eval::Int = -1,
   max_time::Float64 = 30.0,
   bk_max::Int = 10,
   monotone::Bool = true,
   nm_itmax::Int = 25,
-)
+  verbose::Bool = false,
+) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("trunk only works for minimization problem")
   end
@@ -40,8 +91,17 @@ function trunk(
   start_time = time()
   elapsed_time = 0.0
 
-  T = eltype(x)
   n = nlp.meta.nvar
+
+  solver.x .= x
+  x = solver.x
+  xt = solver.xt
+  ∇f = solver.gx
+  ∇fn = solver.gn
+  Hs = solver.Hs
+  subsolver = solver.subsolver
+  H = solver.H
+  tr = solver.tr
 
   cgtol = one(T)  # Must be ≤ 1.
 
@@ -50,11 +110,11 @@ function trunk(
 
   iter = 0
   f = obj(nlp, x)
-  ∇f = grad(nlp, x)
-  gt = zeros(T, n)
+  grad!(nlp, x, ∇f)
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
-  tr = TrustRegion(gt, min(max(∇fNorm2 / 10, one(T)), T(100)))
+  tr = solver.tr
+  tr.radius = min(max(∇fNorm2 / 10, one(T)), T(100))
 
   # Non-monotone mode parameters.
   # fmin: current best overall objective value
@@ -65,21 +125,13 @@ function trunk(
   σref = σcur = zero(T)
   nm_iter = 0
 
-  # Preallocate xt.
-  xt = Vector{T}(undef, n)
-  temp = Vector{T}(undef, n)
-
   optimal = ∇fNorm2 ≤ ϵ
   tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   stalled = false
   status = :unknown
   solved = optimal || tired || stalled
 
-  if isa(nlp, QuasiNewtonModel) && !solved
-    ∇fn = copy(∇f)
-  end
-
-  @info log_header(
+  verbose && @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :inner, :bk, :cgstatus],
     [Int, T, T, T, T, Int, Int, String],
     hdr_override = Dict(:f => "f(x)", :dual => "π", :radius => "Δ"),
@@ -89,17 +141,17 @@ function trunk(
     # Compute inexact solution to trust-region subproblem
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
-    H = hess_op!(nlp, x, temp)
-    cgtol = max(rtol, min(T(0.1), 9 * cgtol / 10, sqrt(∇fNorm2)))
-    (s, cg_stats) = with_logger(subsolver_logger) do
-      cg(H, -∇f, atol = T(atol), rtol = cgtol, radius = tr.radius, itmax = max(2 * n, 50))
-    end
+    cgtol = max(rtol, min(T(0.1), √∇fNorm2, T(0.9) * cgtol))
+    solve!(subsolver, H, ∇f, atol = atol, rtol = cgtol, radius = tr.radius, itmax = max(2 * n, 50), verbose=1)
+    s, cg_stats = subsolver.x, subsolver.stats
 
     # Compute actual vs. predicted reduction.
     sNorm = nrm2(n, s)
+    @. s = -s
     copyaxpy!(n, one(T), s, x, xt)
     slope = dot(n, s, ∇f)
-    curv = dot(n, s, H * s)
+    mul!(Hs, H, s)
+    curv = dot(n, s, Hs)
     Δq = slope + curv / 2
     ft = obj(nlp, xt)
 
@@ -168,7 +220,7 @@ function trunk(
       end
     end
 
-    @info log_row([
+    verbose && @info log_row([
       iter,
       f,
       ∇fNorm2,
@@ -210,15 +262,15 @@ function trunk(
       f = ft
       if !tr.good_grad
         grad!(nlp, x, ∇f)
-        tr.good_grad = false
       else
         ∇f .= tr.gt
+        tr.good_grad = false
       end
       ∇fNorm2 = nrm2(n, ∇f)
 
       if isa(nlp, QuasiNewtonModel)
         ∇fn .-= ∇f
-        ∇fn .*= -1  # = ∇f(xₖ₊₁) - ∇f(xₖ)
+        @. ∇fn = -∇fn  # = ∇f(xₖ₊₁) - ∇f(xₖ)
         push!(nlp, s, ∇fn)
         ∇fn .= ∇f
       end
@@ -232,7 +284,7 @@ function trunk(
     tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
     solved = optimal || tired || stalled
   end
-  @info log_row(Any[iter, f, ∇fNorm2, tr.radius])
+  verbose && @info log_row(Any[iter, f, ∇fNorm2, tr.radius])
 
   if optimal
     status = :first_order
