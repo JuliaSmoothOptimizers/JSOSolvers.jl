@@ -3,7 +3,11 @@ using SolverTest
 function tests()
   @testset "Testing NLP solvers" begin
     @testset "Unconstrained solvers" begin
-      @testset "$solver" for solver in [trunk, lbfgs, tron]
+      @testset "$name" for (name, solver) in [
+        ("trunk+cg", (nlp; kwargs...) -> trunk(nlp, subsolver_type = CgSolver; kwargs...)),
+        ("lbfgs", lbfgs),
+        ("tron", tron),
+      ]
         unconstrained_nlp(solver)
         multiprecision_nlp(solver, :unc)
       end
