@@ -8,6 +8,11 @@ tron(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = tron(Val(variant), n
 """
     tron(nlp)
 
+---
+
+    solver = TronSolver(nlp)
+    output = solve!(solver, nlp)
+
 A pure Julia implementation of a trust-region solver for bound-constrained
 optimization:
 
@@ -18,24 +23,68 @@ TRON is described in
 Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
 Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
 """
-function tron(
+mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <: AbstractOptSolver{T, V}
+  x::V
+  xc::V
+  temp::V
+  gx::V
+  gt::V
+  gn::V
+  gpx::V
+  Hs::V
+  H::Op
+  tr::TrustRegion{T, V}
+end
+
+function TronSolver(
+  nlp::AbstractNLPModel{T, V};
+) where {T, V <: AbstractVector{T}}
+  nvar = nlp.meta.nvar
+  x = V(undef, nvar)
+  xc = V(undef, nvar)
+  temp = V(undef, nvar)
+  gx = V(undef, nvar)
+  gt = V(undef, nvar)
+  gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
+  gpx = V(undef, nvar)
+  Hs = V(undef, nvar)
+  H = hess_op!(nlp, x, Hs)
+  Op = typeof(H)
+  tr = TrustRegion(gt, one(T))
+  return TronSolver{T, V, Op}(x, xc, temp, gx, gt, gn, gpx, Hs, H, tr)
+end
+
+function LinearOperators.reset!(::TronSolver)
+end
+
+@doc (@doc TronSolver) function tron(
   ::Val{:Newton},
   nlp::AbstractNLPModel;
+  x::V = nlp.meta.x0,
+  kwargs...,
+) where {V}
+  solver = TronSolver(nlp)
+  return solve!(solver, nlp; x = x, kwargs...)
+end
+
+function solve!(
+  solver::TronSolver{T, V},
+  nlp::AbstractNLPModel{T, V};
   subsolver_logger::AbstractLogger = NullLogger(),
-  x::AbstractVector = copy(nlp.meta.x0),
-  μ₀::Real = eltype(x)(1e-2),
-  μ₁::Real = one(eltype(x)),
-  σ::Real = eltype(x)(10),
+  x::V = nlp.meta.x0,
+  μ₀::T = T(1e-2),
+  μ₁::T = one(T),
+  σ::T = T(10),
   max_eval::Int = -1,
-  max_time::Real = 30.0,
+  max_time::Float64 = 30.0,
   max_cgiter::Int = 50,
   use_only_objgrad::Bool = false,
-  cgtol::Real = eltype(x)(0.1),
-  atol::Real = √eps(eltype(x)),
-  rtol::Real = √eps(eltype(x)),
-  fatol::Real = zero(eltype(x)),
-  frtol::Real = eps(eltype(x))^eltype(x)(2 / 3),
-)
+  cgtol::T = T(0.1),
+  atol::T = √eps(T),
+  rtol::T = √eps(T),
+  fatol::T = zero(T),
+  frtol::T = eps(T)^T(2 / 3),
+) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("tron only works for minimization problem")
   end
@@ -43,26 +92,26 @@ function tron(
     error("tron should only be called for unconstrained or bound-constrained problems")
   end
 
-  T = eltype(x)
-  ℓ = T.(nlp.meta.lvar)
-  u = T.(nlp.meta.uvar)
+  ℓ = nlp.meta.lvar
+  u = nlp.meta.uvar
   n = nlp.meta.nvar
 
   iter = 0
   start_time = time()
   el_time = 0.0
 
-  # Preallocation
-  temp = zeros(T, n)
-  gpx = zeros(T, n)
-  xc = zeros(T, n)
-  Hs = zeros(T, n)
+  solver.x .= x
+  x = solver.x
+  xc = solver.xc
+  temp = solver.temp
+  gx = solver.gx
+  gt = solver.gt
+  gpx = solver.gpx
+  Hs = solver.Hs
 
   x .= max.(ℓ, min.(x, u))
-  gx = zeros(T, n)
   fx, _ = objgrad!(nlp, x, gx)
   # gt = use_only_objgrad ? zeros(T, n) : T[]
-  gt = zeros(T, n)
   num_success_iters = 0
 
   # Optimality measure
@@ -75,11 +124,6 @@ function tron(
   unbounded = fx < fmin
   stalled = false
   status = :unknown
-
-  local gn
-  if isa(nlp, QuasiNewtonModel)
-    gn = copy(gx)
-  end
 
   αC = one(T)
   tr = TRONTrustRegion(gt, min(max(one(T), πx / 10), 100))
@@ -180,7 +224,7 @@ function tron(
     solution = x,
     objective = fx,
     dual_feas = πx,
-    primal_feas = zero(eltype(x)),
+    primal_feas = zero(T),
     iter = iter,
     elapsed_time = el_time,
   )
