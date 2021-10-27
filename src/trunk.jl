@@ -22,7 +22,12 @@ The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
     SIAM, Philadelphia, USA, 2000.
     DOI: 10.1137/1.9780898719857.
 """
-mutable struct TrunkSolver{T, V <: AbstractVector{T}, Sub <: KrylovSolver{T, V}, Op <: AbstractLinearOperator{T}} <: AbstractOptSolver{T, V}
+mutable struct TrunkSolver{
+  T,
+  V <: AbstractVector{T},
+  Sub <: KrylovSolver{T, V},
+  Op <: AbstractLinearOperator{T},
+} <: AbstractOptSolver{T, V}
   x::V
   xt::V
   gx::V
@@ -36,7 +41,7 @@ end
 
 function TrunkSolver(
   nlp::AbstractNLPModel{T, V};
-  subsolver_type::Type{<: KrylovSolver} = CgSolver,
+  subsolver_type::Type{<:KrylovSolver} = CgSolver,
 ) where {T, V <: AbstractVector{T}}
   nvar = nlp.meta.nvar
   x = V(undef, nvar)
@@ -53,17 +58,16 @@ function TrunkSolver(
   return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, gn, Hs, subsolver, H, tr)
 end
 
-function LinearOperators.reset!(::TrunkSolver)
-end
+function LinearOperators.reset!(::TrunkSolver) end
 
 @doc (@doc TrunkSolver) function trunk(
   ::Val{:Newton},
   nlp::AbstractNLPModel;
   x::V = nlp.meta.x0,
-  subsolver_type::Type{<: KrylovSolver} = CgSolver,
+  subsolver_type::Type{<:KrylovSolver} = CgSolver,
   kwargs...,
 ) where {V}
-  solver = TrunkSolver(nlp, subsolver_type=subsolver_type)
+  solver = TrunkSolver(nlp, subsolver_type = subsolver_type)
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
@@ -142,7 +146,16 @@ function solve!(
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
     cgtol = max(rtol, min(T(0.1), √∇fNorm2, T(0.9) * cgtol))
-    solve!(subsolver, H, ∇f, atol = atol, rtol = cgtol, radius = tr.radius, itmax = max(2 * n, 50), verbose=1)
+    solve!(
+      subsolver,
+      H,
+      ∇f,
+      atol = atol,
+      rtol = cgtol,
+      radius = tr.radius,
+      itmax = max(2 * n, 50),
+      verbose = 1,
+    )
     s, cg_stats = subsolver.x, subsolver.stats
 
     # Compute actual vs. predicted reduction.

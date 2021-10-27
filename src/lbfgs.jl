@@ -11,7 +11,8 @@ export lbfgs, LBFGSSolver
 An implementation of a limited memory BFGS line-search method for unconstrained
 minimization.
 """
-mutable struct LBFGSSolver{T, V, Op <: AbstractLinearOperator{T}, M <: AbstractNLPModel{T, V}} <: AbstractOptSolver{T, V}
+mutable struct LBFGSSolver{T, V, Op <: AbstractLinearOperator{T}, M <: AbstractNLPModel{T, V}} <:
+               AbstractOptSolver{T, V}
   x::V
   xt::V
   gx::V
