@@ -23,7 +23,8 @@ TRON is described in
 Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
 Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
 """
-mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <: AbstractOptSolver{T, V}
+mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <:
+               AbstractOptSolver{T, V}
   x::V
   xc::V
   temp::V
@@ -36,9 +37,7 @@ mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperato
   tr::TrustRegion{T, V}
 end
 
-function TronSolver(
-  nlp::AbstractNLPModel{T, V};
-) where {T, V <: AbstractVector{T}}
+function TronSolver(nlp::AbstractNLPModel{T, V};) where {T, V <: AbstractVector{T}}
   nvar = nlp.meta.nvar
   x = V(undef, nvar)
   xc = V(undef, nvar)
@@ -54,8 +53,7 @@ function TronSolver(
   return TronSolver{T, V, Op}(x, xc, temp, gx, gt, gn, gpx, Hs, H, tr)
 end
 
-function LinearOperators.reset!(::TronSolver)
-end
+function LinearOperators.reset!(::TronSolver) end
 
 @doc (@doc TronSolver) function tron(
   ::Val{:Newton},
