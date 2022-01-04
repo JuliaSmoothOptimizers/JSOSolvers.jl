@@ -104,6 +104,7 @@ function solve!(
   temp = solver.temp
   gx = solver.gx
   gt = solver.gt
+  gn = solver.gn
   gpx = solver.gpx
   Hs = solver.Hs
 
