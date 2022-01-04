@@ -83,7 +83,8 @@ function solve!(
   bk_max::Int = 10,
   monotone::Bool = true,
   nm_itmax::Int = 25,
-  verbose::Bool = false,
+  verbose::Int = 0,
+  verbose_subsolver::Int = 0,
 ) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("trunk only works for minimization problem")
@@ -135,7 +136,7 @@ function solve!(
   status = :unknown
   solved = optimal || tired || stalled
 
-  verbose && @info log_header(
+  (verbose > 0) && @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :inner, :bk, :cgstatus],
     [Int, T, T, T, T, Int, Int, String],
     hdr_override = Dict(:f => "f(x)", :dual => "π", :radius => "Δ"),
@@ -154,7 +155,7 @@ function solve!(
       rtol = cgtol,
       radius = tr.radius,
       itmax = max(2 * n, 50),
-      verbose = 1,
+      verbose = verbose_subsolver,
     )
     s, cg_stats = subsolver.x, subsolver.stats
 
@@ -233,7 +234,7 @@ function solve!(
       end
     end
 
-    verbose && @info log_row([
+    (verbose > 0) && (mod(iter, verbose) == 0) && @info log_row([
       iter,
       f,
       ∇fNorm2,
@@ -297,7 +298,7 @@ function solve!(
     tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
     solved = optimal || tired || stalled
   end
-  verbose && @info log_row(Any[iter, f, ∇fNorm2, tr.radius])
+  (verbose > 0) && @info log_row(Any[iter, f, ∇fNorm2, tr.radius])
 
   if optimal
     status = :first_order
