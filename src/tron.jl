@@ -124,6 +124,10 @@ function solve!(
   stalled = false
   status = :unknown
 
+  if isa(nlp, QuasiNewtonModel)
+    gn .= gx
+  end
+
   αC = one(T)
   tr = TRONTrustRegion(gt, min(max(one(T), πx / 10), 100))
   @info log_header(
