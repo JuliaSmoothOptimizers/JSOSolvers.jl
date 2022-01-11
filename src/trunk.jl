@@ -43,19 +43,25 @@ The backtracking linesearch follows Section 10.3.2.
 The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
 
 # Examples
-```jldoctest
-julia> using JSOSolvers, ADNLPModels
-julia> nlp = ADNLPModel(x -> sum(x.^2), ones(3));
-julia> stats = trunk(nlp)
-"Execution stats: first_order stationary"
+```jldoctest; output = false
+using JSOSolvers, ADNLPModels
+nlp = ADNLPModel(x -> sum(x.^2), ones(3))
+stats = trunk(nlp)
+
+# output
+
+"Execution stats: first-order stationary"
 ```
 
-```jldoctest
-julia> using JSOSolvers, ADNLPModels
-julia> nlp = ADNLPModel(x -> sum(x.^2), ones(3));
-julia> solver = TrunkSolver(nlp);
-julia> stats = solve!(solver, nlp)
-"Execution stats: first_order stationary"
+```jldoctest; output = false
+using JSOSolvers, ADNLPModels
+nlp = ADNLPModel(x -> sum(x.^2), ones(3))
+solver = TrunkSolver(nlp)
+stats = solve!(solver, nlp)
+
+# output
+
+"Execution stats: first-order stationary"
 ```
 """
 mutable struct TrunkSolver{
