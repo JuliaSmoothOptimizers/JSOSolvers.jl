@@ -3,24 +3,60 @@ export trunk, TrunkSolver
 trunk(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = trunk(Val(variant), nlp; kwargs...)
 
 """
-    trunk(nlp)
-
----
-
-    solver = TrunkSolver(nlp)
-    output = solve!(solver, nlp)
+    trunk(nlp; kwargs...)
 
 A trust-region solver for unconstrained optimization using exact second derivatives.
+    
+For an advanced usage, one can first define an `TrunkSolver` preallocating the memory used in the algorithm and then call `solve!`.
 
-This implementation follows the description given in [1].
+    solver = TrunkSolver(nlp, subsolver_type::Type{<:KrylovSolver} = CgSolver)
+    solve!(solver, nlp; kwargs...)
+
+# Arguments
+- `nlp::AbstractNLPModel` represents the model solved, see `NLPModels.jl`.
+The keyword arguments may include
+- `subsolver_logger::AbstractLogger = NullLogger()`: subproblem's logger.
+- `x = nlp.meta.x0`: the initial guess.
+- `atol::T = √eps(T)`: absolute tolerance.
+- `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
+- `max_eval::Int = -1`: maximum number of objective function evaluations.
+- `max_time::Float64 = 30.0`: maximum time limit.
+- `bk_max::Int = 10`: algorithm's parameter.
+- `monotone::Bool = true`: algorithm's parameter.
+- `nm_itmax::Int = 25`: algorithm's parameter.
+- `verbose::Int = 0`: If > 0, display interation information every `verbose` iteration.
+- `verbose_subsolver::Int = 0`: If > 0, display interation information every `verbose_subsolver` iteration of the subsolver.
+
+# Output
+The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
+
+# References
+This implementation follows the description given in
+
+    A. R. Conn, N. I. M. Gould, and Ph. L. Toint,
+    Trust-Region Methods, volume 1 of MPS/SIAM Series on Optimization.
+    SIAM, Philadelphia, USA, 2000.
+    DOI: 10.1137/1.9780898719857
+
 The main algorithm follows the basic trust-region method described in Section 6.
 The backtracking linesearch follows Section 10.3.2.
 The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
 
-[1] A. R. Conn, N. I. M. Gould, and Ph. L. Toint,
-    Trust-Region Methods, volume 1 of MPS/SIAM Series on Optimization.
-    SIAM, Philadelphia, USA, 2000.
-    DOI: 10.1137/1.9780898719857.
+# Examples
+```jldoctest
+julia> using JSOSolvers, ADNLPModels
+julia> nlp = ADNLPModel(x -> sum(x.^2), ones(3));
+julia> stats = trunk(nlp)
+"Execution stats: first_order stationary"
+```
+
+```jldoctest
+julia> using JSOSolvers, ADNLPModels
+julia> nlp = ADNLPModel(x -> sum(x.^2), ones(3));
+julia> solver = TrunkSolver(nlp);
+julia> stats = solve!(solver, nlp)
+"Execution stats: first_order stationary"
+```
 """
 mutable struct TrunkSolver{
   T,
