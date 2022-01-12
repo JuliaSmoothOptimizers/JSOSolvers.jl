@@ -1,27 +1,71 @@
 #  Some parts of this code were adapted from
 # https://github.com/PythonOptimizers/NLP.py/blob/develop/nlp/optimize/tron.py
 
-export tron
+export tron, TronSolver
 
 tron(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = tron(Val(variant), nlp; kwargs...)
 
 """
-    tron(nlp)
+    tron(nlp; kwargs...)
 
----
+A pure Julia implementation of a trust-region solver for bound-constrained optimization:
+    
+        min f(x)    s.t.    ℓ ≦ x ≦ u
+    
+For an advanced usage, one can first define an `TronSolver` preallocating the memory used in the algorithm and then call `solve!`.
 
     solver = TronSolver(nlp)
-    output = solve!(solver, nlp)
+    solve!(solver, nlp; kwargs...)
 
-A pure Julia implementation of a trust-region solver for bound-constrained
-optimization:
+# Arguments
+- `nlp::AbstractNLPModel` represents the model solved, see `NLPModels.jl`.
+The keyword arguments may include
+- `subsolver_logger::AbstractLogger = NullLogger()`: subproblem's logger.
+- `x = nlp.meta.x0`: the initial guess.
+- `μ₀::T = T(1e-2)`: algorithm's parameter.
+- `μ₁::T = one(T)`: algorithm's parameter.
+- `σ::T = T(10)`: algorithm's parameter.
+- `max_eval::Int = -1`: maximum number of objective function evaluations.
+- `max_time::Float64 = 30.0`: maximum time limit.
+- `max_cgiter::Int = 50`: subproblem's iteration limit.
+- `use_only_objgrad::Bool = false`: If `true`, the algorithm uses only the function `objgrad` instead of `obj` and `grad`.
+- `cgtol::T = T(0.1)`: subproblem's tolerance.
+- `atol::T = √eps(T)`: absolute tolerance.
+- `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
+- `fatol::T = zero(T)`
+- `frtol::T = eps(T)^T(2 / 3)`
 
-    min f(x)    s.t.    ℓ ≦ x ≦ u
+# Output
+The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
 
+# References
 TRON is described in
 
-Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
-Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
+    Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
+    Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
+    DOI: 10.1137/S1052623498345075
+
+# Examples
+```jldoctest; output = false
+using JSOSolvers, ADNLPModels
+nlp = ADNLPModel(x -> sum(x), ones(3), zeros(3), 2 * ones(3));
+stats = tron(nlp)
+
+# output
+
+"Execution stats: first_order stationary"
+```
+
+```jldoctest; output = false
+using JSOSolvers, ADNLPModels
+nlp = ADNLPModel(x -> sum(x), ones(3), zeros(3), 2 * ones(3));
+solver = TronSolver(nlp);
+stats = solve!(solver, nlp)
+
+# output
+
+"Execution stats: first_order stationary"
+```
 """
 mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <:
                AbstractOptSolver{T, V}
