@@ -1,15 +1,50 @@
 export lbfgs, LBFGSSolver
 
 """
-    lbfgs(nlp)
+    lbfgs(nlp; kwargs...)
 
----
+An implementation of a limited memory BFGS line-search method for unconstrained minimization.
 
-    solver = LBFGSSolver(nlp)
-    solve!(solver, nlp)
+For an advanced usage, one can first define an `LBFGSSolver` preallocating the memory used in the algorithm and then call `solve!`.
 
-An implementation of a limited memory BFGS line-search method for unconstrained
-minimization.
+    solver = LBFGSSolver(nlp; mem::Int = 5)
+    solve!(solver, nlp; kwargs...)
+
+# Arguments
+- `nlp::AbstractNLPModel` represents the model solved, see `NLPModels.jl`.
+The keyword arguments may include
+- `x = nlp.meta.x0`: the initial guess.
+- `atol::T = √eps(T)`: absolute tolerance.
+- `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
+- `max_eval::Int = -1`: maximum number of objective function evaluations.
+- `max_time::Float64 = 30.0`: maximum time limit.
+- `verbose::Bool = false`: if `true`, this prints iteration information.
+- `mem::Int = 5`: memory parameter of the `lbfgs` algorithm.
+
+# Output
+The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
+
+# Examples
+```jldoctest
+using JSOSolvers, ADNLPModels
+nlp = ADNLPModel(x -> sum(x.^2), ones(3));
+stats = lbfgs(nlp)
+
+# output
+
+"Execution stats: first-order stationary"
+```
+
+```jldoctest
+using JSOSolvers, ADNLPModels
+nlp = ADNLPModel(x -> sum(x.^2), ones(3));
+solver = LBFGSSolver(nlp; mem = 5);
+stats = solve!(solver, nlp)
+
+# output
+
+"Execution stats: first-order stationary"
+```
 """
 mutable struct LBFGSSolver{T, V, Op <: AbstractLinearOperator{T}, M <: AbstractNLPModel{T, V}} <:
                AbstractOptSolver{T, V}
@@ -56,7 +91,7 @@ function solve!(
   rtol::T = √eps(T),
   max_eval::Int = -1,
   max_time::Float64 = 30.0,
-  verbose::Bool = true,
+  verbose::Bool = false,
   mem::Int = 5,
 ) where {T, V}
   if !(nlp.meta.minimize)
