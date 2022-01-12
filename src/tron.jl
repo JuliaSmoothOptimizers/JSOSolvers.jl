@@ -12,31 +12,32 @@ A pure Julia implementation of a trust-region solver for bound-constrained optim
     
         min f(x)    s.t.    ℓ ≦ x ≦ u
     
-For an advanced usage, one can first define an `TronSolver` preallocating the memory used in the algorithm and then call `solve!`.
+For advanced usage, first define a `TronSolver` to preallocate the memory used in the algorithm, and then call `solve!`.
 
     solver = TronSolver(nlp)
     solve!(solver, nlp; kwargs...)
 
 # Arguments
-- `nlp::AbstractNLPModel` represents the model solved, see `NLPModels.jl`.
+- `nlp::AbstractNLPModel{T, V}` represents the model solved, see `NLPModels.jl`.
 The keyword arguments may include
 - `subsolver_logger::AbstractLogger = NullLogger()`: subproblem's logger.
-- `x = nlp.meta.x0`: the initial guess.
-- `μ₀::T = T(1e-2)`: algorithm's parameter.
-- `μ₁::T = one(T)`: algorithm's parameter.
-- `σ::T = T(10)`: algorithm's parameter.
+- `x::V = nlp.meta.x0`: the initial guess.
+- `μ₀::T = T(1e-2)`: algorithm parameter in (0, 0.5).
+- `μ₁::T = one(T)`: algorithm parameter in (0, +∞).
+- `σ::T = T(10)`: algorithm parameter in (1, +∞).
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
-- `max_time::Float64 = 30.0`: maximum time limit.
+- `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_cgiter::Int = 50`: subproblem's iteration limit.
 - `use_only_objgrad::Bool = false`: If `true`, the algorithm uses only the function `objgrad` instead of `obj` and `grad`.
 - `cgtol::T = T(0.1)`: subproblem's tolerance.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
+- `verbose::Int = 0`: If > 0, display interation details every `verbose` iteration.
 - `fatol::T = zero(T)`
 - `frtol::T = eps(T)^T(2 / 3)`
 
 # Output
-The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
+The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 
 # References
 TRON is described in
@@ -53,7 +54,7 @@ stats = tron(nlp)
 
 # output
 
-"Execution stats: first_order stationary"
+"Execution stats: first-order stationary"
 ```
 
 ```jldoctest; output = false
@@ -64,7 +65,7 @@ stats = solve!(solver, nlp)
 
 # output
 
-"Execution stats: first_order stationary"
+"Execution stats: first-order stationary"
 ```
 """
 mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <:
@@ -124,6 +125,7 @@ function solve!(
   cgtol::T = T(0.1),
   atol::T = √eps(T),
   rtol::T = √eps(T),
+  verbose::Int = 0,
   fatol::T = zero(T),
   frtol::T = eps(T)^T(2 / 3),
 ) where {T, V <: AbstractVector{T}}
@@ -174,7 +176,7 @@ function solve!(
 
   αC = one(T)
   tr = TRONTrustRegion(gt, min(max(one(T), πx / 10), 100))
-  @info log_header(
+  (verbose > 0) && @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :cgstatus],
     [Int, T, T, T, T, String],
     hdr_override = Dict(:f => "f(x)", :dual => "π", :radius => "Δ"),
@@ -212,7 +214,7 @@ function solve!(
       continue
     end
     tr.ratio = ared / pred
-    @info log_row([iter, fx, πx, Δ, tr.ratio, cginfo])
+    (verbose > 0) && (mod(iter, verbose) == 0) && @info log_row([iter, fx, πx, Δ, tr.ratio, cginfo])
 
     s_norm = nrm2(n, s)
     if num_success_iters == 0
@@ -251,7 +253,7 @@ function solve!(
     optimal = πx <= ϵ
     unbounded = fx < fmin
   end
-  @info log_row(Any[iter, fx, πx, tr.radius])
+  (verbose > 0) && @info log_row(Any[iter, fx, πx, tr.radius])
 
   if tired
     if el_time > max_time
