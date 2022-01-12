@@ -88,7 +88,7 @@ function solve!(
   ϵ = atol + rtol * ∇fNorm
   iter = 0
 
-  @info log_header(
+  verbose && @info log_header(
     [:iter, :f, :dual, :slope, :bk],
     [Int, T, T, T, Int],
     hdr_override = Dict(:f => "f(x)", :dual => "‖∇f‖", :slope => "∇fᵀd"),
@@ -113,7 +113,7 @@ function solve!(
     t, good_grad, ft, nbk, nbW =
       armijo_wolfe(h, f, slope, ∇ft, τ₁ = T(0.9999), bk_max = 25, verbose = false)
 
-    @info log_row(Any[iter, f, ∇fNorm, slope, nbk])
+    verbose && @info log_row(Any[iter, f, ∇fNorm, slope, nbk])
 
     copyaxpy!(n, t, d, x, xt)
     good_grad || grad!(nlp, xt, ∇ft)
@@ -135,7 +135,7 @@ function solve!(
     elapsed_time = time() - start_time
     tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   end
-  @info log_row(Any[iter, f, ∇fNorm])
+  verbose && @info log_row(Any[iter, f, ∇fNorm])
 
   if optimal
     status = :first_order
