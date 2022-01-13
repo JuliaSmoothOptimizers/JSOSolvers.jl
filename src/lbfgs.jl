@@ -5,19 +5,19 @@ export lbfgs, LBFGSSolver
 
 An implementation of a limited memory BFGS line-search method for unconstrained minimization.
 
-For an advanced usage, one can first define an `LBFGSSolver` preallocating the memory used in the algorithm and then call `solve!`.
+For advanced usage, first define a `LBFGSSolver` to preallocate the memory used in the algorithm, and then call `solve!`.
 
     solver = LBFGSSolver(nlp; mem::Int = 5)
     solve!(solver, nlp; kwargs...)
 
 # Arguments
-- `nlp::AbstractNLPModel` represents the model solved, see `NLPModels.jl`.
+- `nlp::AbstractNLPModel{T, V}` represents the model solved, see `NLPModels.jl`.
 The keyword arguments may include
-- `x = nlp.meta.x0`: the initial guess.
+- `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
-- `max_time::Float64 = 30.0`: maximum time limit.
+- `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `verbose::Bool = false`: if `true`, this prints iteration information.
 - `mem::Int = 5`: memory parameter of the `lbfgs` algorithm.
 

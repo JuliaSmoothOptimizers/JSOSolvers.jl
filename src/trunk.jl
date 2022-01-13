@@ -6,24 +6,24 @@ trunk(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = trunk(Val(variant),
     trunk(nlp; kwargs...)
 
 A trust-region solver for unconstrained optimization using exact second derivatives.
-    
-For an advanced usage, one can first define an `TrunkSolver` preallocating the memory used in the algorithm and then call `solve!`.
+
+For advanced usage, first define a `TrunkSolver` to preallocate the memory used in the algorithm, and then call `solve!`.
 
     solver = TrunkSolver(nlp, subsolver_type::Type{<:KrylovSolver} = CgSolver)
     solve!(solver, nlp; kwargs...)
 
 # Arguments
-- `nlp::AbstractNLPModel` represents the model solved, see `NLPModels.jl`.
+- `nlp::AbstractNLPModel{T, V}` represents the model solved, see `NLPModels.jl`.
 The keyword arguments may include
 - `subsolver_logger::AbstractLogger = NullLogger()`: subproblem's logger.
-- `x = nlp.meta.x0`: the initial guess.
+- `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
-- `max_time::Float64 = 30.0`: maximum time limit.
-- `bk_max::Int = 10`: algorithm's parameter.
-- `monotone::Bool = true`: algorithm's parameter.
-- `nm_itmax::Int = 25`: algorithm's parameter.
+- `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `bk_max::Int = 10`: algorithm parameter.
+- `monotone::Bool = true`: algorithm parameter.
+- `nm_itmax::Int = 25`: algorithm parameter.
 - `verbose::Int = 0`: If > 0, display interation information every `verbose` iteration.
 - `verbose_subsolver::Int = 0`: If > 0, display interation information every `verbose_subsolver` iteration of the subsolver.
 
