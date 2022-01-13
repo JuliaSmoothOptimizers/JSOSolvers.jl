@@ -13,7 +13,7 @@ For advanced usage, first define a `TrunkSolver` to preallocate the memory used 
     solve!(solver, nlp; kwargs...)
 
 # Arguments
-- `nlp::AbstractNLPModel{T, V}` represents the model solved, see `NLPModels.jl`.
+- `nlp::AbstractNLPModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
 - `subsolver_logger::AbstractLogger = NullLogger()`: subproblem's logger.
 - `x::V = nlp.meta.x0`: the initial guess.
@@ -24,8 +24,8 @@ The keyword arguments may include
 - `bk_max::Int = 10`: algorithm parameter.
 - `monotone::Bool = true`: algorithm parameter.
 - `nm_itmax::Int = 25`: algorithm parameter.
-- `verbose::Int = 0`: If > 0, display interation information every `verbose` iteration.
-- `verbose_subsolver::Int = 0`: If > 0, display interation information every `verbose_subsolver` iteration of the subsolver.
+- `verbose::Int = 0`: if > 0, display iteration information every `verbose` iteration.
+- `verbose_subsolver::Int = 0`: if > 0, display iteration information every `verbose_subsolver` iteration of the subsolver.
 
 # Output
 The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -178,7 +178,7 @@ function solve!(
   status = :unknown
   solved = optimal || tired || stalled
 
-  (verbose > 0) && @info log_header(
+  verbose > 0 && @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :inner, :bk, :cgstatus],
     [Int, T, T, T, T, Int, Int, String],
     hdr_override = Dict(:f => "f(x)", :dual => "π", :radius => "Δ"),
@@ -276,18 +276,16 @@ function solve!(
       end
     end
 
-    (verbose > 0) &&
-      (mod(iter, verbose) == 0) &&
-      @info log_row([
-        iter,
-        f,
-        ∇fNorm2,
-        tr.radius,
-        tr.ratio,
-        length(cg_stats.residuals),
-        bk,
-        cg_stats.status,
-      ])
+    verbose > 0 && mod(iter, verbose) == 0 && @info log_row([
+      iter,
+      f,
+      ∇fNorm2,
+      tr.radius,
+      tr.ratio,
+      length(cg_stats.residuals),
+      bk,
+      cg_stats.status,
+    ])
     iter = iter + 1
 
     if acceptable(tr)
@@ -342,7 +340,7 @@ function solve!(
     tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
     solved = optimal || tired || stalled
   end
-  (verbose > 0) && @info log_row(Any[iter, f, ∇fNorm2, tr.radius])
+  verbose > 0 && @info log_row(Any[iter, f, ∇fNorm2, tr.radius])
 
   if optimal
     status = :first_order

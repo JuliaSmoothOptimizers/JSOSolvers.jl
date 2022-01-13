@@ -18,7 +18,7 @@ For advanced usage, first define a `TronSolver` to preallocate the memory used i
     solve!(solver, nlp; kwargs...)
 
 # Arguments
-- `nlp::AbstractNLPModel{T, V}` represents the model solved, see `NLPModels.jl`.
+- `nlp::AbstractNLPModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
 - `subsolver_logger::AbstractLogger = NullLogger()`: subproblem's logger.
 - `x::V = nlp.meta.x0`: the initial guess.
@@ -29,12 +29,10 @@ The keyword arguments may include
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_cgiter::Int = 50`: subproblem's iteration limit.
 - `use_only_objgrad::Bool = false`: If `true`, the algorithm uses only the function `objgrad` instead of `obj` and `grad`.
-- `cgtol::T = T(0.1)`: subproblem's tolerance.
+- `cgtol::T = T(0.1)`: subproblem tolerance.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
-- `verbose::Int = 0`: If > 0, display interation details every `verbose` iteration.
-- `fatol::T = zero(T)`
-- `frtol::T = eps(T)^T(2 / 3)`
+- `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -126,8 +124,6 @@ function solve!(
   atol::T = √eps(T),
   rtol::T = √eps(T),
   verbose::Int = 0,
-  fatol::T = zero(T),
-  frtol::T = eps(T)^T(2 / 3),
 ) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("tron only works for minimization problem")
@@ -176,7 +172,7 @@ function solve!(
 
   αC = one(T)
   tr = TRONTrustRegion(gt, min(max(one(T), πx / 10), 100))
-  (verbose > 0) && @info log_header(
+  verbose > 0 && @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :cgstatus],
     [Int, T, T, T, T, String],
     hdr_override = Dict(:f => "f(x)", :dual => "π", :radius => "Δ"),
@@ -214,7 +210,7 @@ function solve!(
       continue
     end
     tr.ratio = ared / pred
-    (verbose > 0) && (mod(iter, verbose) == 0) && @info log_row([iter, fx, πx, Δ, tr.ratio, cginfo])
+    verbose > 0 && mod(iter, verbose) == 0 && @info log_row([iter, fx, πx, Δ, tr.ratio, cginfo])
 
     s_norm = nrm2(n, s)
     if num_success_iters == 0
@@ -253,7 +249,7 @@ function solve!(
     optimal = πx <= ϵ
     unbounded = fx < fmin
   end
-  (verbose > 0) && @info log_row(Any[iter, fx, πx, tr.radius])
+  verbose > 0 && @info log_row(Any[iter, fx, πx, tr.radius])
 
   if tired
     if el_time > max_time
