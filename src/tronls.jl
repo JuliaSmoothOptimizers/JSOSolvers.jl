@@ -20,17 +20,50 @@ function compute_As_slope_qs!(
 end
 
 """
-    tron(nls)
+    tron(nls; kwargs...)
 
 A pure Julia implementation of a trust-region solver for bound-constrained
-nonlinear least squares optimization:
+nonlinear least-squares problems:
 
     min ½‖F(x)‖²    s.t.    ℓ ≦ x ≦ u
 
-This is an adaptation of the TRON method described in
+# Arguments
+- `nls::AbstractNLSModel{T, V}` represents the model to solve, see `NLPModels.jl`.
+The keyword arguments may include
+- `subsolver_logger::AbstractLogger = NullLogger()`: subproblem's logger.
+- `x::V = nlp.meta.x0`: the initial guess.
+- `subsolver::Symbol = :lsmr`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.tronls_allowed_subsolvers` for a list.
+- `μ₀::T = T(1e-2)`: algorithm parameter in (0, 0.5).
+- `μ₁::T = one(T)`: algorithm parameter in (0, +∞).
+- `σ::T = T(10)`: algorithm parameter in (1, +∞).
+- `max_eval::Int = -1`: maximum number of objective function evaluations.
+- `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `max_cgiter::Int = 50`: subproblem iteration limit.
+- `cgtol::T = T(0.1)`: subproblem tolerance.
+- `atol::T = √eps(T)`: absolute tolerance.
+- `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
+- `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 
-Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
-Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
+# Output
+The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
+
+# References
+This is an adaptation for bound-constrained nonlinear least-squares problems of the TRON method described in
+
+    Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
+    Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
+    DOI: 10.1137/S1052623498345075
+
+# Examples
+```jldoctest; output = false
+using JSOSolvers, ADNLPModels
+F(x) = [x[1] - 1.0; 10 * (x[2] - x[1]^2)]
+x0 = [-1.2; 1.0]
+nls = ADNLSModel(F, x0, 2, zeros(2), 0.5 * ones(2))
+stats = tron(nls)
+# output
+"Execution stats: first-order stationary"
+```
 """
 function tron(
   ::Val{:GaussNewton},
@@ -47,8 +80,7 @@ function tron(
   cgtol::Real = eltype(x)(0.1),
   atol::Real = √eps(eltype(x)),
   rtol::Real = √eps(eltype(x)),
-  fatol::Real = zero(eltype(x)),
-  frtol::Real = eps(eltype(x))^eltype(x)(2 / 3),
+  verbose::Int = 0,
 )
   if !(nlp.meta.minimize)
     error("tron only works for minimization problem")
@@ -100,7 +132,7 @@ function tron(
 
   αC = one(T)
   tr = TRONTrustRegion(gt, min(max(one(T), πx / 10), 100))
-  @info log_header(
+  verbose > 0 && @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :cgstatus],
     [Int, T, T, T, T, String],
     hdr_override = Dict(:f => "f(x)", :dual => "π", :radius => "Δ"),
@@ -146,7 +178,7 @@ function tron(
       continue
     end
     tr.ratio = ared / pred
-    @info log_row([iter, fx, πx, Δ, tr.ratio, cginfo])
+    verbose > 0 && mod(iter, verbose) == 0 && @info log_row([iter, fx, πx, Δ, tr.ratio, cginfo])
 
     s_norm = nrm2(n, s)
     if num_success_iters == 0
@@ -183,7 +215,7 @@ function tron(
     optimal = πx <= ϵ
     unbounded = fx < fmin
   end
-  @info log_row(Any[iter, fx, πx, tr.radius])
+  verbose > 0 && @info log_row(Any[iter, fx, πx, tr.radius])
 
   if tired
     if el_time > max_time

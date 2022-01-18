@@ -6,12 +6,12 @@ trunk(nlp::AbstractNLSModel; variant = :GaussNewton, kwargs...) =
 """
     trunk(nls; kwargs...)
 
-A pure Julia implementation of a trust-region solver for nonlinear least squares optimization:
+A pure Julia implementation of a trust-region solver for nonlinear least-squares problems:
 
     min ½‖F(x)‖²
 
 # Arguments
-- `nls::AbstractNLSModel{T, V}` represents the model solved, see `NLPModels.jl`.
+- `nls::AbstractNLSModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
 - `subsolver::Symbol = :lsmr`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.trunkls_allowed_subsolvers` for a list.
@@ -22,8 +22,8 @@ The keyword arguments may include
 - `bk_max::Int = 10`: algorithm parameter.
 - `monotone::Bool = true`: algorithm parameter.
 - `nm_itmax::Int = 25`: algorithm parameter.
--  `trsolver_args::Dict{Symbol, Any} = Dict{Symbol, Any}()`: additional keyword arguments for the subproblem solver.
-- `verbose::Int = 0`: If > 0, display interation details every `verbose` iteration.
+- `trsolver_args::Dict{Symbol, Any} = Dict{Symbol, Any}()`: additional keyword arguments for the subproblem solver.
+- `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
   
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
