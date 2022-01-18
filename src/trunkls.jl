@@ -4,19 +4,52 @@ trunk(nlp::AbstractNLSModel; variant = :GaussNewton, kwargs...) =
   trunk(Val(variant), nlp; kwargs...)
 
 """
-    trunk(nls)
+    trunk(nls; kwargs...)
 
-A trust-region solver for nonlinear least squares.
+A pure Julia implementation of a trust-region solver for nonlinear least squares optimization:
 
-This implementation follows the description given in [1].
+    min ½‖F(x)‖²
+
+# Arguments
+- `nls::AbstractNLSModel{T, V}` represents the model solved, see `NLPModels.jl`.
+The keyword arguments may include
+- `x::V = nlp.meta.x0`: the initial guess.
+- `subsolver::Symbol = :lsmr`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.trunkls_allowed_subsolvers` for a list.
+- `atol::T = √eps(T)`: absolute tolerance.
+- `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
+- `max_eval::Int = -1`: maximum number of objective function evaluations.
+- `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `bk_max::Int = 10`: algorithm parameter.
+- `monotone::Bool = true`: algorithm parameter.
+- `nm_itmax::Int = 25`: algorithm parameter.
+-  `trsolver_args::Dict{Symbol, Any} = Dict{Symbol, Any}()`: additional keyword arguments for the subproblem solver.
+- `verbose::Int = 0`: If > 0, display interation details every `verbose` iteration.
+  
+# Output
+The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
+
+# References
+This implementation follows the description given in
+
+    A. R. Conn, N. I. M. Gould, and Ph. L. Toint,
+    Trust-Region Methods, volume 1 of MPS/SIAM Series on Optimization.
+    SIAM, Philadelphia, USA, 2000.
+    DOI: 10.1137/1.9780898719857
+
 The main algorithm follows the basic trust-region method described in Section 6.
 The backtracking linesearch follows Section 10.3.2.
 The nonmonotone strategy follows Section 10.1.3, Algorithm 10.1.2.
 
-[1] A. R. Conn, N. I. M. Gould, and Ph. L. Toint,
-    Trust-Region Methods, volume 1 of MPS/SIAM Series on Optimization.
-    SIAM, Philadelphia, USA, 2000.
-    DOI: 10.1137/1.9780898719857.
+# Examples
+```jldoctest; output = false
+using JSOSolvers, ADNLPModels
+F(x) = [x[1] - 1.0; 10 * (x[2] - x[1]^2)]
+x0 = [-1.2; 1.0]
+nls = ADNLSModel(F, x0, 2)
+stats = trunk(nls)
+# output
+"Execution stats: first-order stationary"
+```
 """
 function trunk(
   ::Val{:GaussNewton},
@@ -31,6 +64,7 @@ function trunk(
   monotone::Bool = true,
   nm_itmax::Int = 25,
   trsolver_args::Dict{Symbol, Any} = Dict{Symbol, Any}(),
+  verbose::Int = 0,
 )
   if !(nlp.meta.minimize)
     error("trunk only works for minimization problem")
@@ -85,7 +119,7 @@ function trunk(
   stalled = false
   status = :unknown
 
-  @info log_header(
+  verbose > 0 && @info log_header(
     [:iter, :f, :dual, :radius, :step, :ratio, :inner, :bk, :cgstatus],
     [Int, T, T, T, T, T, Int, Int, String],
     hdr_override = Dict(:f => "f(x)", :dual => "‖∇f‖", :radius => "Δ"),
@@ -188,7 +222,7 @@ function trunk(
       end
     end
 
-    @info log_row([
+    verbose > 0 && mod(iter, verbose) == 0 && @info log_row([
       iter,
       f,
       ∇fNorm2,
@@ -247,7 +281,7 @@ function trunk(
     elapsed_time = time() - start_time
     tired = neval_residual(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   end
-  @info log_row(Any[iter, f, ∇fNorm2, tr.radius])
+  verbose > 0 && @info log_row(Any[iter, f, ∇fNorm2, tr.radius])
 
   if optimal
     status = :first_order
