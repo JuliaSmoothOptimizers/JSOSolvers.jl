@@ -222,17 +222,19 @@ function trunk(
       end
     end
 
-    verbose > 0 && mod(iter, verbose) == 0 && @info log_row([
-      iter,
-      f,
-      ∇fNorm2,
-      tr.radius,
-      sNorm,
-      tr.ratio,
-      length(cg_stats.residuals),
-      bk,
-      cg_stats.status,
-    ])
+    verbose > 0 &&
+      mod(iter, verbose) == 0 &&
+      @info log_row([
+        iter,
+        f,
+        ∇fNorm2,
+        tr.radius,
+        sNorm,
+        tr.ratio,
+        length(cg_stats.residuals),
+        bk,
+        cg_stats.status,
+      ])
     iter = iter + 1
 
     if acceptable(tr)
