@@ -5,20 +5,20 @@ export lbfgs, LBFGSSolver
 
 An implementation of a limited memory BFGS line-search method for unconstrained minimization.
 
-For an advanced usage, one can first define an `LBFGSSolver` preallocating the memory used in the algorithm and then call `solve!`.
+For advanced usage, first define a `LBFGSSolver` to preallocate the memory used in the algorithm, and then call `solve!`.
 
     solver = LBFGSSolver(nlp; mem::Int = 5)
     solve!(solver, nlp; kwargs...)
 
 # Arguments
-- `nlp::AbstractNLPModel` represents the model solved, see `NLPModels.jl`.
+- `nlp::AbstractNLPModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
-- `x = nlp.meta.x0`: the initial guess.
+- `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
-- `max_time::Float64 = 30.0`: maximum time limit.
-- `verbose::Bool = false`: if `true`, this prints iteration information.
+- `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `mem::Int = 5`: memory parameter of the `lbfgs` algorithm.
 
 # Output
@@ -91,7 +91,7 @@ function solve!(
   rtol::T = √eps(T),
   max_eval::Int = -1,
   max_time::Float64 = 30.0,
-  verbose::Bool = false,
+  verbose::Int = 0,
   mem::Int = 5,
 ) where {T, V}
   if !(nlp.meta.minimize)
@@ -123,7 +123,7 @@ function solve!(
   ϵ = atol + rtol * ∇fNorm
   iter = 0
 
-  verbose && @info log_header(
+  verbose > 0 && @info log_header(
     [:iter, :f, :dual, :slope, :bk],
     [Int, T, T, T, Int],
     hdr_override = Dict(:f => "f(x)", :dual => "‖∇f‖", :slope => "∇fᵀd"),
@@ -148,7 +148,7 @@ function solve!(
     t, good_grad, ft, nbk, nbW =
       armijo_wolfe(h, f, slope, ∇ft, τ₁ = T(0.9999), bk_max = 25, verbose = false)
 
-    verbose && @info log_row(Any[iter, f, ∇fNorm, slope, nbk])
+    verbose > 0 && mod(iter, verbose) == 0 && @info log_row(Any[iter, f, ∇fNorm, slope, nbk])
 
     copyaxpy!(n, t, d, x, xt)
     good_grad || grad!(nlp, xt, ∇ft)
@@ -170,7 +170,7 @@ function solve!(
     elapsed_time = time() - start_time
     tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   end
-  verbose && @info log_row(Any[iter, f, ∇fNorm])
+  verbose > 0 && @info log_row(Any[iter, f, ∇fNorm])
 
   if optimal
     status = :first_order
