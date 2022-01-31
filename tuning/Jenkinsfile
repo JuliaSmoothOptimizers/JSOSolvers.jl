@@ -61,23 +61,23 @@ pipeline {
   stages {
     stage('prepare tuning') {
         steps {
+          echo "$org"
           sh "git clone https://github.com/MonssafToukal/SolverParameters.jl.git || true"
           sh "git clone https://github.com/ProofOfConceptForJuliSmoothOptimizers/SolverTuning.jl.git || true"
           sh """
             julia --project=SolverParameters.jl -E 'using Pkg; Pkg.update();'
             julia --project=SolverTuning.jl -E 'using Pkg; Pkg.develop(PackageSpec(url=joinpath("SolverParameters.jl"))); Pkg.update();'
             julia --project -E 'using Pkg; Pkg.develop(PackageSpec(url=joinpath("SolverParameters.jl"))); Pkg.update();'
-            julia --project=tuning -E 'using Pkg; param_package = PackageSpec(url=joinpath("SolverParameters.jl")); 
+            julia --project=tuning -E 'using Pkg; param_package = PackageSpec(url=joinpath("SolverParameters.jl"));
                 tuning_package = PackageSpec(url=joinpath("SolverTuning.jl")); Pkg.develop([param_package, tuning_package]); Pkg.update();'
+            julia --project=tuning -E 'using Pkg; Pkg.develop(PackageSpec(url=joinpath("."))); Pkg.update();'
           """
         }
     }
     stage('tune software') {
       steps {
-        sh "set -e; julia --project=tuning tuning/${tuningFile} &> ${org}_${repo}_${pullrequest}.txt"
         sh """
-            set +e
-            julia --project=tuning tuning/send_gist_url.jl
+          julia --project=tuning tuning/${tuningFile}
         """
       }
     }

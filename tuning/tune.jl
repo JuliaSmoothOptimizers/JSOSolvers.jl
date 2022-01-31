@@ -1,19 +1,27 @@
+using Pkg
 using Distributed
 using SolverParameters
 using SolverTuning
-# using OptimizationProblems, OptimizationProblems.ADNLPProblems, NLPModels, ADNLPModels
+using SolverCore
+using NLPModels
+using BenchmarkTools
+
 
 # 1. Launch workers
-init_workers(;nb_nodes=5)
+init_workers(;nb_nodes=20, exec_flags="--project=$(@__DIR__)")
 
 # 2. make modules available to all workers:
 @everywhere begin
-    using OptimizationProblems,
-      OptimizationProblems.ADNLPProblems,
-      NLPModels,
-      ADNLPModels,
-      JSOSolvers
+  using JSOSolvers, 
+    SolverTuning,
+    OptimizationProblems,
+    OptimizationProblems.ADNLPProblems,
+    NLPModels,
+    ADNLPModels
 end
+# @info "Main: $(names(Main))"
+# @info "Main.JSOSolvers: $(names(Main.JSOSolvers))"
+# @info "JSOSolvers: $(names(JSOSolvers))"
 
 # 3. Setup problems
 problems = (eval(p)(type=Val(Float64)) for p ∈ filter(x -> x != :ADNLPProblems && x != :scosine, names(OptimizationProblems.ADNLPProblems)))
@@ -27,7 +35,8 @@ bk_max = AlgorithmicParameter(25, IntegerRange(10, 30), "bk_max")
 
 lbfgs_params = [mem, τ₁, bk_max]
 
-solver = LBFGSSolver(first(problems), lbfgs_params)
+# This is ahack because AbstractOptSolver is in JSOSolvers...
+solver = Main.LBFGSSolver(first(problems), lbfgs_params)
 
 # Function that will count failures
 function count_failures(bmark_results::Dict{P, Float64}, stats_results::Dict{AbstractNLPModel, AbstractExecutionStats}) where {P <: AbstractNLPModel}
@@ -69,7 +78,7 @@ param_optimization_problem =
 create_nomad_problem!(
   param_optimization_problem;
   display_all_eval = true,
-  max_time = 600,
+  max_time = 180,
   # max_bb_eval = 3,
   display_stats = ["BBE", "EVAL", "SOL", "OBJ"],
 )

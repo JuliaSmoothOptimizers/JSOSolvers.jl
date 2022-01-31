@@ -4,7 +4,7 @@ Pkg.instantiate()
 
 using GitHub
 
-ORG, REPO, PR = ENV["org"], ENV["repo"], ENV["pullrequest"]
+ORG, REPO, PR = ARGS[1], ARGS[2], ARGS[3]
 TEST_RESULTS_FILE = "$(ORG)_$(REPO)_$(PR).txt"
 
 # Need to add GITHUB_AUTH to your .bashrc
@@ -12,13 +12,7 @@ myauth = GitHub.authenticate(ENV["GITHUB_AUTH"])
 
 function create_gist(authentication)
 
-    file_content = ""
-    file = open(TEST_RESULTS_FILE, "r")
-    for line in readlines(file)
-        file_content *= line * '\n'
-    end
-    close(file)
-
+    file_content = read(TEST_RESULTS_FILE, String)
     file_dict = Dict(TEST_RESULTS_FILE => Dict("content" => file_content))
     gist = Dict{String,Any}(
         "description" => "Test results",
