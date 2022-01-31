@@ -48,6 +48,7 @@ stats = solve!(solver, nlp)
 """
 mutable struct LBFGSSolver{T, V, Op <: AbstractLinearOperator{T}, M <: AbstractNLPModel{T, V}} <:
                AbstractOptSolver{T, V}
+  parameters::Dict{String, AlgorithmicParameter}
   x::V
   xt::V
   gx::V
@@ -57,17 +58,26 @@ mutable struct LBFGSSolver{T, V, Op <: AbstractLinearOperator{T}, M <: AbstractN
   h::LineModel{T, V, M}
 end
 
-function LBFGSSolver(nlp::M; mem::Int = 5) where {T, V, M <: AbstractNLPModel{T, V}}
+function LBFGSSolver(nlp::M, params::Vector{AlgorithmicParameter}=[]) where {T, V, M <: AbstractNLPModel{T, V}}
   nvar = nlp.meta.nvar
   x = V(undef, nvar)
   d = V(undef, nvar)
   xt = V(undef, nvar)
   gx = V(undef, nvar)
   gt = V(undef, nvar)
-  H = InverseLBFGSOperator(T, nvar, mem = mem, scaling = true)
+  parameters = Dict("mem" => AlgorithmicParameter(5, IntegerRange(1, 100), "mem"),
+            "τ₁" => AlgorithmicParameter(Float64(0.99), RealInterval(Float64(1.0e-4), 1.0), "τ₁"),
+            "bk_max" => AlgorithmicParameter(25, IntegerRange(10, 30), "bk_max")
+          )
+  for p ∈ params
+    haskey(parameters, name(p)) || continue
+    parameters[name(p)] = p
+  end
+
+  H = InverseLBFGSOperator(T, nvar, mem = default(parameters["mem"]), scaling = true)
   h = LineModel(nlp, x, d)
   Op = typeof(H)
-  return LBFGSSolver{T, V, Op, M}(x, xt, gx, gt, d, H, h)
+  return LBFGSSolver{T, V, Op, M}(parameters, x, xt, gx, gt, d, H, h)
 end
 
 function LinearOperators.reset!(solver::LBFGSSolver)
@@ -75,11 +85,11 @@ function LinearOperators.reset!(solver::LBFGSSolver)
 end
 
 @doc (@doc LBFGSSolver) function lbfgs(
-  nlp::AbstractNLPModel;
+  nlp::AbstractNLPModel, parameters::Vector{AlgorithmicParameter}=[];
   x::V = nlp.meta.x0,
   kwargs...,
 ) where {V}
-  solver = LBFGSSolver(nlp)
+  solver = LBFGSSolver(nlp, parameters)
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
@@ -92,7 +102,6 @@ function solve!(
   max_eval::Int = -1,
   max_time::Float64 = 30.0,
   verbose::Int = 0,
-  mem::Int = 5,
 ) where {T, V}
   if !(nlp.meta.minimize)
     error("lbfgs only works for minimization problem")
@@ -133,7 +142,6 @@ function solve!(
   tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   stalled = false
   status = :unknown
-
   while !(optimal || tired || stalled)
     mul!(d, H, ∇f, -one(T), zero(T))
     slope = dot(n, d, ∇f)
@@ -146,7 +154,7 @@ function solve!(
 
     # Perform improved Armijo linesearch.
     t, good_grad, ft, nbk, nbW =
-      armijo_wolfe(h, f, slope, ∇ft, τ₁ = T(0.9999), bk_max = 25, verbose = false)
+      armijo_wolfe(h, f, slope, ∇ft, τ₁ = default(solver.parameters["τ₁"]), bk_max = default(solver.parameters["bk_max"]), verbose = false)
 
     verbose > 0 && mod(iter, verbose) == 0 && @info log_row(Any[iter, f, ∇fNorm, slope, nbk])
 

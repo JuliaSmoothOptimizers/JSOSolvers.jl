@@ -1,0 +1,10 @@
+[deps]
+ADNLPModels = "54578032-b7ea-4c30-94aa-7cbd1cce6c9a"
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+JSOSolvers = "10dff2fc-5484-5881-a0e0-c90441020f8a"
+NLPModels = "a4795742-8479-5a88-8948-cc11e1c8c1a6"
+NLPModelsModifiers = "e01155f1-5c6f-4375-a9d8-616dd036575f"
+OptimizationProblems = "5049e819-d29b-5fba-b941-0eee7e64c1c6"
+SolverCore = "ff4d7338-4cf1-434d-91df-b86cb86fb843"
+SolverParameters = "adf32eb0-fe7e-47bb-93e4-fe96e72f6839"
+SolverTuning = "82699957-41be-4f37-a62b-14550e0d6cd0"
