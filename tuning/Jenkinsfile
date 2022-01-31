@@ -1,0 +1,100 @@
+def tuningFile = 'tune.jl'
+def prNumber = BRANCH_NAME.tokenize("PR-")[0]
+pipeline {
+  agent any
+  options {
+    skipDefaultCheckout false
+  }
+  triggers {
+    GenericTrigger(
+     genericVariables: [
+        [
+            key: 'action', 
+            value: '$.action',
+            expressionType: 'JSONPath', //Optional, defaults to JSONPath
+            regexpFilter: '[^(created)]', //Optional, defaults to empty string
+            defaultValue: '' //Optional, defaults to empty string
+        ],
+        [
+            key: 'comment',
+            value: '$.comment.body',
+            expressionType: 'JSONPath', //Optional, defaults to JSONPath
+            regexpFilter: '', //Optional, defaults to empty string
+            defaultValue: '' //Optional, defaults to empty string
+        ],
+        [
+            key: 'org',
+            value: '$.organization.login',
+            expressionType: 'JSONPath', //Optional, defaults to JSONPath
+            regexpFilter: '', //Optional, defaults to empty string
+            defaultValue: 'JuliaSmoothOptimizers' //Optional, defaults to empty string
+        ],
+        [
+            key: 'pullrequest',
+            value: '$.issue.number',
+            expressionType: 'JSONPath', //Optional, defaults to JSONPath
+            regexpFilter: '[^0-9]', //Optional, defaults to empty string
+            defaultValue: '' //Optional, defaults to empty string
+        ],
+        [
+            key: 'repo',
+            value: '$.repository.name',
+            expressionType: 'JSONPath', //Optional, defaults to JSONPath
+            regexpFilter: '', //Optional, defaults to empty string
+            defaultValue: '' //Optional, defaults to empty string
+        ]
+     ],
+
+     causeString: 'Triggered on comment',
+
+     token: "JSOSolvers",
+
+     printContributedVariables: true,
+     printPostContent: true,
+
+     silentResponse: false,
+
+     regexpFilterText: '$comment $pullrequest',
+     regexpFilterExpression: '@JSOBot tune( .*\\.jl)? ' + prNumber
+    )
+  }
+  stages {
+    stage('prepare tuning') {
+        steps {
+          sh "git clone https://github.com/MonssafToukal/SolverParameters.jl.git || true"
+          sh "git clone https://github.com/ProofOfConceptForJuliSmoothOptimizers/SolverTuning.jl.git || true"
+          sh """
+            julia --project=SolverParameters.jl -E 'using Pkg; Pkg.update();'
+            julia --project=SolverTuning.jl -E 'using Pkg; Pkg.develop(PackageSpec(url=joinpath("SolverParameters.jl"))); Pkg.update();'
+            julia --project -E 'using Pkg; Pkg.develop(PackageSpec(url=joinpath("SolverParameters.jl"))); Pkg.update();'
+            julia --project=tuning -E 'using Pkg; param_package = PackageSpec(url=joinpath("SolverParameters.jl")); 
+                tuning_package = PackageSpec(url=joinpath("SolverTuning.jl")); Pkg.develop([param_package, tuning_package]); Pkg.update();'
+          """
+        }
+    }
+    stage('tune software') {
+      steps {
+        sh "set -e; julia --project=tuning tuning/${tuningFile} &> ${org}_${repo}_${pullrequest}.txt"
+        sh """
+            set +e
+            julia --project=tuning tuning/send_gist_url.jl
+        """
+      }
+    }
+  }
+  post {
+    success {
+      echo "SUCCESS!"  
+    }
+    failure {
+      sh "cat ${org}_${repo}_${pullrequest}.txt"
+    }
+    cleanup {
+      sh 'printenv'
+      sh '''
+      git clean -fd
+      git reset --hard
+      '''
+    }
+  }
+}
