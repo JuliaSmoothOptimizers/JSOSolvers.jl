@@ -78,7 +78,7 @@ param_optimization_problem =
 create_nomad_problem!(
   param_optimization_problem;
   display_all_eval = true,
-  max_time = 180,
+  max_time = 300,
   # max_bb_eval = 3,
   display_stats = ["BBE", "EVAL", "SOL", "OBJ"],
 )

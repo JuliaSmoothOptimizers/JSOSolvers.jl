@@ -15,7 +15,7 @@ function create_gist(authentication)
     file_content = read(TEST_RESULTS_FILE, String)
     file_dict = Dict(TEST_RESULTS_FILE => Dict("content" => file_content))
     gist = Dict{String,Any}(
-        "description" => "Test results",
+        "description" => "Tuning results:",
         "public" => true,
         "files" => file_dict,
     )
@@ -67,13 +67,13 @@ end
 
 function get_comment_from_test_results()
     open(TEST_RESULTS_FILE, "r") do file
-        text_to_match = r"tests passed"
+        text_to_match = r"Best feasible solution"
         for line in readlines(file)
             if occursin(text_to_match, line)
                 return "$(strip(line)): "
             end
         end
-        return "Tests failed: "
+        return "Tuning failed: "
     end
 end
 

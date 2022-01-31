@@ -77,7 +77,8 @@ pipeline {
     stage('tune software') {
       steps {
         sh """
-          julia --project=tuning tuning/${tuningFile}
+          chmod +x tuning/tune.sh
+          ./tuning/tune.sh $tuningFile $org $repo $pullrequest
         """
       }
     }
