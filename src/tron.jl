@@ -33,6 +33,7 @@ The keyword arguments may include
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
+- `max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100))`: maximum trust-region radius in the first-step chosen smaller than SolverTools.TRONTrustRegion `max_radius`.
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -124,6 +125,7 @@ function solve!(
   atol::T = √eps(T),
   rtol::T = √eps(T),
   verbose::Int = 0,
+  max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
 ) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("tron only works for minimization problem")
@@ -171,7 +173,7 @@ function solve!(
   end
 
   αC = one(T)
-  tr = TRONTrustRegion(gt, min(max(one(T), πx / 10), 100))
+  tr = TRONTrustRegion(gt, min(max(one(T), πx / 10), max_radius))
   verbose > 0 && @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :cgstatus],
     [Int, T, T, T, T, String],
