@@ -9,16 +9,8 @@ using Random
 using JSON
 
 const IS_LOAD_BALANCING = false
-const PATH_PREFIX = IS_LOAD_BALANCING ? "" : "no_"
-const BASE_FILE_PATH = joinpath(@__DIR__, "plots", "$(PATH_PREFIX)load_balancing")
 # 1. Launch workers
 init_workers(;nb_nodes=20, exec_flags="--project=$(@__DIR__)")
-
-# Contains worker data at each iteration
-workers_data = Vector{Dict{Int, Float64}}()
-
-# Contains nb of problems per worker at each iteration: 
-nb_problems_per_worker = Vector{Dict{Int, Vector{String}}}()
 
 # 2. make modules available to all workers:
 @everywhere begin
@@ -71,23 +63,6 @@ function my_black_box(args...;kwargs...)
   bb_result = total_time + failure_penalty
   @info "failure_penalty: $failure_penalty"
 
-  # Getting worker data:
-  global workers_data
-  global nb_problems_per_worker
-  worker_times = Dict(worker_id => 0.0 for worker_id in keys(solver_results))
-  for (worker_id, solver_result) in solver_results
-    bmark_trials, _ = solver_result
-    worker_times[worker_id] = sum(median(trial).time/1.0e9 for trial in values(bmark_trials))
-  end
-  push!(workers_data, worker_times)
-  # Getting nb of problems per worker:
-  problems_per_worker = Dict{Int, Vector{String}}()
-  for (worker_id, solver_result) in solver_results
-    bmark_trials, _ = solver_result
-    problems_per_worker[worker_id] = [get_name(nlp) for nlp ∈ keys(bmark_trials)]
-  end
-  push!(nb_problems_per_worker, problems_per_worker)
-
   return [bb_result], bmark_results, stats_results
 end
 kwargs = Dict{Symbol, Any}(:verbose => 0, :max_time => 60.0)
@@ -112,23 +87,5 @@ create_nomad_problem!(
 # 8. Execute Nomad
 result = solve_with_nomad!(param_optimization_problem)
 @info ("Best feasible parameters: $(result.x_best_feas)")
-
-# discard the first iteration
-let plot_data = Dict{Int, Vector{Float64}}(worker_id => Float64[] for worker_id in workers())
-  global workers_data
-  for bb_iteration in workers_data[2:end]
-    for (worker_id, time) ∈ bb_iteration
-      push!(plot_data[worker_id], time)
-    end
-  end
-  
-  open(joinpath(BASE_FILE_PATH, "workers_times.json"), "w") do f
-    JSON.print(f, plot_data)
-  end
-end
-
-open(joinpath(BASE_FILE_PATH, "workers_problems.json"), "w") do f
-  JSON.print(f, nb_problems_per_worker)
-end
 
 rmprocs(workers())
