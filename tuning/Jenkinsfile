@@ -60,8 +60,10 @@ pipeline {
   }
   stages {
     stage('prepare tuning') {
+      when {
+        expression {env.comment}
+      }
         steps {
-          echo "$org"
           sh """
             julia --project -E 'using Pkg; Pkg.add(url="https://github.com/MonssafToukal/SolverParameters.jl.git");
               Pkg.add(url="https://github.com/ProofOfConceptForJuliSmoothOptimizers/SolverTuning.jl.git");
@@ -74,6 +76,9 @@ pipeline {
         }
     }
     stage('tune software') {
+      when {
+        expression {env.comment}
+      }
       steps {
         sh """
           chmod +x tuning/tune.sh
