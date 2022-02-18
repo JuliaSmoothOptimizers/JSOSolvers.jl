@@ -14,12 +14,15 @@ For advanced usage, first define a `LBFGSSolver` to preallocate the memory used 
 - `nlp::AbstractNLPModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
+- `mem::Int = 5`: memory parameter of the `lbfgs` algorithm.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `τ₁::T = T(0.9999)`: slope factor in the Wolfe condition when performing the line search.
+- `bk_max:: Int = 25`: maximum number of backtracks when performing the line search.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `mem::Int = 5`: memory parameter of the `lbfgs` algorithm.
+- `verbose_subsolver::Int = 0`: if > 0, display iteration information every `verbose_subsolver` iteration of the subsolver.
 
 # Output
 The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -77,9 +80,10 @@ end
 @doc (@doc LBFGSSolver) function lbfgs(
   nlp::AbstractNLPModel;
   x::V = nlp.meta.x0,
+  mem::Int = 5,
   kwargs...,
 ) where {V}
-  solver = LBFGSSolver(nlp)
+  solver = LBFGSSolver(nlp; mem = mem)
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
@@ -91,8 +95,10 @@ function solve!(
   rtol::T = √eps(T),
   max_eval::Int = -1,
   max_time::Float64 = 30.0,
+  τ₁::T = T(0.9999),
+  bk_max::Int = 25,
   verbose::Int = 0,
-  mem::Int = 5,
+  verbose_subsolver::Int = 0,
 ) where {T, V}
   if !(nlp.meta.minimize)
     error("lbfgs only works for minimization problem")
@@ -146,7 +152,7 @@ function solve!(
 
     # Perform improved Armijo linesearch.
     t, good_grad, ft, nbk, nbW =
-      armijo_wolfe(h, f, slope, ∇ft, τ₁ = T(0.9999), bk_max = 25, verbose = false)
+      armijo_wolfe(h, f, slope, ∇ft, τ₁ = τ₁, bk_max = bk_max, verbose = Bool(verbose_subsolver))
 
     verbose > 0 && mod(iter, verbose) == 0 && @info log_row(Any[iter, f, ∇fNorm, slope, nbk])
 
