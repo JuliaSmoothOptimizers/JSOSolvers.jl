@@ -23,14 +23,15 @@ init_workers(;nb_nodes=20, exec_flags="--project=$(@__DIR__)")
 end
 
 
+T = Float32
 # 3. Setup problems
-problems = (eval(p)(type=Val(Float64)) for p ∈ filter(x -> x != :ADNLPProblems && x != :scosine, names(OptimizationProblems.ADNLPProblems)))
+problems = (eval(p)(type=Val(T)) for p ∈ filter(x -> x != :ADNLPProblems && x != :scosine, names(OptimizationProblems.ADNLPProblems)))
 problems = Iterators.filter(p -> unconstrained(p) &&  100 ≤ get_nvar(p) ≤ 1000 && get_minimize(p), problems)
 
 
 # 4. expose solver parameters
 mem = AlgorithmicParameter(5, IntegerRange(1, 100), "mem")
-τ₁ = AlgorithmicParameter(Float64(0.99), RealInterval(Float64(1.0e-4), 1.0), "τ₁")
+τ₁ = AlgorithmicParameter(T(0.99), RealInterval(T(1.0e-4), T(1.0)), "τ₁")
 bk_max = AlgorithmicParameter(25, IntegerRange(10, 30), "bk_max")
 
 lbfgs_params = [mem, τ₁, bk_max]
