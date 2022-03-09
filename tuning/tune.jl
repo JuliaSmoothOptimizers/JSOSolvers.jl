@@ -27,8 +27,6 @@ end
 problems = (eval(p)(type=Val(Float64)) for p ∈ filter(x -> x != :ADNLPProblems && x != :scosine, names(OptimizationProblems.ADNLPProblems)))
 problems = Iterators.filter(p -> unconstrained(p) &&  100 ≤ get_nvar(p) ≤ 1000 && get_minimize(p), problems)
 
-Random.seed!(2017)
-problem_dict = Dict(nlp => 30*rand(Float64) for nlp ∈ problems)
 
 # 4. expose solver parameters
 mem = AlgorithmicParameter(5, IntegerRange(1, 100), "mem")
@@ -47,12 +45,12 @@ function count_failures(bmark_results::Dict{P, Float64}, stats_results::Dict{Abs
     failure_penalty += 25.0 * bmark_results[nlp]
   end
   return failure_penalty
-  end
+end
 
-  function is_failure(stats::AbstractExecutionStats)
-    failure_status = [:exception, :infeasible, :max_eval, :max_iter, :max_time, :stalled, :neg_pred]
-    return any(s -> s == stats.status, failure_status)
-  end
+function is_failure(stats::AbstractExecutionStats)
+  failure_status = [:exception, :infeasible, :max_eval, :max_iter, :max_time, :stalled, :neg_pred]
+  return any(s -> s == stats.status, failure_status)
+end
 
 # 5. define user's blackbox:
 function my_black_box(args...;kwargs...)
@@ -68,19 +66,16 @@ end
 kwargs = Dict{Symbol, Any}(:verbose => 0, :max_time => 60.0)
 black_box = BlackBox(solver, lbfgs_params, my_black_box, kwargs)        
 
-# 6. define load balancer
-lb = IS_LOAD_BALANCING ? GreedyLoadBalancer(problem_dict) : RoundRobinLoadBalancer(problem_dict)
-
 # 7. define problem suite
 param_optimization_problem =
-  ParameterOptimizationProblem(black_box, lb)
+  ParameterOptimizationProblem(black_box, problems)
 
 # named arguments are options to pass to Nomad
 create_nomad_problem!(
   param_optimization_problem;
   display_all_eval = true,
   # max_time = 300,
-  max_bb_eval =200,
+  max_bb_eval =300,
   display_stats = ["BBE", "EVAL", "SOL", "OBJ"],
 )
 

@@ -68,7 +68,8 @@ pipeline {
             julia --project -E 'using Pkg; Pkg.add(url="https://github.com/MonssafToukal/SolverParameters.jl.git");
               Pkg.add(url="https://github.com/ProofOfConceptForJuliSmoothOptimizers/SolverTuning.jl.git");
               Pkg.update()'
-            julia --project=tuning -E 'using Pkg; Pkg.add(url="https://github.com/ProofOfConceptForJuliSmoothOptimizers/SolverTuning.jl.git");
+            julia --project=tuning -E 'using Pkg; Pkg.add(url="https://github.com/MonssafToukal/SolverParameters.jl.git");
+              Pkg.add(url="https://github.com/ProofOfConceptForJuliSmoothOptimizers/SolverTuning.jl.git");
               Pkg.develop(PackageSpec(url=joinpath(".")));
               Pkg.add(url="https://github.com/MonssafToukal/SolverParameters.jl.git");
               Pkg.update();'
