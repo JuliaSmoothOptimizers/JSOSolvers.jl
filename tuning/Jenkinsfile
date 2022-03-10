@@ -72,7 +72,8 @@ pipeline {
               Pkg.add(url="https://github.com/ProofOfConceptForJuliSmoothOptimizers/SolverTuning.jl.git");
               Pkg.develop(PackageSpec(url=joinpath(".")));
               Pkg.add(url="https://github.com/MonssafToukal/SolverParameters.jl.git");
-              Pkg.update();'
+              Pkg.update();
+              Pkg.update("NOMAD");'
           """
         }
     }
