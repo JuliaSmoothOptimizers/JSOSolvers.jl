@@ -56,7 +56,7 @@ end
 # 5. define user's blackbox:
 function my_black_box(args...;kwargs...)
   bmark_results, stats_results, solver_results = eval_solver(lbfgs, args...;kwargs...)
-  bmark_results = Dict(nlp => (median(bmark).time/1.0e9) for (nlp, bmark) ∈ bmark_results)
+  bmark_results = Dict(nlp => (median(bmark).time/1.0e9) + median(bmark).memory/1.0e6 for (nlp, bmark) ∈ bmark_results)
   total_time = sum(values(bmark_results))
   failure_penalty = count_failures(bmark_results, stats_results)
   bb_result = total_time + failure_penalty
