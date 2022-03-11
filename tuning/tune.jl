@@ -8,7 +8,7 @@ using BenchmarkTools
 using Random
 using JSON
 
-const IS_LOAD_BALANCING = false
+const IS_LOAD_BALANCING = true
 # 1. Launch workers
 init_workers(;nb_nodes=20, exec_flags="--project=$(@__DIR__)")
 
