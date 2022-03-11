@@ -1,4 +1,4 @@
-export lbfgs, LBFGSSolver
+export lbfgs, LBFGSSolver, get_parameters
 
 """
     lbfgs(nlp; kwargs...)
@@ -56,21 +56,52 @@ mutable struct LBFGSSolver{T, V, Op <: AbstractLinearOperator{T}, M <: AbstractN
   gx::V
   gt::V
   d::V
+  params::Dict{String,AlgorithmicParameter}
   H::Op
   h::LineModel{T, V, M}
 end
 
-function LBFGSSolver(nlp::M; mem::Int = 5) where {T, V, M <: AbstractNLPModel{T, V}}
+function LBFGSSolver(nlp::M; parameters = AlgorithmicParameter[]) where {T, V, M <: AbstractNLPModel{T, V}}
   nvar = nlp.meta.nvar
   x = V(undef, nvar)
   d = V(undef, nvar)
   xt = V(undef, nvar)
   gx = V(undef, nvar)
   gt = V(undef, nvar)
-  H = InverseLBFGSOperator(T, nvar, mem = mem, scaling = true)
+  params = get_default_parameters(nlp)
+  for p ∈ parameters
+    haskey(params, name(p)) || continue
+    params[name(p)] = p
+  end
+  H = InverseLBFGSOperator(T, nvar, mem = default(params["mem"]), scaling = true)
   h = LineModel(nlp, x, d)
   Op = typeof(H)
-  return LBFGSSolver{T, V, Op, M}(x, xt, gx, gt, d, H, h)
+  return LBFGSSolver{T, V, Op, M}(x, xt, gx, gt, d, params, H, h)
+end
+
+"""
+Returns the set of parameters of a LBFGSSolver as a Dict.
+
+e.g 
+  ```jldoctest 
+  Dict{String, AlgorithmicParameter}(
+    "mem" => AlgorithmicParameter(mem, IntegerRange(1, 100), "mem"),
+    "τ₁"  => AlgorithmicParameter(Float64(0.99), RealInterval(Float64(1.0e-4), Float64(1.0)), "τ₁"),
+    "bk_max" => AlgorithmicParameter(25, IntegerRange(10, 30), "bk_max")
+  )
+  ```
+"""
+function get_parameters(solver::LBFGSSolver{T,V}) where {T, V}
+  return solver.params
+end
+
+function get_default_parameters(::M) where {T, V, M <: AbstractNLPModel{T, V}}
+  params = Dict{String, AlgorithmicParameter}(
+    "mem" => AlgorithmicParameter(5, IntegerRange(1, 100), "mem"),
+    "τ₁"  => AlgorithmicParameter(T(0.99), RealInterval(T(1.0e-4), T(1.0)), "τ₁"),
+    "bk_max" => AlgorithmicParameter(25, IntegerRange(10, 30), "bk_max")
+  )
+  return params
 end
 
 function LinearOperators.reset!(solver::LBFGSSolver)
@@ -80,10 +111,10 @@ end
 @doc (@doc LBFGSSolver) function lbfgs(
   nlp::AbstractNLPModel;
   x::V = nlp.meta.x0,
-  mem::Int = 5,
+  parameters = AlgorithmicParameter[],
   kwargs...,
 ) where {V}
-  solver = LBFGSSolver(nlp; mem = mem)
+  solver = LBFGSSolver(nlp; parameters)
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
@@ -95,8 +126,8 @@ function solve!(
   rtol::T = √eps(T),
   max_eval::Int = -1,
   max_time::Float64 = 30.0,
-  τ₁::T = T(0.9999),
-  bk_max::Int = 25,
+  τ₁::T = default(solver.params["τ₁"]),
+  bk_max::Int = default(solver.params["bk_max"]),
   verbose::Int = 0,
   verbose_subsolver::Int = 0,
 ) where {T, V}
@@ -139,7 +170,6 @@ function solve!(
   tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   stalled = false
   status = :unknown
-
   while !(optimal || tired || stalled)
     mul!(d, H, ∇f, -one(T), zero(T))
     slope = dot(n, d, ∇f)

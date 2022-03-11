@@ -11,6 +11,7 @@ NLPModels = "a4795742-8479-5a88-8948-cc11e1c8c1a6"
 NLPModelsModifiers = "e01155f1-5c6f-4375-a9d8-616dd036575f"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 SolverCore = "ff4d7338-4cf1-434d-91df-b86cb86fb843"
+SolverParameters = "adf32eb0-fe7e-47bb-93e4-fe96e72f6839"
 SolverTools = "b5612192-2639-5dc1-abfe-fbedd65fab29"
 
 [compat]
