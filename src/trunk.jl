@@ -16,6 +16,7 @@ For advanced usage, first define a `TrunkSolver` to preallocate the memory used 
 - `nlp::AbstractNLPModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
 - `subsolver_logger::AbstractLogger = NullLogger()`: subproblem's logger.
+- `callback = (nlp, solver, wks) -> nothing`: callback function called after each iteration. See the Callback section below.
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
@@ -26,6 +27,20 @@ The keyword arguments may include
 - `nm_itmax::Int = 25`: algorithm parameter.
 - `verbose::Int = 0`: if > 0, display iteration information every `verbose` iteration.
 - `verbose_subsolver::Int = 0`: if > 0, display iteration information every `verbose_subsolver` iteration of the subsolver.
+
+## Callback
+
+The callback is called after each iteration.
+The expected signature of callback is `(nlp, solver, wks)`, and the output of the callback is ignored.
+In addition to all information in `nlp` and `solver`, you can also use the following information stored in `wks`:
+
+- `wks[:iter]`: current iteration.
+- `wks[:f]`: current objective function value.
+- `wks[:optimal]`: true if the algorithm has found an optimal solution.
+- `wks[:elapsed_time]`: elapsed time in seconds.
+- `wks[:tired]`: true if the algorithm has exhausted all iterations or maximum time.
+- `wks[:stalled]`: true if the algorithm has stagnated.
+- `wks[:user_stop]`: set to true to stop the algorithm.
 
 # Output
 The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
