@@ -9,6 +9,7 @@ using JSOSolvers
 
 include("simple_model.jl")
 include("consistency.jl")
+include("callback.jl")
 include("test_solvers.jl")
 if VERSION ≥ v"1.6"
   include("allocs.jl")
