@@ -39,7 +39,7 @@ lbfgs_params = [mem, τ₁, bk_max]
 solver = LBFGSSolver(first(problems), lbfgs_params)
 
 # Function that will count failures
-function count_failures(bmark_results::Dict{P, Float64}, stats_results::Dict{AbstractNLPModel, AbstractExecutionStats}) where {P <: AbstractNLPModel}
+function count_failures(bmark_results::Dict{Int, Float64}, stats_results::Dict{Int, AbstractExecutionStats})
   failure_penalty = 0.0   
   for (nlp, stats) in stats_results
     is_failure(stats) || continue
@@ -76,12 +76,15 @@ create_nomad_problem!(
   param_optimization_problem;
   display_all_eval = true,
   # max_time = 300,
-  max_bb_eval =300,
+  max_bb_eval =100,
   display_stats = ["BBE", "EVAL", "SOL", "OBJ"],
 )
 
 # 8. Execute Nomad
+start_time = time()
 result = solve_with_nomad!(param_optimization_problem)
+elapsed_time = time() - start_time
 @info ("Best feasible parameters: $(result.x_best_feas)")
+@info ("elapsed time: $elapsed_time")
 
 rmprocs(workers())
