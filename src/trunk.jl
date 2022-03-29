@@ -32,6 +32,8 @@ The keyword arguments may include
 
 The callback is called after each iteration.
 The expected signature of callback is `(nlp, solver, wks)`, and the output of the callback is ignored.
+Notice that changing any of these variables will affect the algorithm.
+In particular, setting `wks[:user_stop] = true` will stop the algorithm.
 In addition to all information in `nlp` and `solver`, you can also use the following information stored in `wks`:
 
 - `wks[:iter]`: current iteration.
@@ -375,6 +377,8 @@ function solve!(
     elseif wks[:elapsed_time] > max_time
       status = :max_time
     end
+  elseif wks[:user_stop]
+    status = :user
   end
 
   return GenericExecutionStats(
