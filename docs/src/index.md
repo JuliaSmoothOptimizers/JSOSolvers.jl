@@ -46,13 +46,13 @@ function callback_example()
   X = [nlp.meta.x0[1]]
   Y = [nlp.meta.x0[2]]
 
-  function cb(nlp, solver, wks)
+  function cb(nlp, solver)
     x = solver.x
     push!(X, x[1])
     push!(Y, x[2])
 
-    if wks[:iter] == 4
-      wks[:user_stop] = true
+    if solver.output.iter == 4
+      solver.output.status = :user
     end
   end
 

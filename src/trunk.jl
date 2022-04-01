@@ -16,7 +16,7 @@ For advanced usage, first define a `TrunkSolver` to preallocate the memory used 
 - `nlp::AbstractNLPModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
 - `subsolver_logger::AbstractLogger = NullLogger()`: subproblem's logger.
-- `callback = (nlp, solver, wks) -> nothing`: callback function called after each iteration. See the Callback section below.
+- `callback = (nlp, solver) -> nothing`: callback function called after each iteration. See the Callback section below.
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
@@ -31,18 +31,19 @@ The keyword arguments may include
 ## Callback
 
 The callback is called after each iteration.
-The expected signature of callback is `(nlp, solver, wks)`, and the output of the callback is ignored.
-Notice that changing any of these variables will affect the algorithm.
-In particular, setting `wks[:user_stop] = true` will stop the algorithm.
-In addition to all information in `nlp` and `solver`, you can also use the following information stored in `wks`:
+The expected signature of callback is `(nlp, solver)`, and its output is ignored.
+Notice that changing any of the input arguments will affect the subsequent iterations.
+In particular, setting `solver.output.status = :user` will stop the algorithm.
+All relevant information should be available in `nlp` and `solver`.
+Notably, you can access, and modify, the following:
 
-- `wks[:iter]`: current iteration.
-- `wks[:f]`: current objective function value.
-- `wks[:optimal]`: true if the algorithm has found an optimal solution.
-- `wks[:elapsed_time]`: elapsed time in seconds.
-- `wks[:tired]`: true if the algorithm has exhausted all iterations or maximum time.
-- `wks[:stalled]`: true if the algorithm has stagnated.
-- `wks[:user_stop]`: set to true to stop the algorithm.
+- `solver.x`: current iteration.
+- `solver.gx`: current gradient.
+- `solver.output`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
+  - `solver.output.iter`: current iteration counter.
+  - `solver.output.objective`: current objective function value.
+  - `solver.output.status`: current status of the algorithm. Should be `:unknown` unless the algorithm has found a stopping criteria. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
+  - `solver.output.elapsed_time`: elapsed time in seconds.
 
 # Output
 The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -96,6 +97,7 @@ mutable struct TrunkSolver{
   subsolver::Sub
   H::Op
   tr::TrustRegion{T, V}
+  output::GenericExecutionStats{T, V}
 end
 
 function TrunkSolver(
@@ -114,7 +116,8 @@ function TrunkSolver(
   H = hess_op!(nlp, x, Hs)
   Op = typeof(H)
   tr = TrustRegion(gt, one(T))
-  return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, gn, Hs, subsolver, H, tr)
+  output = GenericExecutionStats(:unknown, nlp, solution = x)
+  return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, gn, Hs, subsolver, H, tr, output)
 end
 
 function LinearOperators.reset!(::TrunkSolver) end
@@ -153,10 +156,10 @@ function solve!(
     error("trunk should only be called for unconstrained problems. Try tron instead")
   end
 
-  wks = Dict{Symbol,Any}(:x => x)
+  output = solver.output
 
   start_time = time()
-  wks[:elapsed_time] = 0.0
+  output.elapsed_time = 0.0
 
   n = nlp.meta.nvar
 
@@ -175,8 +178,8 @@ function solve!(
   # Armijo linesearch parameter.
   β = eps(T)^T(1 / 4)
 
-  wks[:iter] = 0
-  wks[:f] = obj(nlp, x)
+  output.iter = 0
+  output.objective = obj(nlp, x)
   grad!(nlp, x, ∇f)
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
@@ -188,17 +191,23 @@ function solve!(
   # nm_iter: number of successful iterations since fmin was first attained
   # fref: objective value at reference iteration
   # σref: cumulative model decrease over successful iterations since the reference iteration
-  fmin = fref = fcur = wks[:f]
+  fmin = fref = fcur = output.objective
   σref = σcur = zero(T)
   nm_iter = 0
 
-  wks[:optimal] = ∇fNorm2 ≤ ϵ
-  wks[:tired] = neval_obj(nlp) > max_eval ≥ 0 || wks[:elapsed_time] > max_time
-  wks[:stalled] = false
-  wks[:user_stop] = false
+  optimal = ∇fNorm2 ≤ ϵ
+  stalled = false
+  output.status = get_status(
+    nlp,
+    elapsed_time = output.elapsed_time,
+    optimal = optimal,
+    max_eval = max_eval,
+    max_time = max_time,
+  )
 
-  status = :unknown
-  done = wks[:optimal] || wks[:tired] || wks[:stalled] || wks[:user_stop]
+  callback(nlp, solver)
+
+  done = output.status != :unknown
 
   verbose > 0 && @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :inner, :bk, :cgstatus],
@@ -233,7 +242,7 @@ function solve!(
     Δq = slope + curv / 2
     ft = obj(nlp, xt)
 
-    ared, pred = aredpred!(tr, nlp, wks[:f], ft, Δq, xt, s, slope)
+    ared, pred = aredpred!(tr, nlp, output.objective, ft, Δq, xt, s, slope)
     if pred ≥ 0
       status = :neg_pred
       stalled = true
@@ -269,7 +278,7 @@ function solve!(
         continue
       end
       α = one(T)
-      while (bk < bk_max) && (ft > wks[:f] + β * α * slope)
+      while (bk < bk_max) && (ft > output.objective + β * α * slope)
         bk = bk + 1
         α /= T(1.2)
         copyaxpy!(n, α, s, x, xt)
@@ -279,7 +288,7 @@ function solve!(
       scal!(n, α, s)
       slope *= α
       Δq = slope + α * α * curv / 2
-      ared, pred = aredpred!(tr, nlp, wks[:f], ft, Δq, xt, s, slope)
+      ared, pred = aredpred!(tr, nlp, output.objective, ft, Δq, xt, s, slope)
       if pred ≥ 0
         status = :neg_pred
         stalled = true
@@ -301,8 +310,8 @@ function solve!(
     verbose > 0 &&
       mod(iter, verbose) == 0 &&
       @info log_row([
-        wks[:iter],
-        wks[:f],
+        output.iter,
+        output.objective,
         ∇fNorm2,
         tr.radius,
         tr.ratio,
@@ -310,7 +319,7 @@ function solve!(
         bk,
         cg_stats.status,
       ])
-    wks[:iter] += 1
+    output.iter += 1
 
     if acceptable(tr)
       # Update non-monotone mode parameters.
@@ -339,7 +348,7 @@ function solve!(
       end
 
       x .= xt
-      wks[:f] = ft
+      output.objective = ft
       if !tr.good_grad
         grad!(nlp, x, ∇f)
       else
@@ -359,35 +368,24 @@ function solve!(
     # Move on.
     update!(tr, sNorm)
 
-    wks[:optimal] = ∇fNorm2 ≤ ϵ
-    wks[:elapsed_time] = time() - start_time
-    wks[:tired] = neval_obj(nlp) > max_eval ≥ 0 || wks[:elapsed_time] > max_time
+    optimal = ∇fNorm2 ≤ ϵ
+    output.elapsed_time = time() - start_time
 
-    callback(nlp, solver, wks)
+    output.status = get_status(
+      nlp,
+      elapsed_time = output.elapsed_time,
+      optimal = optimal,
+      max_eval = max_eval,
+      max_time = max_time,
+    )
 
-    done = wks[:optimal] || wks[:tired] || wks[:stalled] || wks[:user_stop]
+    callback(nlp, solver)
+
+    done = output.status != :unknown
   end
-  verbose > 0 && @info log_row(Any[wks[:iter], wks[:f], ∇fNorm2, tr.radius])
+  verbose > 0 && @info log_row(Any[output.iter, output.objective, ∇fNorm2, tr.radius])
 
-  if wks[:optimal]
-    status = :first_order
-  elseif wks[:tired]
-    if neval_obj(nlp) > max_eval ≥ 0
-      status = :max_eval
-    elseif wks[:elapsed_time] > max_time
-      status = :max_time
-    end
-  elseif wks[:user_stop]
-    status = :user
-  end
+  output.dual_feas = ∇fNorm2
 
-  return GenericExecutionStats(
-    status,
-    nlp,
-    solution = x,
-    objective = wks[:f],
-    dual_feas = ∇fNorm2,
-    iter = wks[:iter],
-    elapsed_time = wks[:elapsed_time],
-  )
+  return output
 end

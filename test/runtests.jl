@@ -1,5 +1,5 @@
 # stdlib
-using Printf, LinearAlgebra, Logging, SparseArrays, Test
+using LinearAlgebra, Logging, SparseArrays, Test
 
 # additional packages
 using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools

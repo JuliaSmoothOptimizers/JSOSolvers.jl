@@ -1,9 +1,9 @@
 @testset "Callback" begin
   nlp = ADNLPModel(x -> (x[1] - 1)^2 + 100 * (x[2] - x[1]^2)^2, [-1.2; 1.0])
 
-  cb = (nlp, solver, wks) -> begin
-    if wks[:iter] == 7
-      wks[:user_stop] = true
+  cb = (nlp, solver) -> begin
+    if solver.output.iter == 7
+      solver.output.status = :user
     end
   end
 
