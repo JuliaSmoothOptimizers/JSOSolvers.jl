@@ -40,6 +40,7 @@ Notably, you can access, and modify, the following:
 - `solver.x`: current iteration.
 - `solver.gx`: current gradient.
 - `solver.output`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
+  - `solver.output.dual_feas`: norm of current gradient.
   - `solver.output.iter`: current iteration counter.
   - `solver.output.objective`: current objective function value.
   - `solver.output.status`: current status of the algorithm. Should be `:unknown` unless the algorithm has found a stopping criteria. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
@@ -196,6 +197,8 @@ function solve!(
   nm_iter = 0
 
   optimal = ∇fNorm2 ≤ ϵ
+  output.dual_feas = ∇fNorm2
+
   stalled = false
   output.status = get_status(
     nlp,
@@ -370,6 +373,7 @@ function solve!(
 
     optimal = ∇fNorm2 ≤ ϵ
     output.elapsed_time = time() - start_time
+    output.dual_feas = ∇fNorm2
 
     output.status = get_status(
       nlp,
@@ -384,8 +388,8 @@ function solve!(
     done = output.status != :unknown
   end
   verbose > 0 && @info log_row(Any[output.iter, output.objective, ∇fNorm2, tr.radius])
-
   output.dual_feas = ∇fNorm2
+
 
   return output
 end
