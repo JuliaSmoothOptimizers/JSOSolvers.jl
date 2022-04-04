@@ -31,13 +31,13 @@ The keyword arguments may include
 ## Callback
 
 The callback is called after each iteration.
-The expected signature of callback is `(nlp, solver)`, and its output is ignored.
+The expected signature of the callback is `(nlp, solver)`, and its output is ignored.
 Notice that changing any of the input arguments will affect the subsequent iterations.
 In particular, setting `solver.output.status = :user` will stop the algorithm.
 All relevant information should be available in `nlp` and `solver`.
 Notably, you can access, and modify, the following:
 
-- `solver.x`: current iteration.
+- `solver.x`: current iterate.
 - `solver.gx`: current gradient.
 - `solver.output`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
   - `solver.output.dual_feas`: norm of current gradient.
