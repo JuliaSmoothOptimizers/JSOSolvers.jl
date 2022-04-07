@@ -67,7 +67,7 @@ stats = solve!(solver, nlp)
 mutable struct TrunkSolver{
   T,
   V <: AbstractVector{T},
-  Sub <: KrylovSolver{T, V},
+  Sub <: KrylovSolver{T, T, V},
   Op <: AbstractLinearOperator{T},
 } <: AbstractOptSolver{T, V}
   x::V
