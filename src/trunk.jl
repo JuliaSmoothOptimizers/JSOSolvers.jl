@@ -1,6 +1,6 @@
 export trunk, TrunkSolver
 
-trunk(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = trunk(Val(variant), nlp; kwargs...)
+trunk(nlp::AbstractNLPModel, params::Vector{<:AlgorithmicParameter}=Vector{AlgorithmicParameter}(); variant = :Newton, kwargs...) = trunk(Val(variant), nlp, params; kwargs...)
 
 """
     trunk(nlp; kwargs...)
@@ -70,6 +70,7 @@ mutable struct TrunkSolver{
   Sub <: KrylovSolver{T, V},
   Op <: AbstractLinearOperator{T},
 } <: AbstractOptSolver{T, V}
+  parameters::OrderedDict{String, AlgorithmicParameter}
   x::V
   xt::V
   gx::V
@@ -83,6 +84,7 @@ end
 
 function TrunkSolver(
   nlp::AbstractNLPModel{T, V};
+  params::Dict{String, <:AlgorithmicParameter}=Dict{String, AlgorithmicParameter}(),
   subsolver_type::Type{<:KrylovSolver} = CgSolver,
 ) where {T, V <: AbstractVector{T}}
   nvar = nlp.meta.nvar
@@ -92,24 +94,50 @@ function TrunkSolver(
   gt = V(undef, nvar)
   gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
   Hs = V(undef, nvar)
+
+  parameters = get_default_trunk_parameters(T)
+  for (p_name, p) ∈ params
+    haskey(parameters, p_name) || continue
+    parameters[p_name] = p
+  end
+
   subsolver = subsolver_type(nvar, nvar, V)
   Sub = typeof(subsolver)
   H = hess_op!(nlp, x, Hs)
   Op = typeof(H)
-  tr = TrustRegion(gt, one(T))
-  return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, gn, Hs, subsolver, H, tr)
+  tr = TrustRegion(gt, one(T);
+          acceptance_threshold=default(parameters["acceptance_threshold"]),
+          decrease_factor=default(parameters["decrease_factor"]),
+          increase_factor=default(parameters["increase_factor"])
+        )
+  return TrunkSolver{T, V, Sub, Op}(parameters, x, xt, gx, gt, gn, Hs, subsolver, H, tr)
 end
 
 function LinearOperators.reset!(::TrunkSolver) end
 
+function get_default_trunk_parameters(T::Type)
+  parameters = OrderedDict("monotone" => AlgorithmicParameter(true, BinaryRange(), "monotone"),
+            "nm_itmax" => AlgorithmicParameter(25, IntegerRange(15, 35), "nm_itmax"),
+            "bk_max" => AlgorithmicParameter(10, IntegerRange(5, 20), "bk_max"),
+            "β" => AlgorithmicParameter(eps(T)^T(1 / 4), RealInterval(T(0.0), 1.0), "β"),
+            "α" => AlgorithmicParameter(one(T), RealInterval(T(0.0), one(T)), "α"),
+            "acceptance_threshold" => AlgorithmicParameter(T(1.0e-4), RealInterval(zero(T), T(0.95), true, true), "acceptance_threshold"),
+            "decrease_factor" => AlgorithmicParameter(one(T) / 3, RealInterval(zero(T), one(T), true, true), "decrease_factor"),
+            "increase_factor" => AlgorithmicParameter(3 * one(T) / 2, RealInterval(one(T), T(2.0), true, false), "increase_factor")
+          )
+  return parameters
+end
+
 @doc (@doc TrunkSolver) function trunk(
   ::Val{:Newton},
-  nlp::AbstractNLPModel;
+  nlp::AbstractNLPModel,
+  parameters::Vector{<:AlgorithmicParameter};
   x::V = nlp.meta.x0,
   subsolver_type::Type{<:KrylovSolver} = CgSolver,
   kwargs...,
 ) where {V}
-  solver = TrunkSolver(nlp, subsolver_type = subsolver_type)
+  trunk_params = Dict{String, AlgorithmicParameter}(name(p) => p for p in parameters)
+  solver = TrunkSolver(nlp;params=trunk_params, subsolver_type = subsolver_type)
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
@@ -123,8 +151,8 @@ function solve!(
   max_eval::Int = -1,
   max_time::Float64 = 30.0,
   bk_max::Int = 10,
-  monotone::Bool = true,
-  nm_itmax::Int = 25,
+  monotone::Bool = default(solver.parameters["monotone"]),
+  nm_itmax::Int = default(solver.parameters["nm_itmax"]),
   verbose::Int = 0,
   verbose_subsolver::Int = 0,
 ) where {T, V <: AbstractVector{T}}
@@ -134,7 +162,7 @@ function solve!(
   if !unconstrained(nlp)
     error("trunk should only be called for unconstrained problems. Try tron instead")
   end
-
+  parameters = solver.parameters
   start_time = time()
   elapsed_time = 0.0
 
@@ -153,7 +181,7 @@ function solve!(
   cgtol = one(T)  # Must be ≤ 1.
 
   # Armijo linesearch parameter.
-  β = eps(T)^T(1 / 4)
+  β = default(parameters["β"])
 
   iter = 0
   f = obj(nlp, x)
@@ -246,7 +274,7 @@ function solve!(
         stalled = true
         continue
       end
-      α = one(T)
+      α = default(parameters["α"])
       while (bk < bk_max) && (ft > f + β * α * slope)
         bk = bk + 1
         α /= T(1.2)
