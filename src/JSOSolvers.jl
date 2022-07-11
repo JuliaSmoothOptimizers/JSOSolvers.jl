@@ -1,5 +1,6 @@
 module JSOSolvers
 
+
 # stdlib
 using LinearAlgebra, Logging, Printf
 
@@ -21,6 +22,7 @@ abstract type AbstractOptSolver{T, V} end
 # Unconstrained solvers
 include("lbfgs.jl")
 include("trunk.jl")
+include("R2.jl")
 
 # Unconstrained solvers for NLS
 include("trunkls.jl")
