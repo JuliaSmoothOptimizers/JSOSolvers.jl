@@ -51,6 +51,7 @@ stats = solve!(solver, nlp)
 """
 mutable struct LBFGSSolver{T, V, Op <: AbstractLinearOperator{T}, M <: AbstractNLPModel{T, V}} <:
                AbstractOptSolver{T, V}
+  p::NamedTuple
   x::V
   xt::V
   gx::V
@@ -60,30 +61,49 @@ mutable struct LBFGSSolver{T, V, Op <: AbstractLinearOperator{T}, M <: AbstractN
   h::LineModel{T, V, M}
 end
 
-function LBFGSSolver(nlp::M; mem::Int = 5) where {T, V, M <: AbstractNLPModel{T, V}}
+function LBFGSSolver(nlp::M; params::NamedTuple=NamedTuple()) where {T, V, M <: AbstractNLPModel{T, V}}
   nvar = nlp.meta.nvar
+  p = merge(get_default_lbfgs_parameters(T), params)
   x = V(undef, nvar)
   d = V(undef, nvar)
   xt = V(undef, nvar)
   gx = V(undef, nvar)
   gt = V(undef, nvar)
-  H = InverseLBFGSOperator(T, nvar, mem = mem, scaling = true)
+
+  H = InverseLBFGSOperator(T, nvar, mem = p.mem, scaling = p.scaling)
   h = LineModel(nlp, x, d)
   Op = typeof(H)
-  return LBFGSSolver{T, V, Op, M}(x, xt, gx, gt, d, H, h)
+
+  return LBFGSSolver{T, V, Op, M}(p, x, xt, gx, gt, d, H, h)
 end
 
 function LinearOperators.reset!(solver::LBFGSSolver)
   reset!(solver.H)
 end
 
+function get_default_lbfgs_parameters(T::Type)
+  return (mem=5, scaling=true, τ₁=T(0.999), bk_max=20)
+end
+
+function get_default_lbfgs_parameters(s::S) where S <: LBFGSSolver
+  return s.p
+end
+
+@doc (@doc LBFGSSolver) function lbfgs(
+  nlp::AbstractNLPModel{T,V}, params::NamedTuple;
+  x::V = nlp.meta.x0,
+  kwargs...,
+) where {T,V}
+  solver = LBFGSSolver(nlp;params=params)
+  return solve!(solver, nlp; x = x, kwargs...)
+end
+
 @doc (@doc LBFGSSolver) function lbfgs(
   nlp::AbstractNLPModel;
   x::V = nlp.meta.x0,
-  mem::Int = 5,
   kwargs...,
 ) where {V}
-  solver = LBFGSSolver(nlp; mem = mem)
+  solver = LBFGSSolver(nlp;)
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
@@ -95,8 +115,8 @@ function solve!(
   rtol::T = √eps(T),
   max_eval::Int = -1,
   max_time::Float64 = 30.0,
-  τ₁::T = T(0.9999),
-  bk_max::Int = 25,
+  τ₁::T = solver.p.τ₁,
+  bk_max::Int = solver.p.bk_max,
   verbose::Int = 0,
   verbose_subsolver::Int = 0,
 ) where {T, V}
