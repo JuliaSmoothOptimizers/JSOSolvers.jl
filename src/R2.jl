@@ -10,7 +10,7 @@ export R2, R2Solver
 - `nlp::AbstractNLPModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 
 The keyword arguments may include
-- xk::V = nlp.meta.x0`: the initial guess.
+- x::V = nlp.meta.x0`: the initial guess.
 - atol = eps(T)^(1 / 3) : absolute tolerance
 - rtol = eps(T)^(1 / 3) : relative tolerance : algorithm stops when norm_∇fk ≤ ϵ_abs + ϵ_rel*norm_∇fk
 - η1 = T(0.3), η2 = T(0.7) : step acceptance
@@ -47,10 +47,9 @@ mutable struct R2Solver{V}
 end
 
 function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
-  nvar = nlp.meta.nvar
-  x = V(undef, nvar)
-  gx = V(undef, nvar)
-  cx = V(undef, nvar)
+  x = similar(nlp.meta.x0)
+  gx = similar(nlp.meta.x0)
+  cx = similar(nlp.meta.x0)
   return R2Solver{V}(x, gx, cx)
 end
 
@@ -60,15 +59,15 @@ end
   kwargs...,
 ) where {T, V}
   solver = R2Solver(nlp)
-  return solve!(solver, nlp; xk = x, kwargs...)
+  return solve!(solver, nlp; x = x, kwargs...)
 end
 
 function solve!(
     solver::R2Solver{V},
     nlp::AbstractNLPModel{T, V};
-    xk::V = nlp.meta.x0,
-    atol = eps(T)^(1 / 3),
-    rtol = eps(T)^(1 / 3),
+    x::V = copy(nlp.meta.x0),
+    atol = eps(T)^(1/3),
+    rtol = eps(T)^(1/3),
     η1 = T(0.3),
     η2 = T(0.7),
     γ1 = T(1/2),
@@ -76,25 +75,24 @@ function solve!(
     σmin = zero(T),
     max_time::Float64 = 3600.0,
     max_eval::Int = -1,
-    verbose::Bool = false,
+    verbose::Bool = true,
   ) where {T, V}
 
   unconstrained(nlp) || error("R2 should only be called on unconstrained problems.")
-
   start_time = time()
   elapsed_time = 0.0
 
-  solver.x .= xk
+  solver.x .= copy(x)
   ∇fk = solver.gx
   ck = solver.cx
 
   iter = 0
   ρk = T(0)
-  fk = obj(nlp, xk)
+  fk = obj(nlp, x)
   
-  grad!(nlp, xk, ∇fk)
+  grad!(nlp, x, ∇fk)
   norm_∇fk=norm(∇fk)
-  σk = 2^round(log2(norm(∇fk) + 1)) # The closest exact-computed power of 2 from ∇xk
+  σk = 2^round(log2(norm(∇fk) + 1)) # The closest exact-computed power of 2 from ∇x
 
   # Stopping criterion: 
   ϵ = atol + rtol*norm_∇fk
@@ -110,7 +108,7 @@ function solve!(
     
   while !(optimal | tired)
 
-    ck .= xk .- (∇fk./σk)
+    ck .= x .- (∇fk./σk)
     ΔTk= norm_∇fk^2/ σk
     fck = obj(nlp, ck)
     if fck == -Inf
@@ -129,9 +127,9 @@ function solve!(
 
   # Acceptance of the new candidate
     if ρk >= η1
-      xk .= ck
+      x .= ck
       fk = fck
-      grad!(nlp, xk, ∇fk)
+      grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
     end
 
@@ -164,7 +162,7 @@ function solve!(
   return GenericExecutionStats(
       status,
       nlp,
-      solution = xk,
+      solution = x,
       objective = fk,
       dual_feas = norm_∇fk,
       elapsed_time = elapsed_time,
