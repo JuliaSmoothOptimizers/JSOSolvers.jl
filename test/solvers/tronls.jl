@@ -5,7 +5,9 @@
   for subsolver in JSOSolvers.tronls_allowed_subsolvers
     stats = tron(model, subsolver = subsolver)
     @test stats.status == :first_order
+    @test stats.solution_reliable
     isapprox(stats.solution, ones(2), rtol = 1e-4)
+    @test stats.objective_reliable
     @test isapprox(stats.objective, 0, atol = 1e-6)
     @test neval_jac_residual(model) == 0
     stline = statsline(
@@ -15,9 +17,6 @@
         :dual_feas,
         :elapsed_time,
         :iter,
-        :neval_residual,
-        :neval_jprod_residual,
-        :neval_jtprod_residual,
         :status,
       ],
     )
@@ -39,6 +38,7 @@ end
       tron(model, subsolver = subsolver)
     end
     @test stats.status == :first_order
+    @test stats.objective_reliable
     @test isapprox(stats.objective, 0, atol = 1e-6)
     @test neval_jac_residual(model) == 0
     stline = statsline(
@@ -48,9 +48,6 @@ end
         :dual_feas,
         :elapsed_time,
         :iter,
-        :neval_residual,
-        :neval_jprod_residual,
-        :neval_jtprod_residual,
         :status,
       ],
     )
