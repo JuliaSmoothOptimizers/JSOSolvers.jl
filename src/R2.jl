@@ -4,16 +4,17 @@ export R2, R2Solver
     R2(nlp; kwargs...)
     solver = R2Solver(nlp;)
     solve!(solver, nlp; kwargs...)
+
     A first-order quadratic regularization method for unconstrained optimization
 
 # Arguments
 - `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
 
 # Keyword arguments 
-- x::V = nlp.meta.x0`: the initial guess
+- x0::V = nlp.meta.x0`: the initial guess
 - atol = eps(T)^(1 / 3): absolute tolerance
 - rtol = eps(T)^(1 / 3): relative tolerance: algorithm stop when ||∇f(x)|| ≤ ϵ_abs + ϵ_rel*||∇f(x0)||
-- η1 = T(0.3), η2 = T(0.7): step acceptance parameters
+- η1 = eps(T)^(1/4), η2 = T(0.95): step acceptance parameters
 - γ1 = T(1/2), γ2 = 1/γ1: regularization update parameters
 - σmin = eps(T): step parameter for R2 algorithm
 - max_eval::Int: maximum number of evaluation of the objective function
@@ -81,7 +82,7 @@ function solve!(
   start_time = time()
   elapsed_time = 0.0
 
-  x = solver.x .= copy(x0)
+  x = solver.x .= x0
   ∇fk = solver.gx
   ck = solver.cx
 
@@ -89,12 +90,17 @@ function solve!(
   fk = obj(nlp, x)
   
   grad!(nlp, x, ∇fk)
-  norm_∇fk=norm(∇fk)
-  σk = 2^round(log2(norm_∇fk + 1)) # The closest exact-computed power of 2 from ∇fk
+  norm_∇fk = norm(∇fk)
+  σk = norm(hess(nlp, x))
 
   # Stopping criterion: 
-  ϵ = atol + rtol*norm_∇fk
+  ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
+  if optimal
+    @info("Optimal point found at initial point")
+    @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
+    @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" iter fk norm_∇fk σk
+  end
   tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   if verbose
     @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
@@ -102,11 +108,11 @@ function solve!(
   end
 
   status = :unknown
-    
+
   while !(optimal | tired)
 
-    ck .= x .- (∇fk./σk)
-    ΔTk= norm_∇fk^2/ σk
+    ck .= x .- (∇fk ./ σk)
+    ΔTk= norm_∇fk^2 / σk
     fck = obj(nlp, ck)
     if fck == -Inf
       status = :unbounded
