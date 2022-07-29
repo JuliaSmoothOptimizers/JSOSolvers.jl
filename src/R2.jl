@@ -91,7 +91,9 @@ function solve!(
   
   grad!(nlp, x, ∇fk)
   norm_∇fk = norm(∇fk)
-  σk = norm(hess(nlp, x))
+  # σk = norm(hess(nlp, x))
+  σk = 2^round(log2(norm_∇fk + 1))
+
 
   # Stopping criterion: 
   ϵ = atol + rtol * norm_∇fk
