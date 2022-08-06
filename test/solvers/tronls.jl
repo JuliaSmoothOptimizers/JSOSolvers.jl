@@ -10,16 +10,7 @@
     @test stats.objective_reliable
     @test isapprox(stats.objective, 0, atol = 1e-6)
     @test neval_jac_residual(model) == 0
-    stline = statsline(
-      stats,
-      [
-        :objective,
-        :dual_feas,
-        :elapsed_time,
-        :iter,
-        :status,
-      ],
-    )
+    stline = statsline(stats, [:objective, :dual_feas, :elapsed_time, :iter, :status])
     reset!(model)
   end
 
@@ -41,16 +32,7 @@ end
     @test stats.objective_reliable
     @test isapprox(stats.objective, 0, atol = 1e-6)
     @test neval_jac_residual(model) == 0
-    stline = statsline(
-      stats,
-      [
-        :objective,
-        :dual_feas,
-        :elapsed_time,
-        :iter,
-        :status,
-      ],
-    )
+    stline = statsline(stats, [:objective, :dual_feas, :elapsed_time, :iter, :status])
     reset!(model)
   end
 end
