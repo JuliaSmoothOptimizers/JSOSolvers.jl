@@ -229,15 +229,13 @@ function tron(
     status = :unbounded
   end
 
-  return GenericExecutionStats(
-    status,
-    nlp,
-    solution = x,
-    objective = fx,
-    dual_feas = πx,
-    iter = iter,
-    elapsed_time = el_time,
-  )
+  stats = GenericExecutionStats(status, nlp)
+  set_solution!(stats, x)
+  set_objective!(stats, fx)
+  set_residuals!(stats, zero(T), πx)
+  set_iter!(stats, iter)
+  set_time!(stats, el_time)
+  stats
 end
 
 """`s = projected_line_search_ls!(x, A, g, d, ℓ, u; μ₀ = 1e-2)`

@@ -31,15 +31,12 @@ end
 if Sys.isunix()
   @testset "Allocation tests" begin
     @testset "LBFGS" begin
-      function al_stats(status, nlp, x)
-        GenericExecutionStats(status, nlp, solution = x)
-        @allocated GenericExecutionStats(status, nlp, solution = x)
-      end
       for n in [2, 20, 200, 2000]
         nlp = SimpleModel(n)
         solver = LBFGSSolver(nlp)
         x = copy(nlp.meta.x0)
-        al_output = al_stats(:unknown, nlp, x)
+        GenericExecutionStats(:unknown, nlp)
+        al_output = @allocated GenericExecutionStats(:unknown, nlp)
         al = 0
         with_logger(NullLogger()) do
           solve!(solver, nlp)
