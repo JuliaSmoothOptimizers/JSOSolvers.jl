@@ -19,7 +19,7 @@ export R2, R2Solver
 - σmin = eps(T): step parameter for R2 algorithm
 - max_eval::Int: maximum number of evaluation of the objective function
 - max_time::Float64 = 3600.0: maximum time limit in seconds
-- verbose::Bool = false: prints iteration details if true.
+- verbose::Int = 0: if > 0, display iteration details every `verbose` iteration.
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -75,7 +75,7 @@ function solve!(
     σmin = zero(T),
     max_time::Float64 = 3600.0,
     max_eval::Int = -1,
-    verbose::Bool = true,
+    verbose::Int = 0,
   ) where {T, V}
 
   unconstrained(nlp) || error("R2 should only be called on unconstrained problems.")
@@ -94,7 +94,6 @@ function solve!(
   # σk = norm(hess(nlp, x))
   σk = 2^round(log2(norm_∇fk + 1))
 
-
   # Stopping criterion: 
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
@@ -104,7 +103,7 @@ function solve!(
     @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" iter fk norm_∇fk σk
   end
   tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
-  if verbose
+  if verbose > 0 && mod(iter, verbose) == 0
     @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
     infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" iter fk norm_∇fk σk
   end
@@ -143,7 +142,7 @@ function solve!(
     optimal = norm_∇fk ≤ ϵ
     tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   
-    if verbose
+    if verbose > 0 && mod(iter, verbose) == 0
       @info infoline
       infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" iter fk norm_∇fk σk
     end
