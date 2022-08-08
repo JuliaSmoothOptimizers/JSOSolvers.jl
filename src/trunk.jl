@@ -354,13 +354,11 @@ function solve!(
     end
   end
 
-  return GenericExecutionStats(
-    status,
-    nlp,
-    solution = x,
-    objective = f,
-    dual_feas = ∇fNorm2,
-    iter = iter,
-    elapsed_time = elapsed_time,
-  )
+  stats = GenericExecutionStats(status, nlp)
+  set_solution!(stats, x)
+  set_objective!(stats, f)
+  set_residuals!(stats, zero(T), ∇fNorm2)
+  set_iter!(stats, iter)
+  set_time!(stats, elapsed_time)
+  stats
 end
