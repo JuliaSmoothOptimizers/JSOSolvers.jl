@@ -7,7 +7,7 @@ function tests()
         ("trunk+cg", (nlp; kwargs...) -> trunk(nlp, subsolver_type = CgSolver; kwargs...)),
         ("lbfgs", lbfgs),
         ("tron", tron),
-        ("R2", R2)
+        ("R2", R2),
       ]
         unconstrained_nlp(solver)
         multiprecision_nlp(solver, :unc)
