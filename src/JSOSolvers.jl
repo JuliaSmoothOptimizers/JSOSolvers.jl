@@ -1,6 +1,5 @@
 module JSOSolvers
 
-
 # stdlib
 using LinearAlgebra, Logging, Printf
 
