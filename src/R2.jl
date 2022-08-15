@@ -54,30 +54,26 @@ function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   return R2Solver{V}(x, gx, cx)
 end
 
-@doc (@doc R2Solver) function R2(
-  nlp::AbstractNLPModel{T,V};
-  kwargs...,
-) where {T, V}
+@doc (@doc R2Solver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
   solver = R2Solver(nlp)
   return solve!(solver, nlp; kwargs...)
 end
 
 function solve!(
-    solver::R2Solver{V},
-    nlp::AbstractNLPModel{T, V};
-    x0::V = nlp.meta.x0,
-    atol = eps(T)^(1/2),
-    rtol = eps(T)^(1/2),
-    η1 = eps(T)^(1/4),
-    η2 = T(0.95),
-    γ1 = T(1/2),
-    γ2 = 1/γ1,
-    σmin = zero(T),
-    max_time::Float64 = 3600.0,
-    max_eval::Int = -1,
-    verbose::Int = 0,
-  ) where {T, V}
-
+  solver::R2Solver{V},
+  nlp::AbstractNLPModel{T, V};
+  x0::V = nlp.meta.x0,
+  atol = eps(T)^(1 / 2),
+  rtol = eps(T)^(1 / 2),
+  η1 = eps(T)^(1 / 4),
+  η2 = T(0.95),
+  γ1 = T(1 / 2),
+  γ2 = 1 / γ1,
+  σmin = zero(T),
+  max_time::Float64 = 3600.0,
+  max_eval::Int = -1,
+  verbose::Int = 0,
+) where {T, V}
   unconstrained(nlp) || error("R2 should only be called on unconstrained problems.")
   start_time = time()
   elapsed_time = 0.0
@@ -88,7 +84,7 @@ function solve!(
 
   iter = 0
   fk = obj(nlp, x)
-  
+
   grad!(nlp, x, ∇fk)
   norm_∇fk = norm(∇fk)
   # σk = norm(hess(nlp, x))
@@ -111,16 +107,15 @@ function solve!(
   status = :unknown
 
   while !(optimal | tired)
-
     ck .= x .- (∇fk ./ σk)
-    ΔTk= norm_∇fk^2 / σk
+    ΔTk = norm_∇fk^2 / σk
     fck = obj(nlp, ck)
     if fck == -Inf
       status = :unbounded
       break
     end
 
-    ρk = (fk - fck) / ΔTk 
+    ρk = (fk - fck) / ΔTk
 
     # Update regularization parameters
     if ρk >= η2
@@ -141,31 +136,30 @@ function solve!(
     elapsed_time = time() - start_time
     optimal = norm_∇fk ≤ ϵ
     tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
-  
+
     if verbose > 0 && mod(iter, verbose) == 0
       @info infoline
       infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" iter fk norm_∇fk σk
     end
-
   end
-    
+
   status = if optimal
-      :first_order
-    elseif tired
-      if elapsed_time > max_time
-        status = :max_time
-      elseif neval_obj(nlp) > max_eval
-        status = :max_eval
-      end
+    :first_order
+  elseif tired
+    if elapsed_time > max_time
+      status = :max_time
+    elseif neval_obj(nlp) > max_eval
+      status = :max_eval
     end
+  end
 
   return GenericExecutionStats(
-      status,
-      nlp,
-      solution = x,
-      objective = fk,
-      dual_feas = norm_∇fk,
-      elapsed_time = elapsed_time,
-      iter = iter,
-    )
+    status,
+    nlp,
+    solution = x,
+    objective = fk,
+    dual_feas = norm_∇fk,
+    elapsed_time = elapsed_time,
+    iter = iter,
+  )
 end
