@@ -1,2 +1,5 @@
 docs/build
 docs/Manifest.toml
+*/.DS_Store
+.DS_Store
+Manifest.toml
