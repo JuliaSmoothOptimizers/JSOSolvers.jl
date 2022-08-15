@@ -66,8 +66,8 @@ function solve!(
     solver::R2Solver{V},
     nlp::AbstractNLPModel{T, V};
     x0::V = nlp.meta.x0,
-    atol = eps(T)^(1/3),
-    rtol = eps(T)^(1/3),
+    atol = eps(T)^(1/2),
+    rtol = eps(T)^(1/2),
     η1 = eps(T)^(1/4),
     η2 = T(0.95),
     γ1 = T(1/2),
