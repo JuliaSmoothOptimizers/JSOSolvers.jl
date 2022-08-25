@@ -24,6 +24,22 @@ export R2, R2Solver
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 
+# Callback
+The callback is called after each iteration.
+The expected signature of the callback is `(nlp, solver)`, and its output is ignored.
+Notice that changing any of the input arguments will affect the subsequent iterations.
+In particular, setting `solver.output.status = :user` will stop the algorithm.
+All relevant information should be available in `nlp` and `solver`.
+Notably, you can access, and modify, the following:
+- `solver.x`: current iterate.
+- `solver.gx`: current gradient.
+- `solver.output`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
+  - `solver.output.dual_feas`: norm of current gradient.
+  - `solver.output.iter`: current iteration counter.
+  - `solver.output.objective`: current objective function value.
+  - `solver.output.status`: current status of the algorithm. Should be `:unknown` unless the algorithm has found a stopping criteria. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
+  - `solver.output.elapsed_time`: elapsed time in seconds.
+
 # Examples
 ```jldoctest
 using JSOSolvers, ADNLPModels
@@ -41,17 +57,19 @@ stats = solve!(solver, nlp)
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct R2Solver{V}
+mutable struct R2Solver{T,V}
   x::V
   gx::V
   cx::V
+  output::GenericExecutionStats{T, V}
 end
 
 function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   x = similar(nlp.meta.x0)
   gx = similar(nlp.meta.x0)
   cx = similar(nlp.meta.x0)
-  return R2Solver{V}(x, gx, cx)
+  output = GenericExecutionStats(:unknown, nlp, solution = x)
+  return R2Solver{T, V}(x, gx, cx, output)
 end
 
 @doc (@doc R2Solver) function R2(
@@ -63,8 +81,9 @@ end
 end
 
 function solve!(
-    solver::R2Solver{V},
+    solver::R2Solver{T, V},
     nlp::AbstractNLPModel{T, V};
+    callback = (args...) -> nothing,
     x0::V = nlp.meta.x0,
     atol = eps(T)^(1/2),
     rtol = eps(T)^(1/2),
@@ -79,19 +98,22 @@ function solve!(
   ) where {T, V}
 
   unconstrained(nlp) || error("R2 should only be called on unconstrained problems.")
+
+  output = solver.output
   start_time = time()
-  elapsed_time = 0.0
+  output.elapsed_time = 0.0
 
   x = solver.x .= x0
   ∇fk = solver.gx
   ck = solver.cx
 
-  iter = 0
-  fk = obj(nlp, x)
+  output.iter = 0
+  output.objective = obj(nlp, x)
   
   grad!(nlp, x, ∇fk)
   norm_∇fk = norm(∇fk)
-  # σk = norm(hess(nlp, x))
+  output.dual_feas = norm_∇fk
+
   σk = 2^round(log2(norm_∇fk + 1))
 
   # Stopping criterion: 
@@ -100,27 +122,36 @@ function solve!(
   if optimal
     @info("Optimal point found at initial point")
     @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
-    @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" iter fk norm_∇fk σk
+    @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" output.iter output.objective norm_∇fk σk
   end
-  tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   if verbose > 0 && mod(iter, verbose) == 0
     @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
-    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" iter fk norm_∇fk σk
+    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" output.iter output.objective norm_∇fk σk
   end
 
-  status = :unknown
+  output.status = get_status(
+    nlp,
+    elapsed_time = output.elapsed_time,
+    optimal = optimal,
+    max_eval = max_eval,
+    max_time = max_time,
+  )
 
-  while !(optimal | tired)
+  callback(nlp, solver)
+
+  done = output.status != :unknown
+
+  while !done
 
     ck .= x .- (∇fk ./ σk)
     ΔTk= norm_∇fk^2 / σk
     fck = obj(nlp, ck)
     if fck == -Inf
-      status = :unbounded
+      output.status = :unbounded
       break
     end
 
-    ρk = (fk - fck) / ΔTk 
+    ρk = (output.objective - fck) / ΔTk 
 
     # Update regularization parameters
     if ρk >= η2
@@ -132,40 +163,33 @@ function solve!(
     # Acceptance of the new candidate
     if ρk >= η1
       x .= ck
-      fk = fck
+      output.objective = fck
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
     end
 
-    iter += 1
-    elapsed_time = time() - start_time
+    output.iter += 1
+    output.elapsed_time = time() - start_time
+    output.dual_feas = norm_∇fk
     optimal = norm_∇fk ≤ ϵ
-    tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
   
     if verbose > 0 && mod(iter, verbose) == 0
       @info infoline
       infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" iter fk norm_∇fk σk
     end
 
-  end
-    
-  status = if optimal
-      :first_order
-    elseif tired
-      if elapsed_time > max_time
-        status = :max_time
-      elseif neval_obj(nlp) > max_eval
-        status = :max_eval
-      end
-    end
-
-  return GenericExecutionStats(
-      status,
+    output.status = get_status(
       nlp,
-      solution = x,
-      objective = fk,
-      dual_feas = norm_∇fk,
-      elapsed_time = elapsed_time,
-      iter = iter,
+      elapsed_time = output.elapsed_time,
+      optimal = optimal,
+      max_eval = max_eval,
+      max_time = max_time,
     )
+  
+    callback(nlp, solver)
+  
+    done = output.status != :unknown
+  end
+
+  return output
 end

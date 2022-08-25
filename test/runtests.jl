@@ -7,6 +7,7 @@ using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, Solve
 # this package
 using JSOSolvers
 
+include("callback.jl")
 include("simple_model.jl")
 include("consistency.jl")
 include("test_solvers.jl")
