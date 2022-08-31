@@ -23,7 +23,7 @@ function get_status(
     elapsed_time = 0.0,
     optimal = false,
     max_eval = Inf,
-    max_time = Inf,
+    max_time = Inf
   )
     if optimal
       :first_order

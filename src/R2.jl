@@ -21,13 +21,13 @@ export R2, R2Solver
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 # Callback
 The callback is called after each iteration.
-The expected signature of the callback is `(nlp, solver)`, and its output is ignored.
-Notice that changing any of the input arguments will affect the subsequent iterations.
+The expected signature of the callback is `callback(nlp, solver)`, and its output is ignored.
+Changing any of the input arguments will affect the subsequent iterations.
 In particular, setting `solver.output.status = :user` will stop the algorithm.
 All relevant information should be available in `nlp` and `solver`.
 Notably, you can access, and modify, the following:
-- `solver.x`: current iterate.
-- `solver.gx`: current gradient.
+- `solver.x`: current iterate;
+- `solver.gx`: current gradient;
 - `solver.output`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
   - `solver.output.dual_feas`: norm of current gradient.
   - `solver.output.iter`: current iteration counter.
@@ -128,12 +128,12 @@ function solve!(
     elapsed_time = output.elapsed_time,
     optimal = optimal,
     max_eval = max_eval,
-    max_time = max_time,
+    max_time = max_time
   )
 
   callback(nlp, solver)
 
-  done = output.status != :unknown
+  done = (output.status == :first_order) || (output.status == :max_eval) || (output.status == :max_time) || (output.status == :user)
 
   while !done
 
@@ -177,12 +177,12 @@ function solve!(
       elapsed_time = output.elapsed_time,
       optimal = optimal,
       max_eval = max_eval,
-      max_time = max_time,
+      max_time = max_time
     )
 
     callback(nlp, solver)
 
-    done = output.status != :unknown
+    done = (output.status == :first_order) || (output.status == :max_eval) || (output.status == :max_time) || (output.status == :user)
   end
 
   return output
