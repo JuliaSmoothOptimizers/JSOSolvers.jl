@@ -30,7 +30,7 @@ Notably, you can access, and modify, the following:
 - `solver.gx`: current gradient;
 - `solver.output`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
   - `solver.output.dual_feas`: norm of current gradient;
-  - `solver.output.iter`: current iteration counter.
+  - `solver.output.iter`: current iteration counter;
   - `solver.output.objective`: current objective function value.
   - `solver.output.status`: current status of the algorithm. Should be `:unknown` unless the algorithm has found a stopping criteria. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
   - `solver.output.elapsed_time`: elapsed time in seconds.
