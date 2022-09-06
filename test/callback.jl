@@ -13,7 +13,7 @@ using ADNLPModels, JSOSolvers, LinearAlgebra, Logging #, Plots
     end
   end
   output = with_logger(NullLogger()) do
-    R2(nlp, callback=cb)
+    R2(nlp, callback = cb)
   end
   @test output.iter == 20
 end

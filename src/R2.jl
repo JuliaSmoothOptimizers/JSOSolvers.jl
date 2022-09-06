@@ -51,7 +51,7 @@ stats = solve!(solver, nlp)
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct R2Solver{T,V}
+mutable struct R2Solver{T, V}
   x::V
   gx::V
   cx::V
@@ -66,31 +66,27 @@ function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   return R2Solver{T, V}(x, gx, cx, output)
 end
 
-@doc (@doc R2Solver) function R2(
-  nlp::AbstractNLPModel{T,V};
-  kwargs...,
-) where {T, V}
+@doc (@doc R2Solver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
   solver = R2Solver(nlp)
   return solve!(solver, nlp; kwargs...)
 end
 
 function solve!(
-    solver::R2Solver{T, V},
-    nlp::AbstractNLPModel{T, V};
-    callback = (args...) -> nothing,
-    x0::V = nlp.meta.x0,
-    atol = eps(T)^(1/2),
-    rtol = eps(T)^(1/2),
-    η1 = eps(T)^(1/4),
-    η2 = T(0.95),
-    γ1 = T(1/2),
-    γ2 = 1/γ1,
-    σmin = zero(T),
-    max_time::Float64 = 3600.0,
-    max_eval::Int = -1,
-    verbose::Int = 0,
-  ) where {T, V}
-
+  solver::R2Solver{T, V},
+  nlp::AbstractNLPModel{T, V};
+  callback = (args...) -> nothing,
+  x0::V = nlp.meta.x0,
+  atol = eps(T)^(1 / 2),
+  rtol = eps(T)^(1 / 2),
+  η1 = eps(T)^(1 / 4),
+  η2 = T(0.95),
+  γ1 = T(1 / 2),
+  γ2 = 1 / γ1,
+  σmin = zero(T),
+  max_time::Float64 = 3600.0,
+  max_eval::Int = -1,
+  verbose::Int = 0,
+) where {T, V}
   unconstrained(nlp) || error("R2 should only be called on unconstrained problems.")
 
   output = solver.output
@@ -128,24 +124,27 @@ function solve!(
     elapsed_time = output.elapsed_time,
     optimal = optimal,
     max_eval = max_eval,
-    max_time = max_time
+    max_time = max_time,
   )
 
   callback(nlp, solver)
 
-  done = (output.status == :first_order) || (output.status == :max_eval) || (output.status == :max_time) || (output.status == :user)
+  done =
+    (output.status == :first_order) ||
+    (output.status == :max_eval) ||
+    (output.status == :max_time) ||
+    (output.status == :user)
 
   while !done
-
     ck .= x .- (∇fk ./ σk)
-    ΔTk= norm_∇fk^2 / σk
+    ΔTk = norm_∇fk^2 / σk
     fck = obj(nlp, ck)
     if fck == -Inf
       output.status = :unbounded
       break
     end
 
-    ρk = (output.objective - fck) / ΔTk 
+    ρk = (output.objective - fck) / ΔTk
 
     # Update regularization parameters
     if ρk >= η2
@@ -177,12 +176,16 @@ function solve!(
       elapsed_time = output.elapsed_time,
       optimal = optimal,
       max_eval = max_eval,
-      max_time = max_time
+      max_time = max_time,
     )
 
     callback(nlp, solver)
 
-    done = (output.status == :first_order) || (output.status == :max_eval) || (output.status == :max_time) || (output.status == :user)
+    done =
+      (output.status == :first_order) ||
+      (output.status == :max_eval) ||
+      (output.status == :max_time) ||
+      (output.status == :user)
   end
 
   return output
