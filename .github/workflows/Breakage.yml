@@ -13,6 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         pkg: [
+          "JuliaSmoothOptimizers/FletcherPenaltySolver.jl",
           "JuliaSmoothOptimizers/Percival.jl"
         ]
         pkgversion: [latest, stable]
