@@ -22,6 +22,7 @@ For advanced usage, first define a `R2Solver` to preallocate the memory used in 
 - σmin = eps(T): step parameter for R2 algorithm
 - max_eval::Int: maximum number of evaluation of the objective function
 - max_time::Float64 = 3600.0: maximum time limit in seconds
+- β = T(0.0) is the constact for the Momentum algorithm, it needs to be ∈ [0,1], if 0, R2 does not use Momentum
 - verbose::Int = 0: if > 0, display iteration details every `verbose` iteration.
 
 # Output
@@ -98,6 +99,7 @@ function SolverCore.solve!(
   σmin = zero(T),
   max_time::Float64 = 3600.0,
   max_eval::Int = -1,
+  β::T = T(0.0),  
   verbose::Int = 0,
 ) where {T, V}
   unconstrained(nlp) || error("R2 should only be called on unconstrained problems.")
@@ -109,6 +111,8 @@ function SolverCore.solve!(
   x = solver.x .= x0
   ∇fk = solver.gx
   ck = solver.cx
+  # used for Momentum, start with zeros
+  d =  similar(∇fk) * 0  
 
   set_iter!(stats, 0)
   set_solution!(stats, x)
@@ -149,7 +153,8 @@ function SolverCore.solve!(
   done = stats.status != :unknown
 
   while !done
-    ck .= x .- (∇fk ./ σk)
+    d .= ∇fk .* (T(1) - β) + d .* β  
+    ck .= x .- (d ./ σk)
     ΔTk = norm_∇fk^2 / σk
     fck = obj(nlp, ck)
     if fck == -Inf
