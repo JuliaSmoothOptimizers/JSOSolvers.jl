@@ -112,7 +112,7 @@ function SolverCore.solve!(
   ∇fk = solver.gx
   ck = solver.cx
   # used for Momentum, start with zeros
-  d =  similar(∇fk) * 0  
+  d =  similar(nlp.meta.x0) * 0  
 
   set_iter!(stats, 0)
   set_solution!(stats, x)
