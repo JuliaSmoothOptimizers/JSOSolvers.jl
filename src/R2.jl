@@ -114,7 +114,7 @@ function solve!(
     @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
     @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" output.iter output.objective norm_∇fk σk
   end
-  if verbose > 0 && mod(iter, verbose) == 0
+  if verbose > 0 && mod(output.iter, verbose) == 0
     @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
     infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" output.iter output.objective norm_∇fk σk
   end
@@ -166,9 +166,9 @@ function solve!(
     output.dual_feas = norm_∇fk
     optimal = norm_∇fk ≤ ϵ
 
-    if verbose > 0 && mod(iter, verbose) == 0
+    if verbose > 0 && mod(output.iter, verbose) == 0
       @info infoline
-      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" iter fk norm_∇fk σk
+      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" output.iter output.objective norm_∇fk σk
     end
 
     output.status = get_status(
