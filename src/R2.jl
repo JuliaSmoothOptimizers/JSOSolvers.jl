@@ -80,7 +80,7 @@ function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   cx = similar(nlp.meta.x0)
   d = fill!(similar(nlp.meta.x0), 0)
   output = GenericExecutionStats(:unknown, nlp, solution = x)
-  return R2Solver{T, V}(x, gx, cx, output)
+  return R2Solver{T, V}(x, gx, cx, d, output)
 end
 
 @doc (@doc R2Solver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
@@ -157,8 +157,12 @@ function SolverCore.solve!(
   done = stats.status != :unknown
 
   while !done
-    d .= ∇fk .* (T(1) - β) .+ d .* β 
-    ck .= x .- (d ./ σk)
+    if β == 0
+      ck .= x .- (∇fk ./ σk)
+    else
+      d .= ∇fk .* (T(1) - β) .+ d .* β
+      ck .= x .- (d ./ σk)
+    end
     ΔTk = norm_∇fk^2 / σk
     fck = obj(nlp, ck)
     if fck == -Inf
