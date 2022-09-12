@@ -39,10 +39,10 @@ if Sys.isunix()
         al_output = @allocated GenericExecutionStats(nlp)
         al = 0
         with_logger(NullLogger()) do
-          solve!(solver, nlp)
+          SolverCore.solve!(solver, nlp)
           reset!(solver.H)
           reset!(nlp)
-          al = @wrappedallocs solve!(solver, nlp)
+          al = @wrappedallocs SolverCore.solve!(solver, nlp)
         end
         @test al - al_output == 0
       end
