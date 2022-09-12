@@ -71,7 +71,7 @@ end
   return solve!(solver, nlp; kwargs...)
 end
 
-function solve!(
+function SolverCore.solve!(
   solver::R2Solver{T, V},
   nlp::AbstractNLPModel{T, V};
   callback = (args...) -> nothing,

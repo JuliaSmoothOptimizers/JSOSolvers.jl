@@ -6,7 +6,7 @@ using LinearAlgebra, Logging, Printf
 # JSO packages
 using Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
 
-import Krylov.solve!
+import SolverCore.solve!
 export solve!
 
 """

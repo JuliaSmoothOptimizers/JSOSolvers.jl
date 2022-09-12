@@ -87,7 +87,7 @@ end
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
-function solve!(
+function SolverCore.solve!(
   solver::LBFGSSolver{T, V},
   nlp::AbstractNLPModel{T, V};
   x::V = nlp.meta.x0,
