@@ -124,12 +124,12 @@ function SolverCore.solve!(
   set_status!(
     stats,
     get_status(
-    nlp,
-    elapsed_time = stats.elapsed_time,
-    optimal = optimal,
-    max_eval = max_eval,
-    max_time = max_time,
-  )
+      nlp,
+      elapsed_time = stats.elapsed_time,
+      optimal = optimal,
+      max_eval = max_eval,
+      max_time = max_time,
+    ),
   )
 
   callback(nlp, solver)
@@ -180,12 +180,12 @@ function SolverCore.solve!(
     set_status!(
       stats,
       get_status(
-      nlp,
-      elapsed_time = stats.elapsed_time,
-      optimal = optimal,
-      max_eval = max_eval,
-      max_time = max_time,
-    )
+        nlp,
+        elapsed_time = stats.elapsed_time,
+        optimal = optimal,
+        max_eval = max_eval,
+        max_time = max_time,
+      ),
     )
 
     callback(nlp, solver)
