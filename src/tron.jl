@@ -67,8 +67,7 @@ stats = solve!(solver, nlp)
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <:
-               AbstractOptSolver{T, V}
+mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <: AbstractOptimizationSolver
   x::V
   xc::V
   temp::V
@@ -111,7 +110,8 @@ end
 
 function SolverCore.solve!(
   solver::TronSolver{T, V},
-  nlp::AbstractNLPModel{T, V};
+  nlp::AbstractNLPModel{T, V},
+  stats::GenericExecutionStats{T, V};
   subsolver_logger::AbstractLogger = NullLogger(),
   x::V = nlp.meta.x0,
   μ₀::T = T(1e-2),
@@ -265,7 +265,6 @@ function SolverCore.solve!(
     status = :unbounded
   end
 
-  stats = GenericExecutionStats(nlp)
   set_status!(stats, status)
   set_solution!(stats, x)
   set_objective!(stats, fx)
