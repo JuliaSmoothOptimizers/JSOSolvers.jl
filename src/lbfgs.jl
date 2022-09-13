@@ -87,7 +87,7 @@ end
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
-function solve!(
+function SolverCore.solve!(
   solver::LBFGSSolver{T, V},
   nlp::AbstractNLPModel{T, V};
   x::V = nlp.meta.x0,
@@ -188,7 +188,8 @@ function solve!(
     end
   end
 
-  stats = GenericExecutionStats(status, nlp)
+  stats = GenericExecutionStats(nlp)
+  set_status!(stats, status)
   set_solution!(stats, x)
   set_objective!(stats, f)
   set_residuals!(stats, zero(T), ∇fNorm)

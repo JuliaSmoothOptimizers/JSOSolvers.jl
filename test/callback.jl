@@ -8,12 +8,12 @@ using ADNLPModels, JSOSolvers, LinearAlgebra, Logging #, Plots
     x = solver.x
     push!(X, x[1])
     push!(Y, x[2])
-    if solver.output.iter == 20
-      solver.output.status = :user
+    if solver.stats.iter == 20
+      solver.stats.status = :user
     end
   end
-  output = with_logger(NullLogger()) do
+  stats = with_logger(NullLogger()) do
     R2(nlp, callback = cb)
   end
-  @test output.iter == 20
+  @test stats.iter == 20
 end

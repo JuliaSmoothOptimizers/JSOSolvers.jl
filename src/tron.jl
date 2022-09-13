@@ -109,7 +109,7 @@ function LinearOperators.reset!(::TronSolver) end
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
-function solve!(
+function SolverCore.solve!(
   solver::TronSolver{T, V},
   nlp::AbstractNLPModel{T, V};
   subsolver_logger::AbstractLogger = NullLogger(),
@@ -265,7 +265,8 @@ function solve!(
     status = :unbounded
   end
 
-  stats = GenericExecutionStats(status, nlp)
+  stats = GenericExecutionStats(nlp)
+  set_status!(stats, status)
   set_solution!(stats, x)
   set_objective!(stats, fx)
   set_residuals!(stats, zero(T), πx)

@@ -55,15 +55,15 @@ mutable struct R2Solver{T, V}
   x::V
   gx::V
   cx::V
-  output::GenericExecutionStats{T, V}
+  stats::GenericExecutionStats{T, V}
 end
 
 function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   x = similar(nlp.meta.x0)
   gx = similar(nlp.meta.x0)
   cx = similar(nlp.meta.x0)
-  output = GenericExecutionStats(:unknown, nlp, solution = x)
-  return R2Solver{T, V}(x, gx, cx, output)
+  stats = GenericExecutionStats(nlp)
+  return R2Solver{T, V}(x, gx, cx, stats)
 end
 
 @doc (@doc R2Solver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
@@ -71,7 +71,7 @@ end
   return solve!(solver, nlp; kwargs...)
 end
 
-function solve!(
+function SolverCore.solve!(
   solver::R2Solver{T, V},
   nlp::AbstractNLPModel{T, V};
   callback = (args...) -> nothing,
@@ -89,20 +89,22 @@ function solve!(
 ) where {T, V}
   unconstrained(nlp) || error("R2 should only be called on unconstrained problems.")
 
-  output = solver.output
+  stats = solver.stats
+  reset!(stats)
   start_time = time()
-  output.elapsed_time = 0.0
+  set_time!(stats, 0.0)
 
   x = solver.x .= x0
   ∇fk = solver.gx
   ck = solver.cx
 
-  output.iter = 0
-  output.objective = obj(nlp, x)
+  set_iter!(stats, 0)
+  set_solution!(stats, x)
+  set_objective!(stats, obj(nlp, x))
 
   grad!(nlp, x, ∇fk)
   norm_∇fk = norm(∇fk)
-  output.dual_feas = norm_∇fk
+  set_residuals!(stats, zero(T), norm_∇fk)
 
   σk = 2^round(log2(norm_∇fk + 1))
 
@@ -112,39 +114,42 @@ function solve!(
   if optimal
     @info("Optimal point found at initial point")
     @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
-    @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" output.iter output.objective norm_∇fk σk
+    @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk σk
   end
   if verbose > 0 && mod(output.iter, verbose) == 0
     @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
-    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" output.iter output.objective norm_∇fk σk
+    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk σk
   end
 
-  output.status = get_status(
+  set_status!(
+    stats,
+    get_status(
     nlp,
-    elapsed_time = output.elapsed_time,
+    elapsed_time = stats.elapsed_time,
     optimal = optimal,
     max_eval = max_eval,
     max_time = max_time,
+  )
   )
 
   callback(nlp, solver)
 
   done =
-    (output.status == :first_order) ||
-    (output.status == :max_eval) ||
-    (output.status == :max_time) ||
-    (output.status == :user)
+    (stats.status == :first_order) ||
+    (stats.status == :max_eval) ||
+    (stats.status == :max_time) ||
+    (stats.status == :user)
 
   while !done
     ck .= x .- (∇fk ./ σk)
     ΔTk = norm_∇fk^2 / σk
     fck = obj(nlp, ck)
     if fck == -Inf
-      output.status = :unbounded
+      set_status!(stats, :unbounded)
       break
     end
 
-    ρk = (output.objective - fck) / ΔTk
+    ρk = (stats.objective - fck) / ΔTk
 
     # Update regularization parameters
     if ρk >= η2
@@ -156,14 +161,15 @@ function solve!(
     # Acceptance of the new candidate
     if ρk >= η1
       x .= ck
-      output.objective = fck
+      set_solution!(stats, x)
+      set_objective!(stats, fck)
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
     end
 
-    output.iter += 1
-    output.elapsed_time = time() - start_time
-    output.dual_feas = norm_∇fk
+    set_iter!(stats, stats.iter + 1)
+    set_time!(stats, time() - start_time)
+    set_residuals!(stats, zero(T), norm_∇fk)
     optimal = norm_∇fk ≤ ϵ
 
     if verbose > 0 && mod(output.iter, verbose) == 0
@@ -171,22 +177,25 @@ function solve!(
       infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" output.iter output.objective norm_∇fk σk
     end
 
-    output.status = get_status(
+    set_status!(
+      stats,
+      get_status(
       nlp,
-      elapsed_time = output.elapsed_time,
+      elapsed_time = stats.elapsed_time,
       optimal = optimal,
       max_eval = max_eval,
       max_time = max_time,
+    )
     )
 
     callback(nlp, solver)
 
     done =
-      (output.status == :first_order) ||
-      (output.status == :max_eval) ||
-      (output.status == :max_time) ||
-      (output.status == :user)
+      (stats.status == :first_order) ||
+      (stats.status == :max_eval) ||
+      (stats.status == :max_time) ||
+      (stats.status == :user)
   end
 
-  return output
+  return stats
 end

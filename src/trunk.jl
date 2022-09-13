@@ -113,7 +113,7 @@ function LinearOperators.reset!(::TrunkSolver) end
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
-function solve!(
+function SolverCore.solve!(
   solver::TrunkSolver{T, V},
   nlp::AbstractNLPModel{T, V};
   subsolver_logger::AbstractLogger = NullLogger(),
@@ -189,7 +189,7 @@ function solve!(
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
     cgtol = max(rtol, min(T(0.1), √∇fNorm2, T(0.9) * cgtol))
-    solve!(
+    Krylov.solve!(
       subsolver,
       H,
       ∇f,
@@ -354,7 +354,8 @@ function solve!(
     end
   end
 
-  stats = GenericExecutionStats(status, nlp)
+  stats = GenericExecutionStats(nlp)
+  set_status!(stats, status)
   set_solution!(stats, x)
   set_objective!(stats, f)
   set_residuals!(stats, zero(T), ∇fNorm2)

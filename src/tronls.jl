@@ -229,7 +229,8 @@ function tron(
     status = :unbounded
   end
 
-  stats = GenericExecutionStats(status, nlp)
+  stats = GenericExecutionStats(nlp)
+  set_status!(stats, status)
   set_solution!(stats, x)
   set_objective!(stats, fx)
   set_residuals!(stats, zero(T), πx)
