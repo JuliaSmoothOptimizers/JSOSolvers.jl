@@ -69,7 +69,7 @@ mutable struct TrunkSolver{
   V <: AbstractVector{T},
   Sub <: KrylovSolver{T, T, V},
   Op <: AbstractLinearOperator{T},
-} <: AbstractOptSolver{T, V}
+} <: AbstractOptimizationSolver
   x::V
   xt::V
   gx::V
@@ -115,7 +115,8 @@ end
 
 function SolverCore.solve!(
   solver::TrunkSolver{T, V},
-  nlp::AbstractNLPModel{T, V};
+  nlp::AbstractNLPModel{T, V},
+  stats::GenericExecutionStats{T, V};
   subsolver_logger::AbstractLogger = NullLogger(),
   x::V = nlp.meta.x0,
   atol::T = √eps(T),
@@ -354,7 +355,6 @@ function SolverCore.solve!(
     end
   end
 
-  stats = GenericExecutionStats(nlp)
   set_status!(stats, status)
   set_solution!(stats, x)
   set_objective!(stats, f)

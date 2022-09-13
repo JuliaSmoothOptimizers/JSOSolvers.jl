@@ -50,7 +50,7 @@ stats = solve!(solver, nlp)
 ```
 """
 mutable struct LBFGSSolver{T, V, Op <: AbstractLinearOperator{T}, M <: AbstractNLPModel{T, V}} <:
-               AbstractOptSolver{T, V}
+               AbstractOptimizationSolver
   x::V
   xt::V
   gx::V
@@ -89,7 +89,8 @@ end
 
 function SolverCore.solve!(
   solver::LBFGSSolver{T, V},
-  nlp::AbstractNLPModel{T, V};
+  nlp::AbstractNLPModel{T, V},
+  stats::GenericExecutionStats{T, V};
   x::V = nlp.meta.x0,
   atol::T = √eps(T),
   rtol::T = √eps(T),
@@ -188,7 +189,6 @@ function SolverCore.solve!(
     end
   end
 
-  stats = GenericExecutionStats(nlp)
   set_status!(stats, status)
   set_solution!(stats, x)
   set_objective!(stats, f)

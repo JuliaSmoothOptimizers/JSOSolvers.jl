@@ -51,7 +51,7 @@ stats = solve!(solver, nlp)
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct R2Solver{T, V}
+mutable struct R2Solver{T, V} <: AbstractOptimizationSolver
   x::V
   gx::V
   cx::V
@@ -73,7 +73,8 @@ end
 
 function SolverCore.solve!(
   solver::R2Solver{T, V},
-  nlp::AbstractNLPModel{T, V};
+  nlp::AbstractNLPModel{T, V},
+  stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
   x0::V = nlp.meta.x0,
   atol = eps(T)^(1 / 2),
