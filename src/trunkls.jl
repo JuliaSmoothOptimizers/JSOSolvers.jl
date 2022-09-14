@@ -55,6 +55,8 @@ stats = trunk(nls)
 
 ```jldoctest; output = false
 using JSOSolvers, ADNLPModels
+F(x) = [x[1] - 1.0; 10 * (x[2] - x[1]^2)]
+x0 = [-1.2; 1.0]
 nls = ADNLSModel(F, x0, 2)
 solver = TrunkSolverNLS(nls)
 stats = solve!(solver, nls)
