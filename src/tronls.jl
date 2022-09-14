@@ -66,6 +66,17 @@ stats = tron(nls)
 # output
 "Execution stats: first-order stationary"
 ```
+
+```jldoctest; output = false
+using JSOSolvers, ADNLPModels
+F(x) = [x[1] - 1.0; 10 * (x[2] - x[1]^2)]
+x0 = [-1.2; 1.0]
+nls = ADNLSModel(F, x0, 2, zeros(2), 0.5 * ones(2))
+solver = TronSolverNLS(nls)
+stats = solve!(solver, nls)
+# output
+"Execution stats: first-order stationary"
+```
 """
 mutable struct TronSolverNLS{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <: AbstractOptimizationSolver
   x::V
