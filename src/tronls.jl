@@ -1,3 +1,5 @@
+export TronSolverNLS
+
 const tronls_allowed_subsolvers = [:cgls, :crls, :lsqr, :lsmr]
 
 tron(nls::AbstractNLSModel; variant = :GaussNewton, kwargs...) = tron(Val(variant), nls; kwargs...)
@@ -65,23 +67,70 @@ stats = tron(nls)
 "Execution stats: first-order stationary"
 ```
 """
-function tron(
+mutable struct TronSolverNLS{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <: AbstractOptimizationSolver
+  x::V
+  xc::V
+  gx::V
+  gt::V
+  gpx::V
+  Hs::V
+  H::Op
+  tr::TrustRegion{T, V}
+  Fc::V
+  Av::V
+  Atv::V
+end 
+
+function TronSolverNLS(nlp::AbstractNLSModel{T, V};) where {T, V <: AbstractVector{T}}
+  nvar = nlp.meta.nvar
+  nequ = nlp.nls_meta.nequ
+  x = V(undef, nvar)
+  xc = V(undef, nvar)
+  gx = V(undef, nvar)
+  gt = V(undef, nvar)
+  gpx = V(undef, nvar)
+  Hs = V(undef, nvar)
+  H = hess_op!(nlp, x, Hs)
+  Op = typeof(H)
+  tr = TrustRegion(gt, one(T))
+
+  Fc = V(undef, nequ)
+  Av = V(undef, nequ)
+  Atv = V(undef, nvar)
+  
+  return TronSolverNLS{T, V, Op}(x, xc, gx, gt, gpx, Hs, H, tr, Fc, Av, Atv)
+end
+
+function LinearOperators.reset!(::TronSolverNLS) end
+
+@doc (@doc TronSolverNLS) function tron(
   ::Val{:GaussNewton},
   nlp::AbstractNLSModel;
+  x::V = nlp.meta.x0,
+  kwargs...,
+) where {V}
+  solver = TronSolverNLS(nlp)
+  return solve!(solver, nlp; x = x, kwargs...)
+end
+
+function SolverCore.solve!(
+  solver::TronSolverNLS{T, V},
+  nlp::AbstractNLSModel{T, V},
+  stats::GenericExecutionStats{T, V};
   subsolver_logger::AbstractLogger = NullLogger(),
-  x::AbstractVector = copy(nlp.meta.x0),
+  x::V = nlp.meta.x0,
   subsolver::Symbol = :lsmr,
-  μ₀::Real = eltype(x)(1e-2),
-  μ₁::Real = one(eltype(x)),
-  σ::Real = eltype(x)(10),
+  μ₀::Real = T(1e-2),
+  μ₁::Real = one(T),
+  σ::Real = T(10),
   max_eval::Int = -1,
   max_time::Real = 30.0,
   max_cgiter::Int = 50,
-  cgtol::Real = eltype(x)(0.1),
-  atol::Real = √eps(eltype(x)),
-  rtol::Real = √eps(eltype(x)),
+  cgtol::T = T(0.1),
+  atol::T = √eps(T),
+  rtol::T = √eps(T),
   verbose::Int = 0,
-)
+) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("tron only works for minimization problem")
   end
@@ -89,7 +138,7 @@ function tron(
     error("tron should only be called for unconstrained or bound-constrained problems")
   end
 
-  T = eltype(x)
+  reset!(stats)
   ℓ = T.(nlp.meta.lvar)
   u = T.(nlp.meta.uvar)
   n = nlp.meta.nvar
@@ -99,12 +148,16 @@ function tron(
   start_time = time()
   el_time = 0.0
 
+  solver.x .= x
+  x = solver.x
+  gx = solver.gx
+
   # Preallocation
-  Av = zeros(T, m)
-  Atv = zeros(T, n)
-  gpx = zeros(T, n)
-  xc = zeros(T, n)
-  Hs = zeros(T, n)
+  Av = solver.Av
+  Atv = solver.Atv
+  gpx = solver.gpx
+  xc = solver.xc
+  Hs = solver.Hs
 
   F(x) = residual(nlp, x)
   A(x) = jac_op_residual!(nlp, x, Av, Atv)
@@ -113,10 +166,10 @@ function tron(
   Fx = F(x)
   fx = dot(Fx, Fx) / 2
   Ax = A(x)
-  gx = copy(Ax' * Fx)
-  gt = zeros(T, n)
+  mul!(gx, Ax', Fx)
+  gt = solver.gt
 
-  Fc = zeros(T, m)
+  Fc = solver.Fc
   num_success_iters = 0
 
   # Optimality measure
@@ -229,7 +282,6 @@ function tron(
     status = :unbounded
   end
 
-  stats = GenericExecutionStats(nlp)
   set_status!(stats, status)
   set_solution!(stats, x)
   set_objective!(stats, fx)
