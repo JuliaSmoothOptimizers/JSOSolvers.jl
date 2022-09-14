@@ -5,7 +5,7 @@ export R2, R2Solver
 
 A first-order quadratic regularization method for unconstrained optimization.
 
-For advanced usage, first define a `R2Solver` to preallocate the memory used in the algorithm, and then call `solve!`.
+For advanced usage, first define a `R2Solver` to preallocate the memory used in the algorithm, and then call `solve!`:
 
     solver = R2Solver(nlp)
     solve!(solver, nlp; kwargs...)
@@ -16,7 +16,7 @@ For advanced usage, first define a `R2Solver` to preallocate the memory used in 
 # Keyword arguments 
 - x0::V = nlp.meta.x0`: the initial guess
 - atol = eps(T)^(1 / 3): absolute tolerance
-- rtol = eps(T)^(1 / 3): relative tolerance: algorithm stop when ||∇f(x)|| ≤ ϵ\\_abs + ϵ\\_rel*||∇f(x0)||
+- rtol = eps(T)^(1 / 3): relative tolerance: algorithm stops when ||∇f(x)|| ≤ ϵ\\_abs + ϵ\\_rel*||∇f(x0)||
 - η1 = eps(T)^(1/4), η2 = T(0.95): step acceptance parameters
 - γ1 = T(1/2), γ2 = 1/γ1: regularization update parameters
 - σmin = eps(T): step parameter for R2 algorithm
@@ -40,7 +40,7 @@ Notably, you can access, and modify, the following:
 - `stats.dual_feas`: norm of current gradient;
 - `stats.iter`: current iteration counter;
 - `stats.objective`: current objective function value;
-- `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm has found a stopping criteria. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
+- `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm has attained a stopping criterion. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
 - `stats.elapsed_time`: elapsed time in seconds.
 
 # Examples
