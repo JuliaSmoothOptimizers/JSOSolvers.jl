@@ -4,12 +4,12 @@ using ADNLPModels, JSOSolvers, LinearAlgebra, Logging #, Plots
   nlp = ADNLPModel(f, [-1.2; 1.0])
   X = [nlp.meta.x0[1]]
   Y = [nlp.meta.x0[2]]
-  function cb(nlp, solver)
+  function cb(nlp, solver, stats)
     x = solver.x
     push!(X, x[1])
     push!(Y, x[2])
-    if solver.stats.iter == 20
-      solver.stats.status = :user
+    if stats.iter == 20
+      stats.status = :user
     end
   end
   stats = with_logger(NullLogger()) do
