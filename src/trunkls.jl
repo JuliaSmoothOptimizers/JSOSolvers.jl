@@ -1,3 +1,5 @@
+export TrunkSolverNLS
+
 const trunkls_allowed_subsolvers = [:cgls, :crls, :lsqr, :lsmr]
 
 trunk(nlp::AbstractNLSModel; variant = :GaussNewton, kwargs...) =
@@ -50,14 +52,72 @@ stats = trunk(nls)
 # output
 "Execution stats: first-order stationary"
 ```
+
+```jldoctest; output = false
+using JSOSolvers, ADNLPModels
+nls = ADNLSModel(F, x0, 2)
+solver = TrunkSolverNLS(nls)
+stats = solve!(solver, nls)
+
+# output
+
+"Execution stats: first-order stationary"
+```
 """
-function trunk(
+mutable struct TrunkSolverNLS{
+  T,
+  V <: AbstractVector{T},
+} <: AbstractOptimizationSolver
+  x::V
+  xt::V
+  temp::V
+  gx::V
+  gt::V
+  tr::TrustRegion{T, V}
+  Fx::V
+  Av::V
+  Atv::V
+end
+
+function TrunkSolverNLS(
+  nlp::AbstractNLPModel{T, V}
+) where {T, V <: AbstractVector{T}}
+  nvar = nlp.meta.nvar
+  nequ = nlp.nls_meta.nequ
+  x = V(undef, nvar)
+  xt = V(undef, nvar)
+  temp = V(undef, nvar)
+  gx = V(undef, nvar)
+  gt = V(undef, nvar)
+  tr = TrustRegion(gt, one(T))
+
+  Fx = V(undef, nequ)
+  Av = V(undef, nequ)
+  Atv = V(undef, nvar)
+  return TrunkSolverNLS{T, V}(x, xt, temp, gx, gt, tr, Fx, Av, Atv)
+end
+
+function LinearOperators.reset!(::TrunkSolverNLS) end
+
+@doc (@doc TrunkSolverNLS) function trunk(
   ::Val{:GaussNewton},
   nlp::AbstractNLSModel;
-  x::AbstractVector = copy(nlp.meta.x0),
+  x::V = nlp.meta.x0,
+  subsolver_type::Type{<:KrylovSolver} = CgSolver,
+  kwargs...,
+) where {V}
+  solver = TrunkSolverNLS(nlp)
+  return solve!(solver, nlp; x = x, kwargs...)
+end
+
+function SolverCore.solve!(
+  solver::TrunkSolverNLS{T, V},
+  nlp::AbstractNLPModel{T, V},
+  stats::GenericExecutionStats{T, V};
+  x::V = nlp.meta.x0,
   subsolver::Symbol = :lsmr,
-  atol::Real = √eps(eltype(x)),
-  rtol::Real = √eps(eltype(x)),
+  atol::Real = √eps(T),
+  rtol::Real = √eps(T),
   max_eval::Int = -1,
   max_time::Float64 = 30.0,
   bk_max::Int = 10,
@@ -65,7 +125,7 @@ function trunk(
   nm_itmax::Int = 25,
   trsolver_args::Dict{Symbol, Any} = Dict{Symbol, Any}(),
   verbose::Int = 0,
-)
+) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("trunk only works for minimization problem")
   end
@@ -73,30 +133,35 @@ function trunk(
     error("trunk should only be called for unconstrained problems. Try tron instead")
   end
 
+  reset!(stats)
   start_time = time()
   elapsed_time = 0.0
+
+  solver.x .= x
+  x = solver.x
+  ∇f = solver.gx
 
   subsolver in trunkls_allowed_subsolvers ||
     error("subproblem solver must be one of $(trunkls_allowed_subsolvers)")
   trsolver = eval(subsolver)
   n = nlp.nls_meta.nvar
   m = nlp.nls_meta.nequ
-  T = eltype(x)
   cgtol = one(T)  # Must be ≤ 1.
 
   # Armijo linesearch parameter.
   β = eps(T)^T(1 / 4)
 
   iter = 0
-  r = residual(nlp, x)
+  r = solver.Fx
+  residual!(nlp, x, r)
   f = dot(r, r) / 2
 
   # preallocate storage for products with A and A'
-  Av = Vector{T}(undef, m)
-  Atv = Vector{T}(undef, n)
-  gt = zeros(T, n)
+  Av = solver.Av
+  Atv = solver.Atv
+  gt = solver.gt
   A = jac_op_residual!(nlp, x, Av, Atv)
-  ∇f = A' * r
+  mul!(∇f, A', r)
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
   tr = TrustRegion(gt, min(max(∇fNorm2 / 10, one(T)), T(100)))
@@ -111,8 +176,8 @@ function trunk(
   nm_iter = 0
 
   # Preallocate xt.
-  xt = Vector{T}(undef, n)
-  temp = Vector{T}(undef, n)
+  xt = solver.xt
+  temp = solver.temp
 
   optimal = ∇fNorm2 ≤ ϵ
   tired = neval_residual(nlp) > max_eval ≥ 0 || elapsed_time > max_time
@@ -295,7 +360,6 @@ function trunk(
     end
   end
 
-  stats = GenericExecutionStats(nlp)
   set_status!(stats, status)
   set_solution!(stats, x)
   set_objective!(stats, f)
