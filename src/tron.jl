@@ -134,6 +134,7 @@ function SolverCore.solve!(
     error("tron should only be called for unconstrained or bound-constrained problems")
   end
 
+  reset!(stats)
   ℓ = nlp.meta.lvar
   u = nlp.meta.uvar
   n = nlp.meta.nvar
