@@ -136,6 +136,7 @@ function SolverCore.solve!(
     error("trunk should only be called for unconstrained problems. Try tron instead")
   end
 
+  reset!(stats)
   start_time = time()
   elapsed_time = 0.0
 
