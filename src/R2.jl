@@ -55,15 +55,13 @@ mutable struct R2Solver{T, V} <: AbstractOptimizationSolver
   x::V
   gx::V
   cx::V
-  stats::GenericExecutionStats{T, V}
 end
 
 function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   x = similar(nlp.meta.x0)
   gx = similar(nlp.meta.x0)
   cx = similar(nlp.meta.x0)
-  stats = GenericExecutionStats(nlp)
-  return R2Solver{T, V}(x, gx, cx, stats)
+  return R2Solver{T, V}(x, gx, cx)
 end
 
 @doc (@doc R2Solver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
@@ -90,7 +88,6 @@ function SolverCore.solve!(
 ) where {T, V}
   unconstrained(nlp) || error("R2 should only be called on unconstrained problems.")
 
-  stats = solver.stats
   reset!(stats)
   start_time = time()
   set_time!(stats, 0.0)
@@ -133,7 +130,7 @@ function SolverCore.solve!(
   )
   )
 
-  callback(nlp, solver)
+  callback(nlp, solver, stats)
 
   done =
     (stats.status == :first_order) ||
@@ -189,7 +186,7 @@ function SolverCore.solve!(
     )
     )
 
-    callback(nlp, solver)
+    callback(nlp, solver, stats)
 
     done =
       (stats.status == :first_order) ||
