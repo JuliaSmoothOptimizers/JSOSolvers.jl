@@ -78,14 +78,12 @@ stats = solve!(solver, nls)
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct TronSolverNLS{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <: AbstractOptimizationSolver
+mutable struct TronSolverNLS{T, V <: AbstractVector{T}} <: AbstractOptimizationSolver
   x::V
   xc::V
   gx::V
   gt::V
   gpx::V
-  Hs::V
-  H::Op
   tr::TrustRegion{T, V}
   Fc::V
   Av::V
@@ -100,16 +98,13 @@ function TronSolverNLS(nlp::AbstractNLSModel{T, V};) where {T, V <: AbstractVect
   gx = V(undef, nvar)
   gt = V(undef, nvar)
   gpx = V(undef, nvar)
-  Hs = V(undef, nvar)
-  H = hess_op!(nlp, x, Hs)
-  Op = typeof(H)
   tr = TrustRegion(gt, one(T))
 
   Fc = V(undef, nequ)
   Av = V(undef, nequ)
   Atv = V(undef, nvar)
   
-  return TronSolverNLS{T, V, Op}(x, xc, gx, gt, gpx, Hs, H, tr, Fc, Av, Atv)
+  return TronSolverNLS{T, V}(x, xc, gx, gt, gpx, tr, Fc, Av, Atv)
 end
 
 function LinearOperators.reset!(::TronSolverNLS) end
@@ -168,7 +163,6 @@ function SolverCore.solve!(
   Atv = solver.Atv
   gpx = solver.gpx
   xc = solver.xc
-  Hs = solver.Hs
 
   F(x) = residual(nlp, x)
   A(x) = jac_op_residual!(nlp, x, Av, Atv)
