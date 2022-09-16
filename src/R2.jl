@@ -113,7 +113,6 @@ function SolverCore.solve!(
   x = solver.x .= x0
   ∇fk = solver.gx
   ck = solver.cx
-  # used for Momentum, start with zeros
   d = solver.d
 
   set_iter!(stats, 0)
