@@ -22,7 +22,7 @@ For advanced usage, first define a `R2Solver` to preallocate the memory used in 
 - σmin = eps(T): step parameter for R2 algorithm
 - max_eval::Int: maximum number of evaluation of the objective function
 - max_time::Float64 = 3600.0: maximum time limit in seconds
-- β = T(0) is the constant for the Momentum algorithm, it needs to be ∈ [0,1], if 0, R2 does not use Momentum
+- β = T(0) ∈ [0,1] is the constant in the momentum term. If `β == 0`, R2 does not use momentum
 - verbose::Int = 0: if > 0, display iteration details every `verbose` iteration.
 
 # Output
