@@ -101,11 +101,11 @@ function SolverCore.solve!(
   σmin = zero(T),
   max_time::Float64 = 3600.0,
   max_eval::Int = -1,
-  β::T = T(0),
+  β = T(0),
   verbose::Int = 0,
 ) where {T, V}
   unconstrained(nlp) || error("R2 should only be called on unconstrained problems.")
-
+  β = T(β)
   reset!(stats)
   start_time = time()
   set_time!(stats, 0.0)
