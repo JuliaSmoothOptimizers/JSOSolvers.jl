@@ -71,7 +71,6 @@ mutable struct R2Solver{T, V} <: AbstractOptimizationSolver
   gx::V
   cx::V
   d::V
-  output::GenericExecutionStats{T, V}
 end
 
 function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
@@ -79,8 +78,7 @@ function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   gx = similar(nlp.meta.x0)
   cx = similar(nlp.meta.x0)
   d = fill!(similar(nlp.meta.x0), 0)
-  output = GenericExecutionStats(:unknown, nlp, solution = x)
-  return R2Solver{T, V}(x, gx, cx, d, output)
+  return R2Solver{T, V}(x, gx, cx, d)
 end
 
 @doc (@doc R2Solver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
