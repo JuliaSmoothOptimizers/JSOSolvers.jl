@@ -8,12 +8,17 @@ using ADNLPModels, JSOSolvers, LinearAlgebra, Logging #, Plots
     x = solver.x
     push!(X, x[1])
     push!(Y, x[2])
-    if stats.iter == 20
+    if stats.iter == 15
       stats.status = :user
     end
   end
   stats = with_logger(NullLogger()) do
     R2(nlp, callback = cb)
   end
-  @test stats.iter == 20
+  @test stats.iter == 15
+
+  stats = with_logger(NullLogger()) do
+    lbfgs(nlp, callback = cb)
+  end
+  @test stats.iter == 15
 end
