@@ -279,7 +279,9 @@ function SolverCore.solve!(
       continue
     end
     tr.ratio = ared / pred
-    verbose > 0 && mod(stats.iter, verbose) == 0 && @info log_row([stats.iter, fx, πx, Δ, tr.ratio, cginfo])
+    verbose > 0 &&
+      mod(stats.iter, verbose) == 0 &&
+      @info log_row([stats.iter, fx, πx, Δ, tr.ratio, cginfo])
 
     s_norm = nrm2(n, s)
     if num_success_iters == 0
@@ -333,12 +335,12 @@ function SolverCore.solve!(
     callback(nlp, solver, stats)
 
     done =
-    (stats.status == :first_order) ||
-    (stats.status == :max_eval) ||
-    (stats.status == :max_time) ||
-    (stats.status == :user) ||
-    (stats.status == :small_step) ||
-    (stats.status == :neg_pred)
+      (stats.status == :first_order) ||
+      (stats.status == :max_eval) ||
+      (stats.status == :max_time) ||
+      (stats.status == :user) ||
+      (stats.status == :small_step) ||
+      (stats.status == :neg_pred)
   end
   verbose > 0 && @info log_row(Any[stats.iter, fx, πx, tr.radius])
 
