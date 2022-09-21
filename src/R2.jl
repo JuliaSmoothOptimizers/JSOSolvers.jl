@@ -22,6 +22,7 @@ For advanced usage, first define a `R2Solver` to preallocate the memory used in 
 - σmin = eps(T): step parameter for R2 algorithm
 - max_eval::Int: maximum number of evaluation of the objective function
 - max_time::Float64 = 3600.0: maximum time limit in seconds
+- β = T(0) ∈ [0,1] is the constant in the momentum term. If `β == 0`, R2 does not use momentum
 - verbose::Int = 0: if > 0, display iteration details every `verbose` iteration.
 
 # Output
@@ -69,13 +70,15 @@ mutable struct R2Solver{T, V} <: AbstractOptimizationSolver
   x::V
   gx::V
   cx::V
+  d::V   # used for momentum term
 end
 
 function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   x = similar(nlp.meta.x0)
   gx = similar(nlp.meta.x0)
   cx = similar(nlp.meta.x0)
-  return R2Solver{T, V}(x, gx, cx)
+  d = fill!(similar(nlp.meta.x0), 0)
+  return R2Solver{T, V}(x, gx, cx, d)
 end
 
 @doc (@doc R2Solver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
@@ -98,6 +101,7 @@ function SolverCore.solve!(
   σmin = zero(T),
   max_time::Float64 = 3600.0,
   max_eval::Int = -1,
+  β::T = T(0),
   verbose::Int = 0,
 ) where {T, V}
   unconstrained(nlp) || error("R2 should only be called on unconstrained problems.")
@@ -109,6 +113,7 @@ function SolverCore.solve!(
   x = solver.x .= x0
   ∇fk = solver.gx
   ck = solver.cx
+  d = solver.d
 
   set_iter!(stats, 0)
   set_solution!(stats, x)
@@ -149,7 +154,12 @@ function SolverCore.solve!(
   done = stats.status != :unknown
 
   while !done
-    ck .= x .- (∇fk ./ σk)
+    if β == 0
+      ck .= x .- (∇fk ./ σk)
+    else
+      d .= ∇fk .* (T(1) - β) .+ d .* β
+      ck .= x .- (d ./ σk)
+    end
     ΔTk = norm_∇fk^2 / σk
     fck = obj(nlp, ck)
     if fck == -Inf
