@@ -114,8 +114,8 @@ function cb(nlp, solver, stats)
   x = solver.x
   push!(X, x[1])
   push!(Y, x[2])
-  if solver.output.iter == 4
-    solver.output.status = :user
+  if stats.iter == 4
+    stats.status = :user
   end
 end
 stats = trunk(nlp, callback=cb)
