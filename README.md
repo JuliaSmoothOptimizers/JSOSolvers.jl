@@ -10,8 +10,54 @@
 [![Cirrus CI - Base Branch Build Status](https://img.shields.io/cirrus/github/JuliaSmoothOptimizers/JSOSolvers.jl?logo=Cirrus%20CI)](https://cirrus-ci.com/github/JuliaSmoothOptimizers/JSOSolvers.jl)
 
 This package provides optimization solvers curated by the JuliaSmoothOptimizers
-organization.
+organization for unconstrained optimization
+
+    min f(x)
+
+or bound-constrained optimization
+
+    min f(x)     s.t.  ℓ ≤ x ≤ u
+
+This package contains the implementation of four algorithms that are classical for unconstrained/bound-constrained nonlinear optimization:
+- `lbfgs`: An implementation of a limited memory BFGS line-search method for unconstrained minimization.
+- `R2`: A first-order quadratic regularization method for unconstrained optimization.
+- `tron`: A pure Julia implementation of TRON a trust-region solver for bound-constrained optimization described in
+
+    >  Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
+    >  Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
+    >  DOI: [10.1137/S1052623498345075](https://www.doi.org/10.1137/S1052623498345075)
+
+    The package also contains a variant for nonlinear least-squares.
+- `trunk`: A trust-region solver for unconstrained optimization using exact second derivatives. This implementation follows the description given in
+
+    >  A. R. Conn, N. I. M. Gould, and Ph. L. Toint,
+    >  Trust-Region Methods, volume 1 of MPS/SIAM Series on Optimization.
+    >  SIAM, Philadelphia, USA, 2000.
+    >  DOI: [10.1137/1.9780898719857](https://www.doi.org/10.1137/1.9780898719857)
+
+    The package also contains a variant for nonlinear least-squares.
+
+## Installation
+
+`pkg> add JSOSolvers`
+
+## Example
+
+```julia
+using JSOSolvers, ADNLPModels
+
+# Rosenbrock
+nlp = ADNLPModel(x -> 100 * (x[2] - x[1]^2)^2 + (x[1] - 1)^2, [-1.2; 1.0])
+stats = lbfgs(nlp) # or trunk, tron, R2
+```
 
 ## How to cite
 
 If you use JSOSolvers.jl in your work, please cite using the format given in [CITATION.bib](CITATION.bib).
+
+# Bug reports and discussions
+
+If you think you found a bug, feel free to open an [issue](https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/issues).
+Focused suggestions and requests can also be opened as issues. Before opening a pull request, start an issue or a discussion on the topic, please.
+
+If you want to ask a question not suited for a bug report, feel free to start a discussion [here](https://github.com/JuliaSmoothOptimizers/Organization/discussions). This forum is for general discussion about this repository and the [JuliaSmoothOptimizers](https://github.com/JuliaSmoothOptimizers), so questions about any of our packages are welcome.
