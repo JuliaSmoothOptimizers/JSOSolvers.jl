@@ -86,7 +86,7 @@ The following table provides the correspondance between the solvers and the solv
 
 It is also possible to pre-allocate the output structure `stats` and call `solve!(solver, nlp, stats)`.
 ```@example ex3
-using JSOSolvers, ADNLPModels
+using JSOSolvers, ADNLPModels, SolverCore
 nlp = ADNLPModel(x -> sum(x.^2), ones(3));
 solver = LBFGSSolver(nlp; mem = 5);
 stats = GenericExecutionStats(nlp)
