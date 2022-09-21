@@ -28,7 +28,7 @@ The keyword arguments may include
 The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
 
 # Callback
-The callback is called after each iteration.
+The callback is called at each iteration.
 The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
 Changing any of the input arguments will affect the subsequent iterations.
 In particular, setting `stats.status = :user` will stop the algorithm.
@@ -148,7 +148,6 @@ function SolverCore.solve!(
   ϵ = atol + rtol * ∇fNorm
 
   set_iter!(stats, 0)
-  set_solution!(stats, x)
   set_objective!(stats, f)
   set_dual_residual!(stats, ∇fNorm)
 
@@ -210,7 +209,6 @@ function SolverCore.solve!(
 
     ∇fNorm = nrm2(n, ∇f)
 
-    set_solution!(stats, x)
     set_objective!(stats, f)
     set_iter!(stats, stats.iter + 1)
     set_time!(stats, time() - start_time)
@@ -239,5 +237,6 @@ function SolverCore.solve!(
   end
   verbose > 0 && @info log_row(Any[stats.iter, f, ∇fNorm])
 
+  set_solution!(stats, x)
   stats
 end
