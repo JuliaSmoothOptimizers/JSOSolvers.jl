@@ -26,4 +26,9 @@ using ADNLPModels, JSOSolvers, LinearAlgebra, Logging #, Plots
     trunk(nlp, callback = cb)
   end
   @test stats.iter == 8
+
+  stats = with_logger(NullLogger()) do
+    tron(nlp, callback = cb)
+  end
+  @test stats.iter == 8
 end
