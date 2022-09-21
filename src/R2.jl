@@ -20,7 +20,7 @@ For advanced usage, first define a `R2Solver` to preallocate the memory used in 
 - `η1 = eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
 - `γ1 = T(1/2)`, `γ2 = 1/γ1`: regularization update parameters.
 - `σmin = eps(T)`: step parameter for R2 algorithm.
-- `max_eval::Int`: maximum number of evaluation of the objective function.
+- `max_eval::Int = -1`: maximum number of evaluation of the objective function.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `β = T(0) ∈ [0,1]` is the constant in the momentum term. If `β == 0`, R2 does not use momentum.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
