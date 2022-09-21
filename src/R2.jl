@@ -29,7 +29,7 @@ For advanced usage, first define a `R2Solver` to preallocate the memory used in 
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 
 # Callback
-The callback is called after each iteration.
+The callback is called at each iteration.
 The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
 Changing any of the input arguments will affect the subsequent iterations.
 In particular, setting `stats.status = :user` will stop the algorithm.
@@ -116,7 +116,6 @@ function SolverCore.solve!(
   d = solver.d
 
   set_iter!(stats, 0)
-  set_solution!(stats, x)
   set_objective!(stats, obj(nlp, x))
 
   grad!(nlp, x, ∇fk)
@@ -179,7 +178,6 @@ function SolverCore.solve!(
     # Acceptance of the new candidate
     if ρk >= η1
       x .= ck
-      set_solution!(stats, x)
       set_objective!(stats, fck)
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
@@ -211,5 +209,6 @@ function SolverCore.solve!(
     done = stats.status != :unknown
   end
 
+  set_solution!(stats, x)
   return stats
 end

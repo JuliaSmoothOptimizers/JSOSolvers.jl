@@ -16,7 +16,7 @@ The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
 - `mem::Int = 5`: memory parameter of the `lbfgs` algorithm.
 - `atol::T = √eps(T)`: absolute tolerance.
-- `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
+- `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `τ₁::T = T(0.9999)`: slope factor in the Wolfe condition when performing the line search.
@@ -26,6 +26,22 @@ The keyword arguments may include
 
 # Output
 The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
+
+# Callback
+The callback is called at each iteration.
+The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
+Changing any of the input arguments will affect the subsequent iterations.
+In particular, setting `stats.status = :user` will stop the algorithm.
+All relevant information should be available in `nlp` and `solver`.
+Notably, you can access, and modify, the following:
+- `solver.x`: current iterate;
+- `solver.gx`: current gradient;
+- `stats`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
+  - `stats.dual_feas`: norm of current gradient;
+  - `stats.iter`: current iteration counter;
+  - `stats.objective`: current objective function value;
+  - `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm has found a stopping criteria. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
+  - `stats.elapsed_time`: elapsed time in seconds.
 
 # Examples
 ```jldoctest
@@ -91,6 +107,7 @@ function SolverCore.solve!(
   solver::LBFGSSolver{T, V},
   nlp::AbstractNLPModel{T, V},
   stats::GenericExecutionStats{T, V};
+  callback = (args...) -> nothing,
   x::V = nlp.meta.x0,
   atol::T = √eps(T),
   rtol::T = √eps(T),
@@ -110,7 +127,7 @@ function SolverCore.solve!(
 
   reset!(stats)
   start_time = time()
-  elapsed_time = 0.0
+  set_time!(stats, 0.0)
 
   n = nlp.meta.nvar
 
@@ -129,7 +146,10 @@ function SolverCore.solve!(
 
   ∇fNorm = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm
-  iter = 0
+
+  set_iter!(stats, 0)
+  set_objective!(stats, f)
+  set_dual_residual!(stats, ∇fNorm)
 
   verbose > 0 && @info log_header(
     [:iter, :f, :dual, :slope, :bk],
@@ -138,17 +158,33 @@ function SolverCore.solve!(
   )
 
   optimal = ∇fNorm ≤ ϵ
-  tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
-  stalled = false
-  status = :unknown
 
-  while !(optimal || tired || stalled)
+  set_status!(
+    stats,
+    get_status(
+      nlp,
+      elapsed_time = stats.elapsed_time,
+      optimal = optimal,
+      max_eval = max_eval,
+      max_time = max_time,
+    ),
+  )
+
+  callback(nlp, solver, stats)
+
+  done =
+    (stats.status == :first_order) ||
+    (stats.status == :max_eval) ||
+    (stats.status == :max_time) ||
+    (stats.status == :user) ||
+    (stats.status == :not_desc)
+
+  while !done
     mul!(d, H, ∇f, -one(T), zero(T))
     slope = dot(n, d, ∇f)
     if slope ≥ 0
       @error "not a descent direction" slope
-      status = :not_desc
-      stalled = true
+      set_status!(stats, :not_desc)
       continue
     end
 
@@ -156,7 +192,7 @@ function SolverCore.solve!(
     t, good_grad, ft, nbk, nbW =
       armijo_wolfe(h, f, slope, ∇ft, τ₁ = τ₁, bk_max = bk_max, verbose = Bool(verbose_subsolver))
 
-    verbose > 0 && mod(iter, verbose) == 0 && @info log_row(Any[iter, f, ∇fNorm, slope, nbk])
+    verbose > 0 && mod(stats.iter, verbose) == 0 && @info log_row(Any[stats.iter, f, ∇fNorm, slope, nbk])
 
     copyaxpy!(n, t, d, x, xt)
     good_grad || grad!(nlp, xt, ∇ft)
@@ -172,29 +208,35 @@ function SolverCore.solve!(
     ∇f .= ∇ft
 
     ∇fNorm = nrm2(n, ∇f)
-    iter = iter + 1
 
+    set_objective!(stats, f)
+    set_iter!(stats, stats.iter + 1)
+    set_time!(stats, time() - start_time)
+    set_dual_residual!(stats, ∇fNorm)
     optimal = ∇fNorm ≤ ϵ
-    elapsed_time = time() - start_time
-    tired = neval_obj(nlp) > max_eval ≥ 0 || elapsed_time > max_time
-  end
-  verbose > 0 && @info log_row(Any[iter, f, ∇fNorm])
 
-  if optimal
-    status = :first_order
-  elseif tired
-    if neval_obj(nlp) > max_eval ≥ 0
-      status = :max_eval
-    elseif elapsed_time > max_time
-      status = :max_time
-    end
-  end
+    set_status!(
+      stats,
+      get_status(
+        nlp,
+        elapsed_time = stats.elapsed_time,
+        optimal = optimal,
+        max_eval = max_eval,
+        max_time = max_time,
+      ),
+    )
 
-  set_status!(stats, status)
+    callback(nlp, solver, stats)
+
+    done =
+      (stats.status == :first_order) ||
+      (stats.status == :max_eval) ||
+      (stats.status == :max_time) ||
+      (stats.status == :user) ||
+      (stats.status == :not_desc)
+  end
+  verbose > 0 && @info log_row(Any[stats.iter, f, ∇fNorm])
+
   set_solution!(stats, x)
-  set_objective!(stats, f)
-  set_residuals!(stats, zero(T), ∇fNorm)
-  set_iter!(stats, iter)
-  set_time!(stats, elapsed_time)
   stats
 end
