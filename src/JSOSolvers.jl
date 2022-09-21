@@ -31,9 +31,18 @@ function get_status(
   end
 end
 
-function get_status(nls::AbstractNLSModel; elapsed_time = 0.0, optimal = false, max_eval = Inf, max_time = Inf)
+function get_status(
+  nls::AbstractNLSModel;
+  elapsed_time = 0.0,
+  optimal = false,
+  unbounded = false,
+  max_eval = Inf,
+  max_time = Inf,
+)
   if optimal
     :first_order
+  elseif unbounded
+    :unbounded
   elseif neval_residual(nls) > max_eval ≥ 0
     :max_eval
   elseif elapsed_time > max_time
