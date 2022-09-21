@@ -46,4 +46,9 @@ end
     trunk(nls, callback = cb)
   end
   @test stats.iter == 8
+
+  stats = with_logger(NullLogger()) do
+    tron(nls, callback = cb)
+  end
+  @test stats.iter == 8
 end

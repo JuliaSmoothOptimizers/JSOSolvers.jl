@@ -29,6 +29,10 @@ nonlinear least-squares problems:
 
     min ½‖F(x)‖²    s.t.    ℓ ≦ x ≦ u
 
+For advanced usage, first define a `TronSolverNLS` to preallocate the memory used in the algorithm, and then call `solve!`:
+    solver = TronSolverNLS(nls)
+    solve!(solver, nls; kwargs...)
+
 # Arguments
 - `nls::AbstractNLSModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
@@ -43,11 +47,27 @@ The keyword arguments may include
 - `max_cgiter::Int = 50`: subproblem iteration limit.
 - `cgtol::T = T(0.1)`: subproblem tolerance.
 - `atol::T = √eps(T)`: absolute tolerance.
-- `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
+- `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
+
+# Callback
+The callback is called at each iteration.
+The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
+Changing any of the input arguments will affect the subsequent iterations.
+In particular, setting `stats.status = :user` will stop the algorithm.
+All relevant information should be available in `nlp` and `solver`.
+Notably, you can access, and modify, the following:
+- `solver.x`: current iterate;
+- `solver.gx`: current gradient;
+- `stats`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
+  - `stats.dual_feas`: norm of current gradient;
+  - `stats.iter`: current iteration counter;
+  - `stats.objective`: current objective function value;
+  - `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm attained a stopping criterion. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
+  - `stats.elapsed_time`: elapsed time in seconds.
 
 # References
 This is an adaptation for bound-constrained nonlinear least-squares problems of the TRON method described in
@@ -123,6 +143,7 @@ function SolverCore.solve!(
   solver::TronSolverNLS{T, V},
   nlp::AbstractNLSModel{T, V},
   stats::GenericExecutionStats{T, V};
+  callback = (args...) -> nothing,
   subsolver_logger::AbstractLogger = NullLogger(),
   x::V = nlp.meta.x0,
   subsolver::Symbol = :lsmr,
@@ -152,7 +173,7 @@ function SolverCore.solve!(
 
   iter = 0
   start_time = time()
-  el_time = 0.0
+  set_time!(stats, 0.0)
 
   solver.x .= x
   x = solver.x
@@ -183,10 +204,11 @@ function SolverCore.solve!(
   ϵ = atol + rtol * πx
   fmin = min(-one(T), fx) / eps(eltype(x))
   optimal = πx <= ϵ
-  tired = el_time > max_time || neval_obj(nlp) > max_eval ≥ 0
   unbounded = fx < fmin
-  stalled = false
-  status = :unknown
+
+  set_iter!(stats, 0)
+  set_objective!(stats, fx)
+  set_dual_residual!(stats, πx)
 
   αC = one(T)
   tr = TRONTrustRegion(gt, min(max(one(T), πx / 10), 100))
@@ -195,7 +217,30 @@ function SolverCore.solve!(
     [Int, T, T, T, T, String],
     hdr_override = Dict(:f => "f(x)", :dual => "π", :radius => "Δ"),
   )
-  while !(optimal || tired || stalled || unbounded)
+
+  set_status!(
+    stats,
+    get_status(
+      nlp,
+      elapsed_time = stats.elapsed_time,
+      optimal = optimal,
+      unbounded = unbounded,
+      max_eval = max_eval,
+      max_time = max_time,
+    ),
+  )
+
+  callback(nlp, solver, stats)
+
+  done =
+    (stats.status == :first_order) ||
+    (stats.status == :max_eval) ||
+    (stats.status == :max_time) ||
+    (stats.status == :user) ||
+    (stats.status == :small_step) ||
+    (stats.status == :neg_pred)
+
+  while !done
     # Current iteration
     xc .= x
     fc = fx
@@ -207,7 +252,6 @@ function SolverCore.solve!(
     if cauchy_status != :success
       @error "Cauchy step returned: $cauchy_status"
       status = cauchy_status
-      stalled = true
       continue
     end
     s, As, cgits, cginfo = with_logger(subsolver_logger) do
@@ -232,11 +276,10 @@ function SolverCore.solve!(
     ared, pred = aredpred!(tr, nlp, fc, fx, qs, x, s, slope)
     if pred ≥ 0
       status = :neg_pred
-      stalled = true
       continue
     end
     tr.ratio = ared / pred
-    verbose > 0 && mod(iter, verbose) == 0 && @info log_row([iter, fx, πx, Δ, tr.ratio, cginfo])
+    verbose > 0 && mod(stats.iter, verbose) == 0 && @info log_row([stats.iter, fx, πx, Δ, tr.ratio, cginfo])
 
     s_norm = nrm2(n, s)
     if num_success_iters == 0
@@ -267,32 +310,39 @@ function SolverCore.solve!(
       x .= xc
     end
 
-    iter += 1
-    el_time = time() - start_time
-    tired = el_time > max_time || neval_obj(nlp) > max_eval ≥ 0
+    set_iter!(stats, stats.iter + 1)
+    set_objective!(stats, fx)
+    set_time!(stats, time() - start_time)
+    set_dual_residual!(stats, πx)
+
     optimal = πx <= ϵ
     unbounded = fx < fmin
-  end
-  verbose > 0 && @info log_row(Any[iter, fx, πx, tr.radius])
 
-  if tired
-    if el_time > max_time
-      status = :max_time
-    elseif neval_obj(nlp) > max_eval ≥ 0
-      status = :max_eval
-    end
-  elseif optimal
-    status = :first_order
-  elseif unbounded
-    status = :unbounded
-  end
+    set_status!(
+      stats,
+      get_status(
+        nlp,
+        elapsed_time = stats.elapsed_time,
+        optimal = optimal,
+        unbounded = unbounded,
+        max_eval = max_eval,
+        max_time = max_time,
+      ),
+    )
 
-  set_status!(stats, status)
+    callback(nlp, solver, stats)
+
+    done =
+    (stats.status == :first_order) ||
+    (stats.status == :max_eval) ||
+    (stats.status == :max_time) ||
+    (stats.status == :user) ||
+    (stats.status == :small_step) ||
+    (stats.status == :neg_pred)
+  end
+  verbose > 0 && @info log_row(Any[stats.iter, fx, πx, tr.radius])
+
   set_solution!(stats, x)
-  set_objective!(stats, fx)
-  set_residuals!(stats, zero(T), πx)
-  set_iter!(stats, iter)
-  set_time!(stats, el_time)
   stats
 end
 
@@ -403,7 +453,6 @@ function cauchy_ls(
       end
       # TODO: Correctly assess why this fails
       if α < sqrt(nextfloat(zero(α)))
-        stalled = true
         search = false
         status = :small_step
       end
