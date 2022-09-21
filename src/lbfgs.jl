@@ -192,7 +192,9 @@ function SolverCore.solve!(
     t, good_grad, ft, nbk, nbW =
       armijo_wolfe(h, f, slope, ∇ft, τ₁ = τ₁, bk_max = bk_max, verbose = Bool(verbose_subsolver))
 
-    verbose > 0 && mod(stats.iter, verbose) == 0 && @info log_row(Any[stats.iter, f, ∇fNorm, slope, nbk])
+    verbose > 0 &&
+      mod(stats.iter, verbose) == 0 &&
+      @info log_row(Any[stats.iter, f, ∇fNorm, slope, nbk])
 
     copyaxpy!(n, t, d, x, xt)
     good_grad || grad!(nlp, xt, ∇ft)
