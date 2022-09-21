@@ -14,16 +14,16 @@ For advanced usage, first define a `R2Solver` to preallocate the memory used in 
 - `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
 
 # Keyword arguments 
-- x0::V = nlp.meta.x0`: the initial guess
-- atol = eps(T)^(1 / 3): absolute tolerance
-- rtol = eps(T)^(1 / 3): relative tolerance: algorithm stops when ‖∇f(x)‖ ≤ ϵ\\_abs + ϵ\\_rel*‖∇f(x0)‖
-- η1 = eps(T)^(1/4), η2 = T(0.95): step acceptance parameters
-- γ1 = T(1/2), γ2 = 1/γ1: regularization update parameters
-- σmin = eps(T): step parameter for R2 algorithm
-- max_eval::Int: maximum number of evaluation of the objective function
-- max_time::Float64 = 3600.0: maximum time limit in seconds
-- β = T(0) ∈ [0,1] is the constant in the momentum term. If `β == 0`, R2 does not use momentum
-- verbose::Int = 0: if > 0, display iteration details every `verbose` iteration.
+- `x::V = nlp.meta.x0`: the initial guess.
+- `atol::T = √eps(T)`: absolute tolerance.
+- `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
+- `η1 = eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
+- `γ1 = T(1/2)`, `γ2 = 1/γ1`: regularization update parameters.
+- `σmin = eps(T)`: step parameter for R2 algorithm.
+- `max_eval::Int = -1`: maximum number of evaluation of the objective function.
+- `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `β = T(0) ∈ [0,1]` is the constant in the momentum term. If `β == 0`, R2 does not use momentum.
+- `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -91,15 +91,15 @@ function SolverCore.solve!(
   nlp::AbstractNLPModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
-  x0::V = nlp.meta.x0,
-  atol = eps(T)^(1 / 2),
-  rtol = eps(T)^(1 / 2),
+  x::V = nlp.meta.x0,
+  atol::T = √eps(T),
+  rtol::T = √eps(T),
   η1 = eps(T)^(1 / 4),
   η2 = T(0.95),
   γ1 = T(1 / 2),
   γ2 = 1 / γ1,
   σmin = zero(T),
-  max_time::Float64 = 3600.0,
+  max_time::Float64 = 30.0,
   max_eval::Int = -1,
   β::T = T(0),
   verbose::Int = 0,
@@ -110,7 +110,7 @@ function SolverCore.solve!(
   start_time = time()
   set_time!(stats, 0.0)
 
-  x = solver.x .= x0
+  x = solver.x .= x
   ∇fk = solver.gx
   ck = solver.cx
   d = solver.d
