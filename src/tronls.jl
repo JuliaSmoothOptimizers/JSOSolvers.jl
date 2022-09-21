@@ -88,7 +88,7 @@ mutable struct TronSolverNLS{T, V <: AbstractVector{T}} <: AbstractOptimizationS
   Fc::V
   Av::V
   Atv::V
-end 
+end
 
 function TronSolverNLS(nlp::AbstractNLSModel{T, V};) where {T, V <: AbstractVector{T}}
   nvar = nlp.meta.nvar
@@ -103,7 +103,7 @@ function TronSolverNLS(nlp::AbstractNLSModel{T, V};) where {T, V <: AbstractVect
   Fc = V(undef, nequ)
   Av = V(undef, nequ)
   Atv = V(undef, nvar)
-  
+
   return TronSolverNLS{T, V}(x, xc, gx, gt, gpx, tr, Fc, Av, Atv)
 end
 

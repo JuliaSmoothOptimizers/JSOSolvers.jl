@@ -66,10 +66,7 @@ stats = solve!(solver, nls)
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct TrunkSolverNLS{
-  T,
-  V <: AbstractVector{T},
-} <: AbstractOptimizationSolver
+mutable struct TrunkSolverNLS{T, V <: AbstractVector{T}} <: AbstractOptimizationSolver
   x::V
   xt::V
   temp::V
@@ -81,9 +78,7 @@ mutable struct TrunkSolverNLS{
   Atv::V
 end
 
-function TrunkSolverNLS(
-  nlp::AbstractNLPModel{T, V}
-) where {T, V <: AbstractVector{T}}
+function TrunkSolverNLS(nlp::AbstractNLPModel{T, V}) where {T, V <: AbstractVector{T}}
   nvar = nlp.meta.nvar
   nequ = nlp.nls_meta.nequ
   x = V(undef, nvar)
