@@ -14,9 +14,9 @@ For advanced usage, first define a `R2Solver` to preallocate the memory used in 
 - `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
 
 # Keyword arguments 
-- x0::V = nlp.meta.x0`: the initial guess
+- x::V = nlp.meta.x0`: the initial guess
 - atol = eps(T)^(1 / 3): absolute tolerance
-- rtol = eps(T)^(1 / 3): relative tolerance: algorithm stops when ‖∇f(x)‖ ≤ ϵ\\_abs + ϵ\\_rel*‖∇f(x0)‖
+- rtol = eps(T)^(1 / 3): relative tolerance: algorithm stops when ‖∇f(x)‖ ≤ ϵ\\_abs + ϵ\\_rel*‖∇f(x⁰)‖
 - η1 = eps(T)^(1/4), η2 = T(0.95): step acceptance parameters
 - γ1 = T(1/2), γ2 = 1/γ1: regularization update parameters
 - σmin = eps(T): step parameter for R2 algorithm
@@ -91,9 +91,9 @@ function SolverCore.solve!(
   nlp::AbstractNLPModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
-  x0::V = nlp.meta.x0,
-  atol = eps(T)^(1 / 2),
-  rtol = eps(T)^(1 / 2),
+  x::V = nlp.meta.x0,
+  atol = √eps(T),
+  rtol = √eps(T),
   η1 = eps(T)^(1 / 4),
   η2 = T(0.95),
   γ1 = T(1 / 2),
@@ -110,7 +110,7 @@ function SolverCore.solve!(
   start_time = time()
   set_time!(stats, 0.0)
 
-  x = solver.x .= x0
+  x = solver.x .= x
   ∇fk = solver.gx
   ck = solver.cx
   d = solver.d
