@@ -42,24 +42,24 @@ The solvers `tron` and `trunk` both have a specialized implementation for input 
 
 The following example illustrate this specialization.
 
-```@example
+```@example ex1
 using JSOSolvers, ADNLPModels
 f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
 nlp = ADNLPModel(f, [-1.2; 1.0])
 trunk(nlp, verbose = 1)
 ```
 
-```@example
+```@example ex1
 nlp.counters
 ```
 
-```@example
+```@example ex1
 F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
 nls = ADNLSModel(F, [-1.2; 1.0], 2)
 trunk(nls, verbose = 1)
 ```
 
-```@example
+```@example ex1
 nls.counters
 ```
 
@@ -67,7 +67,7 @@ nls.counters
 
 For advanced usage, first define a `Solver` structure to preallocate the memory used in the algorithm, and then call `solve!`.
 
-```
+```@example  ex2
 using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> sum(x.^2), ones(3));
 solver = LBFGSSolver(nlp; mem = 5);
@@ -85,7 +85,7 @@ The following table provides the correspondance between the solvers and the solv
 | trunk (nls-variant) | TrunkSolverNLS   |
 
 It is also possible to pre-allocate the output structure `stats` and call `solve!(solver, nlp, stats)`.
-```
+```@example ex3
 using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> sum(x.^2), ones(3));
 solver = LBFGSSolver(nlp; mem = 5);
@@ -103,7 +103,7 @@ All relevant information should be available in `nlp` and `solver` see the docum
 
 Below you can see an example of execution of the solver `trunk` with a callback to plot the iterates and create an animation.
 
-```@example
+```@example ex4
 using ADNLPModels, JSOSolvers, LinearAlgebra, Logging, Plots
 f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
 nlp = ADNLPModel(f, [-1.2; 1.0])
@@ -121,7 +121,7 @@ end
 stats = trunk(nlp, callback=cb)
 ```
 
-```@example
+```@example ex4
 plot(leg=false)
 xg = range(-1.5, 1.5, length=50)
 yg = range(-1.5, 1.5, length=50)
