@@ -384,7 +384,7 @@ function SolverCore.solve!(
     set_dual_residual!(stats, ∇fNorm2)
 
     optimal = ∇fNorm2 ≤ ϵ
-    
+
     set_status!(
       stats,
       get_status(
