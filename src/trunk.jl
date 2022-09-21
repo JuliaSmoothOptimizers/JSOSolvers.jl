@@ -7,7 +7,7 @@ trunk(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = trunk(Val(variant),
 
 A trust-region solver for unconstrained optimization using exact second derivatives.
 
-For advanced usage, first define a `TrunkSolver` to preallocate the memory used in the algorithm, and then call `solve!`.
+For advanced usage, first define a `TrunkSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
 
     solver = TrunkSolver(nlp, subsolver_type::Type{<:KrylovSolver} = CgSolver)
     solve!(solver, nlp; kwargs...)
@@ -40,11 +40,11 @@ Notably, you can access, and modify, the following:
 - `solver.x`: current iterate;
 - `solver.gx`: current gradient;
 - `stats`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
-- `stats.dual_feas`: norm of current gradient;
-- `stats.iter`: current iteration counter;
-- `stats.objective`: current objective function value;
-- `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm has found a stopping criteria. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
-- `stats.elapsed_time`: elapsed time in seconds.
+  - `stats.dual_feas`: norm of current gradient;
+  - `stats.iter`: current iteration counter;
+  - `stats.objective`: current objective function value;
+  - `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm attained a stopping criterion. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
+  - `stats.elapsed_time`: elapsed time in seconds.
 
 # References
 This implementation follows the description given in
