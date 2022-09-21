@@ -31,6 +31,18 @@ function get_status(
   end
 end
 
+function get_status(nls::AbstractNLSModel; elapsed_time = 0.0, optimal = false, max_eval = Inf, max_time = Inf)
+  if optimal
+    :first_order
+  elseif neval_residual(nls) > max_eval ≥ 0
+    :max_eval
+  elseif elapsed_time > max_time
+    :max_time
+  else
+    :unknown
+  end
+end
+
 # Unconstrained solvers
 include("lbfgs.jl")
 include("trunk.jl")

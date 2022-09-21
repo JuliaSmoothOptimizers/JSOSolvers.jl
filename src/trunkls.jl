@@ -12,13 +12,18 @@ A pure Julia implementation of a trust-region solver for nonlinear least-squares
 
     min ½‖F(x)‖²
 
+For advanced usage, first define a `TrunkSolverNLS` to preallocate the memory used in the algorithm, and then call `solve!`:
+
+    solver = TrunkSolverNLS(nls)
+    solve!(solver, nls; kwargs...)
+
 # Arguments
 - `nls::AbstractNLSModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
 - `subsolver::Symbol = :lsmr`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.trunkls_allowed_subsolvers` for a list.
 - `atol::T = √eps(T)`: absolute tolerance.
-- `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ||∇f(xᵏ)|| ≤ atol + rtol * ||∇f(x⁰)||.
+- `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `bk_max::Int = 10`: algorithm parameter.
@@ -29,6 +34,22 @@ The keyword arguments may include
   
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
+
+# Callback
+The callback is called at each iteration.
+The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
+Changing any of the input arguments will affect the subsequent iterations.
+In particular, setting `stats.status = :user` will stop the algorithm.
+All relevant information should be available in `nlp` and `solver`.
+Notably, you can access, and modify, the following:
+- `solver.x`: current iterate;
+- `solver.gx`: current gradient;
+- `stats`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
+  - `stats.dual_feas`: norm of current gradient;
+  - `stats.iter`: current iteration counter;
+  - `stats.objective`: current objective function value;
+  - `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm attained a stopping criterion. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
+  - `stats.elapsed_time`: elapsed time in seconds.
 
 # References
 This implementation follows the description given in
@@ -111,6 +132,7 @@ function SolverCore.solve!(
   solver::TrunkSolverNLS{T, V},
   nlp::AbstractNLPModel{T, V},
   stats::GenericExecutionStats{T, V};
+  callback = (args...) -> nothing,
   x::V = nlp.meta.x0,
   subsolver::Symbol = :lsmr,
   atol::Real = √eps(T),
@@ -132,7 +154,7 @@ function SolverCore.solve!(
 
   reset!(stats)
   start_time = time()
-  elapsed_time = 0.0
+  set_time!(stats, 0.0)
 
   solver.x .= x
   x = solver.x
@@ -148,7 +170,6 @@ function SolverCore.solve!(
   # Armijo linesearch parameter.
   β = eps(T)^T(1 / 4)
 
-  iter = 0
   r = solver.Fx
   residual!(nlp, x, r)
   f = dot(r, r) / 2
@@ -177,9 +198,10 @@ function SolverCore.solve!(
   temp = solver.temp
 
   optimal = ∇fNorm2 ≤ ϵ
-  tired = neval_residual(nlp) > max_eval ≥ 0 || elapsed_time > max_time
-  stalled = false
-  status = :unknown
+
+  set_iter!(stats, 0)
+  set_objective!(stats, f)
+  set_dual_residual!(stats, ∇fNorm2)
 
   verbose > 0 && @info log_header(
     [:iter, :f, :dual, :radius, :step, :ratio, :inner, :bk, :cgstatus],
@@ -187,7 +209,28 @@ function SolverCore.solve!(
     hdr_override = Dict(:f => "f(x)", :dual => "‖∇f‖", :radius => "Δ"),
   )
 
-  while !(optimal || tired || stalled)
+  set_status!(
+    stats,
+    get_status(
+      nlp,
+      elapsed_time = stats.elapsed_time,
+      optimal = optimal,
+      max_eval = max_eval,
+      max_time = max_time,
+    ),
+  )
+
+  callback(nlp, solver, stats)
+
+  done =
+    (stats.status == :first_order) ||
+    (stats.status == :max_eval) ||
+    (stats.status == :max_time) ||
+    (stats.status == :user) ||
+    (stats.status == :not_desc) ||
+    (stats.status == :neg_pred)
+
+  while !done
     # Compute inexact solution to trust-region subproblem
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
@@ -219,7 +262,6 @@ function SolverCore.solve!(
     ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
     if pred ≥ 0
       status = :neg_pred
-      stalled = true
       continue
     end
     tr.ratio = ared / pred
@@ -228,7 +270,6 @@ function SolverCore.solve!(
       ared_hist, pred_hist = aredpred!(tr, nlp, fref, ft, σref + Δq, xt, s, slope)
       if pred_hist ≥ 0
         status = :neg_pred
-        stalled = true
         continue
       end
       ρ_hist = ared_hist / pred_hist
@@ -248,7 +289,6 @@ function SolverCore.solve!(
       if slope ≥ 0
         @error "not a descent direction" slope ∇fNorm2 sNorm
         status = :not_desc
-        stalled = true
         continue
       end
       α = one(T)
@@ -268,7 +308,6 @@ function SolverCore.solve!(
       ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
       if pred ≥ 0
         status = :neg_pred
-        stalled = true
         continue
       end
       tr.ratio = ared / pred
@@ -276,7 +315,6 @@ function SolverCore.solve!(
         ared_hist, pred_hist = aredpred!(tr, nlp, fref, ft, σref + Δq, xt, s, slope)
         if pred_hist ≥ 0
           status = :neg_pred
-          stalled = true
           continue
         end
         ρ_hist = ared_hist / pred_hist
@@ -285,9 +323,9 @@ function SolverCore.solve!(
     end
 
     verbose > 0 &&
-      mod(iter, verbose) == 0 &&
+      mod(stats.iter, verbose) == 0 &&
       @info log_row([
-        iter,
+        stats.iter,
         f,
         ∇fNorm2,
         tr.radius,
@@ -297,7 +335,7 @@ function SolverCore.solve!(
         bk,
         cg_stats.status,
       ])
-    iter = iter + 1
+    set_iter!(stats, stats.iter + 1)
 
     if acceptable(tr)
       # Update non-monotone mode parameters.
@@ -341,27 +379,35 @@ function SolverCore.solve!(
     # Move on.
     update!(tr, sNorm)
 
+    set_objective!(stats, f)
+    set_time!(stats, time() - start_time)
+    set_dual_residual!(stats, ∇fNorm2)
+
     optimal = ∇fNorm2 ≤ ϵ
-    elapsed_time = time() - start_time
-    tired = neval_residual(nlp) > max_eval ≥ 0 || elapsed_time > max_time
-  end
-  verbose > 0 && @info log_row(Any[iter, f, ∇fNorm2, tr.radius])
+    
+    set_status!(
+      stats,
+      get_status(
+        nlp,
+        elapsed_time = stats.elapsed_time,
+        optimal = optimal,
+        max_eval = max_eval,
+        max_time = max_time,
+      ),
+    )
 
-  if optimal
-    status = :first_order
-  elseif tired
-    if neval_residual(nlp) > max_eval ≥ 0
-      status = :max_eval
-    elseif elapsed_time > max_time
-      status = :max_time
-    end
-  end
+    callback(nlp, solver, stats)
 
-  set_status!(stats, status)
+    done =
+      (stats.status == :first_order) ||
+      (stats.status == :max_eval) ||
+      (stats.status == :max_time) ||
+      (stats.status == :user) ||
+      (stats.status == :not_desc) ||
+      (stats.status == :neg_pred)
+  end
+  verbose > 0 && @info log_row(Any[stats.iter, f, ∇fNorm2, tr.radius])
+
   set_solution!(stats, x)
-  set_objective!(stats, f)
-  set_residuals!(stats, zero(T), ∇fNorm2)
-  set_iter!(stats, iter)
-  set_time!(stats, elapsed_time)
   stats
 end
