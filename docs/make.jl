@@ -12,6 +12,7 @@ makedocs(
   sitename = "JSOSolvers.jl",
   pages = [
     "Home" => "index.md",
+    "Tutorial" => "tutorial.md",
     "Solvers" => "solvers.md",
     "Internal" => "internal.md",
     "Reference" => "reference.md",
