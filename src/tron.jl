@@ -9,9 +9,9 @@ tron(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = tron(Val(variant), n
     tron(nlp; kwargs...)
 
 A pure Julia implementation of a trust-region solver for bound-constrained optimization:
-    
+
         min f(x)    s.t.    ℓ ≦ x ≦ u
-    
+
 For advanced usage, first define a `TronSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
 
     solver = TronSolver(nlp)
@@ -107,7 +107,7 @@ function TronSolver(nlp::AbstractNLPModel{T, V};) where {T, V <: AbstractVector{
   gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
   gpx = V(undef, nvar)
   Hs = V(undef, nvar)
-  H = hess_op!(nlp, x, Hs)
+  H = hess_op!(nlp, xc, Hs)
   Op = typeof(H)
   tr = TrustRegion(gt, one(T))
   return TronSolver{T, V, Op}(x, xc, temp, gx, gt, gn, gpx, Hs, H, tr)
@@ -160,6 +160,7 @@ function SolverCore.solve!(
   start_time = time()
   set_time!(stats, 0.0)
 
+  H = solver.H
   solver.x .= x
   x = solver.x
   xc = solver.xc
@@ -223,10 +224,9 @@ function SolverCore.solve!(
 
   while !done
     # Current iteration
-    xc .= x
+    xc .= x # This implictly changes H = hess_op!(nlp, xc, Hs)
     fc = fx
     Δ = tr.radius
-    H = hess_op!(nlp, xc, temp)
 
     αC, s, cauchy_status = cauchy(x, H, gx, Δ, αC, ℓ, u, μ₀ = μ₀, μ₁ = μ₁, σ = σ)
 
