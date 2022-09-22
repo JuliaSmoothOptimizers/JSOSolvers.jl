@@ -14,21 +14,21 @@ organization for unconstrained optimization
 
     min f(x)
 
-or bound-constrained optimization
+and bound-constrained optimization
 
     min f(x)     s.t.  ℓ ≤ x ≤ u
 
-This package contains the implementation of four algorithms that are classical for unconstrained/bound-constrained nonlinear optimization:
-- `lbfgs`: An implementation of a limited memory BFGS line-search method for unconstrained minimization.
-- `R2`: A first-order quadratic regularization method for unconstrained optimization.
-- `tron`: A pure Julia implementation of TRON a trust-region solver for bound-constrained optimization described in
+This package provides an implementation of four classic algorithms for unconstrained/bound-constrained nonlinear optimization:
+- `lbfgs`: an implementation of a limited-memory BFGS line-search method for unconstrained minimization;
+- `R2`: a first-order quadratic regularization method for unconstrained optimization;
+- `tron`: a pure Julia implementation of TRON, a trust-region solver for bound-constrained optimization described in
 
     >  Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
     >  Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
     >  DOI: [10.1137/S1052623498345075](https://www.doi.org/10.1137/S1052623498345075)
 
-    The package also contains a variant for nonlinear least-squares.
-- `trunk`: A trust-region solver for unconstrained optimization using exact second derivatives. This implementation follows the description given in
+    as well as a variant for nonlinear least-squares;
+- `trunk`: a trust-region solver for unconstrained optimization using exact second derivatives. Our implementation follows the description given in
 
     >  A. R. Conn, N. I. M. Gould, and Ph. L. Toint,
     >  Trust-Region Methods, volume 1 of MPS/SIAM Series on Optimization.
