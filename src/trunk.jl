@@ -228,6 +228,7 @@ function SolverCore.solve!(
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
     cgtol = max(rtol, min(T(0.1), √∇fNorm2, T(0.9) * cgtol))
+    ∇f .*= -1
     Krylov.solve!(
       subsolver,
       H,
@@ -242,9 +243,8 @@ function SolverCore.solve!(
 
     # Compute actual vs. predicted reduction.
     sNorm = nrm2(n, s)
-    @. s = -s
     copyaxpy!(n, one(T), s, x, xt)
-    slope = dot(n, s, ∇f)
+    slope = -dot(n, s, ∇f)
     mul!(Hs, H, s)
     curv = dot(n, s, Hs)
     Δq = slope + curv / 2
@@ -366,7 +366,7 @@ function SolverCore.solve!(
 
       if isa(nlp, QuasiNewtonModel)
         ∇fn .-= ∇f
-        @. ∇fn = -∇fn  # = ∇f(xₖ₊₁) - ∇f(xₖ)
+        ∇fn .*= -1  # = ∇f(xₖ₊₁) - ∇f(xₖ)
         push!(nlp, s, ∇fn)
         ∇fn .= ∇f
       end
