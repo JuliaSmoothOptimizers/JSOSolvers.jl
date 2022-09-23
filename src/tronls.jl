@@ -171,7 +171,6 @@ function SolverCore.solve!(
   n = nlp.meta.nvar
   m = nlp.nls_meta.nequ
 
-  iter = 0
   start_time = time()
   set_time!(stats, 0.0)
 

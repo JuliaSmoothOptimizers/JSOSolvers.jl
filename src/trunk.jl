@@ -174,7 +174,6 @@ function SolverCore.solve!(
   # Armijo linesearch parameter.
   β = eps(T)^T(1 / 4)
 
-  iter = 0
   f = obj(nlp, x)
   grad!(nlp, x, ∇f)
   ∇fNorm2 = nrm2(n, ∇f)
