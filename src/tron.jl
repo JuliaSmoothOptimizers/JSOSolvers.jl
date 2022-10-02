@@ -233,6 +233,7 @@ function SolverCore.solve!(
     if cauchy_status != :success
       @error "Cauchy step returned: $cauchy_status"
       status = cauchy_status
+      done = true
       continue
     end
     s, Hs, cgits, cginfo = with_logger(subsolver_logger) do
@@ -249,6 +250,7 @@ function SolverCore.solve!(
     ared, pred = aredpred!(tr, nlp, fc, fx, qs, x, s, slope)
     if pred ≥ 0
       status = :neg_pred
+      done = true
       continue
     end
     tr.ratio = ared / pred

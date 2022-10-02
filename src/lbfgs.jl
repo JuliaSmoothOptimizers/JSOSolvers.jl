@@ -185,6 +185,7 @@ function SolverCore.solve!(
     if slope ≥ 0
       @error "not a descent direction" slope
       set_status!(stats, :not_desc)
+      done = true
       continue
     end
 
