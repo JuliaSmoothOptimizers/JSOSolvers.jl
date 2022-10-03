@@ -252,6 +252,7 @@ function SolverCore.solve!(
     ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
     if pred ≥ 0
       status = :neg_pred
+      done = true
       continue
     end
     tr.ratio = ared / pred
@@ -260,6 +261,7 @@ function SolverCore.solve!(
       ared_hist, pred_hist = aredpred!(tr, nlp, fref, ft, σref + Δq, xt, s, slope)
       if pred_hist ≥ 0
         status = :neg_pred
+        done = true
         continue
       end
       ρ_hist = ared_hist / pred_hist
@@ -279,6 +281,7 @@ function SolverCore.solve!(
       if slope ≥ 0
         @error "not a descent direction: slope = $slope, ‖∇f‖ = $∇fNorm2"
         status = :not_desc
+        done = true
         continue
       end
       α = one(T)
@@ -295,6 +298,7 @@ function SolverCore.solve!(
       ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
       if pred ≥ 0
         status = :neg_pred
+        done = true
         continue
       end
       tr.ratio = ared / pred
@@ -302,6 +306,7 @@ function SolverCore.solve!(
         ared_hist, pred_hist = aredpred!(tr, nlp, fref, ft, σref + Δq, xt, s, slope)
         if pred_hist ≥ 0
           status = :neg_pred
+          done = true
           continue
         end
         ρ_hist = ared_hist / pred_hist
