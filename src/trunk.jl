@@ -116,7 +116,19 @@ function TrunkSolver(
   return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, gn, Hs, subsolver, H, tr)
 end
 
-function LinearOperators.reset!(::TrunkSolver) end
+function SolverCore.reset!(solver::TrunkSolver)
+  solver.tr.good_grad = false
+  solver.tr.radius = solver.tr.initial_radius
+  solver
+end
+
+function SolverCore.reset!(solver::TrunkSolver, nlp::AbstractNLPModel)
+  @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
+  solver.H = hess_op!(nlp, solver.x, solver.Hs)
+  solver.tr.good_grad = false
+  solver.tr.radius = solver.tr.initial_radius
+  solver
+end
 
 @doc (@doc TrunkSolver) function trunk(
   ::Val{:Newton},

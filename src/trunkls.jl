@@ -115,7 +115,12 @@ function TrunkSolverNLS(nlp::AbstractNLPModel{T, V}) where {T, V <: AbstractVect
   return TrunkSolverNLS{T, V}(x, xt, temp, gx, gt, tr, Fx, Av, Atv)
 end
 
-function LinearOperators.reset!(::TrunkSolverNLS) end
+function SolverCore.reset!(solver::TrunkSolverNLS)
+  solver.tr.good_grad = false
+  solver.tr.radius = solver.tr.initial_radius
+  solver
+end
+SolverCore.reset!(solver::TrunkSolverNLS, ::AbstractNLPModel) = reset!(solver)
 
 @doc (@doc TrunkSolverNLS) function trunk(
   ::Val{:GaussNewton},

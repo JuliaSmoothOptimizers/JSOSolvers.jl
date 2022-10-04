@@ -86,6 +86,12 @@ end
   return solve!(solver, nlp; kwargs...)
 end
 
+function SolverCore.reset!(solver::R2Solver{T}) where T
+  solver.d .= zero(T)
+  solver
+end
+SolverCore.reset!(solver::R2Solver, ::AbstractNLPModel) = reset!(solver)
+
 function SolverCore.solve!(
   solver::R2Solver{T, V},
   nlp::AbstractNLPModel{T, V},

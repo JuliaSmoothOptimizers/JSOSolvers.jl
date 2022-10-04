@@ -127,7 +127,12 @@ function TronSolverNLS(nlp::AbstractNLSModel{T, V};) where {T, V <: AbstractVect
   return TronSolverNLS{T, V}(x, xc, gx, gt, gpx, tr, Fc, Av, Atv)
 end
 
-function LinearOperators.reset!(::TronSolverNLS) end
+function SolverCore.reset!(solver::TronSolverNLS)
+  solver.tr.good_grad = false
+  solver.tr.radius = solver.tr.initial_radius
+  solver
+end
+SolverCore.reset!(solver::TronSolverNLS, ::AbstractNLPModel) = reset!(solver)
 
 @doc (@doc TronSolverNLS) function tron(
   ::Val{:GaussNewton},
