@@ -67,7 +67,7 @@ end
 end
 
 @testset "Test restart NLS with a different problem: $fun" for (fun, s) in (
-  (:tron, TronSolverNLS),
+  (:tron, :TronSolverNLS),
   (:trunk, :TrunkSolverNLS),
 )
   F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
