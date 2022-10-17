@@ -113,7 +113,19 @@ function TronSolver(nlp::AbstractNLPModel{T, V};) where {T, V <: AbstractVector{
   return TronSolver{T, V, Op}(x, xc, temp, gx, gt, gn, gpx, Hs, H, tr)
 end
 
-function LinearOperators.reset!(::TronSolver) end
+function SolverCore.reset!(solver::TronSolver)
+  solver.tr.good_grad = false
+  solver.tr.radius = solver.tr.initial_radius
+  solver
+end
+
+function SolverCore.reset!(solver::TronSolver, nlp::AbstractNLPModel)
+  @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
+  solver.H = hess_op!(nlp, solver.x, solver.Hs)
+  solver.tr.good_grad = false
+  solver.tr.radius = solver.tr.initial_radius
+  solver
+end
 
 @doc (@doc TronSolver) function tron(
   ::Val{:Newton},

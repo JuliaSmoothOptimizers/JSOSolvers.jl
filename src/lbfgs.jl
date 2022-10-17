@@ -89,8 +89,14 @@ function LBFGSSolver(nlp::M; mem::Int = 5) where {T, V, M <: AbstractNLPModel{T,
   return LBFGSSolver{T, V, Op, M}(x, xt, gx, gt, d, H, h)
 end
 
-function LinearOperators.reset!(solver::LBFGSSolver)
+function SolverCore.reset!(solver::LBFGSSolver)
   reset!(solver.H)
+end
+
+function SolverCore.reset!(solver::LBFGSSolver, nlp::AbstractNLPModel)
+  reset!(solver.H)
+  solver.h = LineModel(nlp, solver.x, solver.d)
+  solver
 end
 
 @doc (@doc LBFGSSolver) function lbfgs(
