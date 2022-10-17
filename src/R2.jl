@@ -86,7 +86,7 @@ end
   return solve!(solver, nlp; kwargs...)
 end
 
-function SolverCore.reset!(solver::R2Solver{T}) where T
+function SolverCore.reset!(solver::R2Solver{T}) where {T}
   solver.d .= zero(T)
   solver
 end
