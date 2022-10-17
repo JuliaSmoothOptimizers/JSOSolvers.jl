@@ -266,7 +266,7 @@ function SolverCore.solve!(
 
     ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
     if pred ≥ 0
-      status = :neg_pred
+      stats.status = :neg_pred
       done = true
       continue
     end
@@ -275,7 +275,7 @@ function SolverCore.solve!(
     if !monotone
       ared_hist, pred_hist = aredpred!(tr, nlp, fref, ft, σref + Δq, xt, s, slope)
       if pred_hist ≥ 0
-        status = :neg_pred
+        stats.status = :neg_pred
         done = true
         continue
       end
@@ -295,7 +295,7 @@ function SolverCore.solve!(
 
       if slope ≥ 0
         @error "not a descent direction" slope ∇fNorm2 sNorm
-        status = :not_desc
+        stats.status = :not_desc
         done = true
         continue
       end
@@ -315,7 +315,7 @@ function SolverCore.solve!(
       @debug "" slope Δq
       ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
       if pred ≥ 0
-        status = :neg_pred
+        stats.status = :neg_pred
         done = true
         continue
       end
@@ -323,7 +323,7 @@ function SolverCore.solve!(
       if !monotone
         ared_hist, pred_hist = aredpred!(tr, nlp, fref, ft, σref + Δq, xt, s, slope)
         if pred_hist ≥ 0
-          status = :neg_pred
+          stats.status = :neg_pred
           done = true
           continue
         end

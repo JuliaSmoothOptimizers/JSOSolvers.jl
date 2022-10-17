@@ -255,7 +255,7 @@ function SolverCore.solve!(
 
     if cauchy_status != :success
       @error "Cauchy step returned: $cauchy_status"
-      status = cauchy_status
+      stats.status = cauchy_status
       done = true
       continue
     end
@@ -280,7 +280,7 @@ function SolverCore.solve!(
 
     ared, pred = aredpred!(tr, nlp, fc, fx, qs, x, s, slope)
     if pred ≥ 0
-      status = :neg_pred
+      stats.status = :neg_pred
       done = true
       continue
     end
