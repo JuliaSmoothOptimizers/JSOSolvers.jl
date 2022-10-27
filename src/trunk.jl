@@ -188,6 +188,7 @@ function SolverCore.solve!(
 
   f = obj(nlp, x)
   grad!(nlp, x, ∇f)
+  ∇fn .= ∇f
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
   tr = solver.tr
