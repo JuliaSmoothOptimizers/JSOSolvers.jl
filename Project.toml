@@ -14,7 +14,7 @@ SolverCore = "ff4d7338-4cf1-434d-91df-b86cb86fb843"
 SolverTools = "b5612192-2639-5dc1-abfe-fbedd65fab29"
 
 [compat]
-Krylov = "0.8"
+Krylov = "0.8, 0.9"
 LinearOperators = "1.1, 2.0"
 NLPModels = "0.15, 0.16, 0.17, 0.18, 0.19"
 NLPModelsModifiers = "0.2, 0.3, 0.4, 0.5, 0.6"
