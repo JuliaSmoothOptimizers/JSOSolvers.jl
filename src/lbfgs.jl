@@ -147,8 +147,7 @@ function SolverCore.solve!(
   H = solver.H
   reset!(H)
 
-  f = obj(nlp, x)
-  grad!(nlp, x, ∇f)
+  f, ∇f = objgrad!(nlp, x, ∇f)
 
   ∇fNorm = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm
