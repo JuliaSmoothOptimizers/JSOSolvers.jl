@@ -94,10 +94,14 @@ mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperato
   gpx::V
   Hs::V
   H::Op
-  tr::TrustRegion{T, V}
+  tr::TRONTrustRegion{T, V}
 end
 
-function TronSolver(nlp::AbstractNLPModel{T, V};) where {T, V <: AbstractVector{T}}
+function TronSolver(
+  nlp::AbstractNLPModel{T, V};
+  max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
+  kwargs...,
+) where {T, V <: AbstractVector{T}}
   nvar = nlp.meta.nvar
   x = V(undef, nvar)
   xc = V(undef, nvar)
@@ -109,13 +113,12 @@ function TronSolver(nlp::AbstractNLPModel{T, V};) where {T, V <: AbstractVector{
   Hs = V(undef, nvar)
   H = hess_op!(nlp, x, Hs)
   Op = typeof(H)
-  tr = TrustRegion(gt, one(T))
+  tr = TRONTrustRegion(gt, min(one(T), max_radius - eps(T)); max_radius = max_radius, kwargs...)
   return TronSolver{T, V, Op}(x, xc, temp, gx, gt, gn, gpx, Hs, H, tr)
 end
 
 function SolverCore.reset!(solver::TronSolver)
   solver.tr.good_grad = false
-  solver.tr.radius = solver.tr.initial_radius
   solver
 end
 
@@ -123,17 +126,17 @@ function SolverCore.reset!(solver::TronSolver, nlp::AbstractNLPModel)
   @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
   solver.H = hess_op!(nlp, solver.x, solver.Hs)
   solver.tr.good_grad = false
-  solver.tr.radius = solver.tr.initial_radius
   solver
 end
 
 @doc (@doc TronSolver) function tron(
   ::Val{:Newton},
-  nlp::AbstractNLPModel;
+  nlp::AbstractNLPModel{T, V};
   x::V = nlp.meta.x0,
+  max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
   kwargs...,
-) where {V}
-  solver = TronSolver(nlp)
+) where {T, V}
+  solver = TronSolver(nlp; max_radius = max_radius)
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
@@ -155,7 +158,6 @@ function SolverCore.solve!(
   atol::T = √eps(T),
   rtol::T = √eps(T),
   verbose::Int = 0,
-  max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
 ) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("tron only works for minimization problem")
@@ -204,7 +206,8 @@ function SolverCore.solve!(
   end
 
   αC = one(T)
-  tr = TRONTrustRegion(gt, min(max(one(T), πx / 10), max_radius))
+  tr = solver.tr
+  tr.radius = tr.initial_radius = min(max(one(T), πx / 10), tr.max_radius)
   verbose > 0 && @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :cgstatus],
     [Int, T, T, T, T, String],

@@ -17,3 +17,16 @@ if VERSION ≥ v"1.6"
 end
 
 include("objgrad-on-tron.jl")
+
+@testset "Test max_radius in TRON" begin
+  max_radius = 0.00314
+  function cb(nlp, solver, stats)
+    @test solver.tr.radius ≤ max_radius
+  end
+
+  nlp = ADNLPModel(x -> 100 * (x[2] - x[1]^2)^2 + (x[1] - 1)^2, [-1.2; 1.0])
+  stats = tron(nlp, max_radius = max_radius, callback = cb)
+
+  nls = ADNLSModel(x -> [100 * (x[2] - x[1]^2); x[1] - 1], [-1.2; 1.0], 2)
+  stats = tron(nls, max_radius = max_radius, callback = cb)
+end
