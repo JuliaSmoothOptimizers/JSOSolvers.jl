@@ -14,7 +14,7 @@ A pure Julia implementation of a trust-region solver for bound-constrained optim
     
 For advanced usage, first define a `TronSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
 
-    solver = TronSolver(nlp)
+    solver = TronSolver(nlp; kwargs...)
     solve!(solver, nlp; kwargs...)
 
 # Arguments
@@ -33,7 +33,8 @@ The keyword arguments may include
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100))`: maximum trust-region radius in the first-step chosen smaller than SolverTools.TRONTrustRegion `max_radius`.
+
+The keyword arguments of `TronSolver` are passed to the [`TRONTrustRegion`](https://github.com/JuliaSmoothOptimizers/SolverTools.jl/blob/main/src/trust-region/tron-trust-region.jl) constructor.
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -133,11 +134,16 @@ end
   ::Val{:Newton},
   nlp::AbstractNLPModel{T, V};
   x::V = nlp.meta.x0,
-  max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
   kwargs...,
 ) where {T, V}
-  solver = TronSolver(nlp; max_radius = max_radius)
-  return solve!(solver, nlp; x = x, kwargs...)
+  dict = Dict(kwargs)
+  subsolver_keys = intersect(keys(dict), tron_keys)
+  subsolver_kwargs = Dict(k => dict[k] for k in subsolver_keys)
+  solver = TronSolver(nlp; subsolver_kwargs...)
+  for k in subsolver_keys
+    pop!(dict, k)
+  end
+  return solve!(solver, nlp; x = x, dict...)
 end
 
 function SolverCore.solve!(

@@ -60,6 +60,17 @@ include("R2.jl")
 # Unconstrained solvers for NLS
 include("trunkls.jl")
 
+# List of keywords accepted by TRONTrustRegion
+const tron_keys = (
+  :max_radius,
+  :acceptance_threshold,
+  :decrease_threshold,
+  :increase_threshold,
+  :large_decrease_factor,
+  :small_decrease_factor,
+  :increase_factor,
+)
+
 # Bound-constrained solvers
 include("tron.jl")
 
