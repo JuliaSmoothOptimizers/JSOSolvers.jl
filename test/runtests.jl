@@ -20,7 +20,7 @@ include("objgrad-on-tron.jl")
 
 @testset "Test max_radius in TRON" begin
   max_radius = 0.00314
-  increase_factor = 5.
+  increase_factor = 5.0
   function cb(nlp, solver, stats)
     @test solver.tr.radius ≤ max_radius
   end
