@@ -104,13 +104,17 @@ mutable struct TronSolverNLS{T, V <: AbstractVector{T}} <: AbstractOptimizationS
   gx::V
   gt::V
   gpx::V
-  tr::TrustRegion{T, V}
+  tr::TRONTrustRegion{T, V}
   Fc::V
   Av::V
   Atv::V
 end
 
-function TronSolverNLS(nlp::AbstractNLSModel{T, V};) where {T, V <: AbstractVector{T}}
+function TronSolverNLS(
+  nlp::AbstractNLSModel{T, V}; 
+  max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
+  kwargs...,
+) where {T, V <: AbstractVector{T}}
   nvar = nlp.meta.nvar
   nequ = nlp.nls_meta.nequ
   x = V(undef, nvar)
@@ -118,7 +122,7 @@ function TronSolverNLS(nlp::AbstractNLSModel{T, V};) where {T, V <: AbstractVect
   gx = V(undef, nvar)
   gt = V(undef, nvar)
   gpx = V(undef, nvar)
-  tr = TrustRegion(gt, one(T))
+  tr = TRONTrustRegion(gt, min(one(T), max_radius - eps(T)); max_radius = max_radius, kwargs...)
 
   Fc = V(undef, nequ)
   Av = V(undef, nequ)
@@ -129,18 +133,18 @@ end
 
 function SolverCore.reset!(solver::TronSolverNLS)
   solver.tr.good_grad = false
-  solver.tr.radius = solver.tr.initial_radius
   solver
 end
 SolverCore.reset!(solver::TronSolverNLS, ::AbstractNLPModel) = reset!(solver)
 
 @doc (@doc TronSolverNLS) function tron(
   ::Val{:GaussNewton},
-  nlp::AbstractNLSModel;
+  nlp::AbstractNLSModel{T, V};
   x::V = nlp.meta.x0,
+  max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
   kwargs...,
-) where {V}
-  solver = TronSolverNLS(nlp)
+) where {T, V}
+  solver = TronSolverNLS(nlp; max_radius = max_radius)
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
@@ -215,7 +219,8 @@ function SolverCore.solve!(
   set_dual_residual!(stats, πx)
 
   αC = one(T)
-  tr = TRONTrustRegion(gt, min(max(one(T), πx / 10), 100))
+  tr = solver.tr
+  tr.radius = tr.initial_radius = min(max(one(T), πx / 10), tr.max_radius)
   verbose > 0 && @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :cgstatus],
     [Int, T, T, T, T, String],
