@@ -30,11 +30,11 @@ end
 
 if Sys.isunix()
   @testset "Allocation tests" begin
-    @testset "LBFGS" begin
+    @testset "$solver" for solver in (:LBFGSSolver, :R2Solver)
       for model in NLPModelsTest.nlp_problems
         nlp = eval(Meta.parse(model))()
         if unconstrained(nlp)
-          solver = LBFGSSolver(nlp)
+          solver = eval(solver)(nlp)
           x = copy(nlp.meta.x0)
           stats = GenericExecutionStats(nlp)
           with_logger(NullLogger()) do
