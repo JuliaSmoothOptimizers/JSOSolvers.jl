@@ -31,20 +31,20 @@ end
 if Sys.isunix()
   @testset "Allocation tests" begin
     @testset "LBFGS" begin
-      for n in [2, 20, 200, 2000]
-        nlp = SimpleModel(n)
-        solver = LBFGSSolver(nlp)
-        x = copy(nlp.meta.x0)
-        GenericExecutionStats(nlp)
-        al_output = @allocated GenericExecutionStats(nlp)
-        al = 0
-        with_logger(NullLogger()) do
-          SolverCore.solve!(solver, nlp)
-          reset!(solver.H)
-          reset!(nlp)
-          al = @wrappedallocs SolverCore.solve!(solver, nlp)
+      for model in NLPModelsTest.nlp_problems
+        nlp = eval(Meta.parse(model))()
+        if unconstrained(nlp)
+          solver = LBFGSSolver(nlp)
+          x = copy(nlp.meta.x0)
+          stats = GenericExecutionStats(nlp)
+          with_logger(NullLogger()) do
+            SolverCore.solve!(solver, nlp, stats)
+            reset!(solver)
+            reset!(nlp)
+            al = @wrappedallocs SolverCore.solve!(solver, nlp, stats)
+            @test al == 0
+          end
         end
-        @test al - al_output == 0
       end
     end
   end
