@@ -75,6 +75,7 @@ stats = solve!(solver, nlp)
 ```
 
 The following table provides the correspondance between the solvers and the solvers structures:
+
 | Algorithm           | Solver structure |
 | ------------------- | ---------------- |
 | lbfgs               | LBFGSSolver      |
