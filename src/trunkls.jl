@@ -24,6 +24,8 @@ The keyword arguments may include
 - `subsolver::Symbol = :lsmr`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.trunkls_allowed_subsolvers` for a list.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
+- `Fatol::T = zero(T)`: absolute tolerance on the residual.
+- `Frtol::T = zero(T)`: relative tolerance on the residual, the algorithm stops when ‖F(xᵏ)‖ ≤ Fatol + Frtol * ‖F(x⁰)‖.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `bk_max::Int = 10`: algorithm parameter.
@@ -142,6 +144,8 @@ function SolverCore.solve!(
   subsolver::Symbol = :lsmr,
   atol::Real = √eps(T),
   rtol::Real = √eps(T),
+  Fatol::T = zero(T),
+  Frtol::T = zero(T),
   max_eval::Int = -1,
   max_time::Float64 = 30.0,
   bk_max::Int = 10,
@@ -189,6 +193,9 @@ function SolverCore.solve!(
   ϵ = atol + rtol * ∇fNorm2
   tr = TrustRegion(gt, min(max(∇fNorm2 / 10, one(T)), T(100)))
 
+  check_small_residual = (Fatol > 0) || (Frtol > 0)
+  ϵF = Fatol + Frtol * 2 * √f
+
   # Non-monotone mode parameters.
   # fmin: current best overall objective value
   # nm_iter: number of successful iterations since fmin was first attained
@@ -203,6 +210,7 @@ function SolverCore.solve!(
   temp = solver.temp
 
   optimal = ∇fNorm2 ≤ ϵ
+  small_residual = check_small_residual && (2 * √f ≤ ϵF)
 
   set_iter!(stats, 0)
   set_objective!(stats, f)
@@ -220,6 +228,7 @@ function SolverCore.solve!(
       nlp,
       elapsed_time = stats.elapsed_time,
       optimal = optimal,
+      small_residual = small_residual,
       max_eval = max_eval,
       max_time = max_time,
     ),
@@ -394,6 +403,7 @@ function SolverCore.solve!(
     set_dual_residual!(stats, ∇fNorm2)
 
     optimal = ∇fNorm2 ≤ ϵ
+    small_residual = check_small_residual && (2 * √f ≤ ϵF)
 
     set_status!(
       stats,
@@ -401,6 +411,7 @@ function SolverCore.solve!(
         nlp,
         elapsed_time = stats.elapsed_time,
         optimal = optimal,
+        small_residual = small_residual,
         max_eval = max_eval,
         max_time = max_time,
       ),

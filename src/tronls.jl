@@ -48,6 +48,8 @@ The keyword arguments may include
 - `cgtol::T = T(0.1)`: subproblem tolerance.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
+- `Fatol::T = zero(T)`: absolute tolerance on the residual.
+- `Frtol::T = zero(T)`: relative tolerance on the residual, the algorithm stops when ‖F(xᵏ)‖ ≤ Fatol + Frtol * ‖F(x⁰)‖.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 
 The keyword arguments of `TronSolverNLS` are passed to the [`TRONTrustRegion`](https://github.com/JuliaSmoothOptimizers/SolverTools.jl/blob/main/src/trust-region/tron-trust-region.jl) constructor.
@@ -172,6 +174,8 @@ function SolverCore.solve!(
   cgtol::T = T(0.1),
   atol::T = √eps(T),
   rtol::T = √eps(T),
+  Fatol::T = zero(T),
+  Frtol::T = zero(T),
   verbose::Int = 0,
 ) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
@@ -220,6 +224,9 @@ function SolverCore.solve!(
   fmin = min(-one(T), fx) / eps(eltype(x))
   optimal = πx <= ϵ
   unbounded = fx < fmin
+  check_small_residual = (Fatol > 0) || (Frtol > 0)
+  ϵF = Fatol + Frtol * 2 * √fx
+  small_residual = check_small_residual && (2 * √fx ≤ ϵF)
 
   set_iter!(stats, 0)
   set_objective!(stats, fx)
@@ -240,6 +247,7 @@ function SolverCore.solve!(
       nlp,
       elapsed_time = stats.elapsed_time,
       optimal = optimal,
+      small_residual = small_residual,
       unbounded = unbounded,
       max_eval = max_eval,
       max_time = max_time,
@@ -336,6 +344,7 @@ function SolverCore.solve!(
     set_dual_residual!(stats, πx)
 
     optimal = πx <= ϵ
+    small_residual = check_small_residual && (2 * √fx ≤ ϵF)
     unbounded = fx < fmin
 
     set_status!(
@@ -344,6 +353,7 @@ function SolverCore.solve!(
         nlp,
         elapsed_time = stats.elapsed_time,
         optimal = optimal,
+        small_residual = small_residual,
         unbounded = unbounded,
         max_eval = max_eval,
         max_time = max_time,
