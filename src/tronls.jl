@@ -48,8 +48,8 @@ The keyword arguments may include
 - `cgtol::T = T(0.1)`: subproblem tolerance.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
-- `Fatol::T = zero(T)`: absolute tolerance on the residual.
-- `Frtol::T = zero(T)`: relative tolerance on the residual, the algorithm stops when ‖F(xᵏ)‖ ≤ Fatol + Frtol * ‖F(x⁰)‖.
+- `Fatol::T = √eps(T)`: absolute tolerance on the residual.
+- `Frtol::T = eps(T)`: relative tolerance on the residual, the algorithm stops when ‖F(xᵏ)‖ ≤ Fatol + Frtol * ‖F(x⁰)‖.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 
 The keyword arguments of `TronSolverNLS` are passed to the [`TRONTrustRegion`](https://github.com/JuliaSmoothOptimizers/SolverTools.jl/blob/main/src/trust-region/tron-trust-region.jl) constructor.
@@ -174,8 +174,8 @@ function SolverCore.solve!(
   cgtol::T = T(0.1),
   atol::T = √eps(T),
   rtol::T = √eps(T),
-  Fatol::T = zero(T),
-  Frtol::T = zero(T),
+  Fatol::T = √eps(T),
+  Frtol::T = eps(T),
   verbose::Int = 0,
 ) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
@@ -224,9 +224,9 @@ function SolverCore.solve!(
   fmin = min(-one(T), fx) / eps(eltype(x))
   optimal = πx <= ϵ
   unbounded = fx < fmin
-  check_small_residual = (Fatol > 0) || (Frtol > 0)
   ϵF = Fatol + Frtol * 2 * √fx
-  small_residual = check_small_residual && (2 * √fx ≤ ϵF)
+  project!(gpx, x, ℓ, u)
+  small_residual = (norm(x - gpx) <= ϵ) && (2 * √fx <= ϵF)
 
   set_iter!(stats, 0)
   set_objective!(stats, fx)
@@ -256,13 +256,7 @@ function SolverCore.solve!(
 
   callback(nlp, solver, stats)
 
-  done =
-    (stats.status == :first_order) ||
-    (stats.status == :max_eval) ||
-    (stats.status == :max_time) ||
-    (stats.status == :user) ||
-    (stats.status == :small_step) ||
-    (stats.status == :neg_pred)
+  done = stats.status != :unknown
 
   while !done
     # Current iteration
@@ -344,7 +338,8 @@ function SolverCore.solve!(
     set_dual_residual!(stats, πx)
 
     optimal = πx <= ϵ
-    small_residual = check_small_residual && (2 * √fx ≤ ϵF)
+    project!(gpx, x, ℓ, u)
+    small_residual = (norm(x - gpx) <= ϵ) && (2 * √fx <= ϵF)
     unbounded = fx < fmin
 
     set_status!(
@@ -362,13 +357,7 @@ function SolverCore.solve!(
 
     callback(nlp, solver, stats)
 
-    done =
-      (stats.status == :first_order) ||
-      (stats.status == :max_eval) ||
-      (stats.status == :max_time) ||
-      (stats.status == :user) ||
-      (stats.status == :small_step) ||
-      (stats.status == :neg_pred)
+    done = stats.status != :unknown
   end
   verbose > 0 && @info log_row(Any[stats.iter, fx, πx, tr.radius])
 

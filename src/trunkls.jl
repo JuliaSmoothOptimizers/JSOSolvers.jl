@@ -24,8 +24,8 @@ The keyword arguments may include
 - `subsolver::Symbol = :lsmr`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.trunkls_allowed_subsolvers` for a list.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
-- `Fatol::T = zero(T)`: absolute tolerance on the residual.
-- `Frtol::T = zero(T)`: relative tolerance on the residual, the algorithm stops when ‖F(xᵏ)‖ ≤ Fatol + Frtol * ‖F(x⁰)‖.
+- `Fatol::T = √eps(T)`: absolute tolerance on the residual.
+- `Frtol::T = eps(T)`: relative tolerance on the residual, the algorithm stops when ‖F(xᵏ)‖ ≤ Fatol + Frtol * ‖F(x⁰)‖.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `bk_max::Int = 10`: algorithm parameter.
@@ -191,10 +191,8 @@ function SolverCore.solve!(
   mul!(∇f, A', r)
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
-  tr = TrustRegion(gt, min(max(∇fNorm2 / 10, one(T)), T(100)))
-
-  check_small_residual = (Fatol > 0) || (Frtol > 0)
   ϵF = Fatol + Frtol * 2 * √f
+  tr = TrustRegion(gt, min(max(∇fNorm2 / 10, one(T)), T(100)))
 
   # Non-monotone mode parameters.
   # fmin: current best overall objective value
@@ -210,7 +208,7 @@ function SolverCore.solve!(
   temp = solver.temp
 
   optimal = ∇fNorm2 ≤ ϵ
-  small_residual = check_small_residual && (2 * √f ≤ ϵF)
+  small_residual = 2 * √f ≤ ϵF
 
   set_iter!(stats, 0)
   set_objective!(stats, f)
@@ -236,13 +234,7 @@ function SolverCore.solve!(
 
   callback(nlp, solver, stats)
 
-  done =
-    (stats.status == :first_order) ||
-    (stats.status == :max_eval) ||
-    (stats.status == :max_time) ||
-    (stats.status == :user) ||
-    (stats.status == :not_desc) ||
-    (stats.status == :neg_pred)
+  done = stats.status != :unknown
 
   while !done
     # Compute inexact solution to trust-region subproblem
@@ -403,7 +395,7 @@ function SolverCore.solve!(
     set_dual_residual!(stats, ∇fNorm2)
 
     optimal = ∇fNorm2 ≤ ϵ
-    small_residual = check_small_residual && (2 * √f ≤ ϵF)
+    small_residual = 2 * √f ≤ ϵF
 
     set_status!(
       stats,
@@ -419,13 +411,7 @@ function SolverCore.solve!(
 
     callback(nlp, solver, stats)
 
-    done =
-      (stats.status == :first_order) ||
-      (stats.status == :max_eval) ||
-      (stats.status == :max_time) ||
-      (stats.status == :user) ||
-      (stats.status == :not_desc) ||
-      (stats.status == :neg_pred)
+    done = stats.status != :unknown
   end
   verbose > 0 && @info log_row(Any[stats.iter, f, ∇fNorm2, tr.radius])
 

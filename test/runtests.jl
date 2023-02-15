@@ -8,6 +8,15 @@ using NLPModelsTest
 # this package
 using JSOSolvers
 
+@testset "Test small residual checks $solver" for solver in (:TrunkSolverNLS, :TronSolverNLS)
+  nls = ADNLSModel(x -> [x[1] - 1; sin(x[2])], [-1.2; 1.0], 2)
+  stats = GenericExecutionStats(nls)
+  solver = eval(solver)(nls)
+  SolverCore.solve!(solver, nls, stats, atol = 0.0, rtol = 0.0, Fatol = 1e-6, Frtol = 0.0)
+  @test stats.status_reliable && stats.status == :small_residual
+  @test stats.objective_reliable && isapprox(stats.objective, 0, atol = 1e-6)
+end
+
 include("restart.jl")
 include("callback.jl")
 include("consistency.jl")
