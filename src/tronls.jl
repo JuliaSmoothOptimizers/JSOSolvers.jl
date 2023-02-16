@@ -225,8 +225,8 @@ function SolverCore.solve!(
   optimal = πx <= ϵ
   unbounded = fx < fmin
   ϵF = Fatol + Frtol * 2 * √fx
-  project!(gpx, x, ℓ, u)
-  small_residual = (norm(x - gpx) <= ϵ) && (2 * √fx <= ϵF)
+  project_step!(gpx, x, x, ℓ, u, zero(T)) # Proj(x) - x
+  small_residual = (norm(gpx) <= ϵ) && (2 * √fx <= ϵF)
 
   set_iter!(stats, 0)
   set_objective!(stats, fx)
@@ -338,8 +338,8 @@ function SolverCore.solve!(
     set_dual_residual!(stats, πx)
 
     optimal = πx <= ϵ
-    project!(gpx, x, ℓ, u)
-    small_residual = (norm(x - gpx) <= ϵ) && (2 * √fx <= ϵF)
+    project_step!(gpx, x, x, ℓ, u, zero(T)) # Proj(x) - x
+    small_residual = (norm(gpx) <= ϵ) && (2 * √fx <= ϵF)
     unbounded = fx < fmin
 
     set_status!(
