@@ -21,6 +21,7 @@ The keyword arguments may include
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `bk_max::Int = 10`: algorithm parameter.
 - `monotone::Bool = true`: algorithm parameter.
 - `nm_itmax::Int = 25`: algorithm parameter.
@@ -151,6 +152,7 @@ function SolverCore.solve!(
   atol::T = √eps(T),
   rtol::T = √eps(T),
   max_eval::Int = -1,
+  max_iter::Int = typemax(Int),
   max_time::Float64 = 30.0,
   bk_max::Int = 10,
   monotone::Bool = true,
@@ -221,19 +223,15 @@ function SolverCore.solve!(
       elapsed_time = stats.elapsed_time,
       optimal = optimal,
       max_eval = max_eval,
+      iter = stats.iter,
+      max_iter = max_iter,
       max_time = max_time,
     ),
   )
 
   callback(nlp, solver, stats)
 
-  done =
-    (stats.status == :first_order) ||
-    (stats.status == :max_eval) ||
-    (stats.status == :max_time) ||
-    (stats.status == :user) ||
-    (stats.status == :not_desc) ||
-    (stats.status == :neg_pred)
+  done = stats.status != :unknown
 
   while !done
     # Compute inexact solution to trust-region subproblem
@@ -401,19 +399,16 @@ function SolverCore.solve!(
         elapsed_time = stats.elapsed_time,
         optimal = optimal,
         max_eval = max_eval,
+        iter = stats.iter,
+        max_iter = max_iter,
         max_time = max_time,
       ),
     )
 
     callback(nlp, solver, stats)
 
-    done =
-      (stats.status == :first_order) ||
-      (stats.status == :max_eval) ||
-      (stats.status == :max_time) ||
-      (stats.status == :user) ||
-      (stats.status == :not_desc) ||
-      (stats.status == :neg_pred)
+    done = stats.status != :unknown
+
   end
   verbose > 0 && @info log_row(Any[stats.iter, f, ∇fNorm2, tr.radius])
 

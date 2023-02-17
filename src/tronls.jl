@@ -44,6 +44,7 @@ The keyword arguments may include
 - `σ::T = T(10)`: algorithm parameter in (1, +∞).
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `max_cgiter::Int = 50`: subproblem iteration limit.
 - `cgtol::T = T(0.1)`: subproblem tolerance.
 - `atol::T = √eps(T)`: absolute tolerance.
@@ -169,6 +170,7 @@ function SolverCore.solve!(
   μ₁::Real = one(T),
   σ::Real = T(10),
   max_eval::Int = -1,
+  max_iter::Int = typemax(Int),
   max_time::Real = 30.0,
   max_cgiter::Int = 50,
   cgtol::T = T(0.1),
@@ -250,6 +252,8 @@ function SolverCore.solve!(
       small_residual = small_residual,
       unbounded = unbounded,
       max_eval = max_eval,
+      iter = stats.iter,
+      max_iter = max_iter,
       max_time = max_time,
     ),
   )
@@ -351,6 +355,8 @@ function SolverCore.solve!(
         small_residual = small_residual,
         unbounded = unbounded,
         max_eval = max_eval,
+        iter = stats.iter,
+        max_iter = max_iter,
         max_time = max_time,
       ),
     )

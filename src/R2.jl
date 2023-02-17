@@ -22,6 +22,7 @@ For advanced usage, first define a `R2Solver` to preallocate the memory used in 
 - `σmin = eps(T)`: step parameter for R2 algorithm.
 - `max_eval::Int = -1`: maximum number of evaluation of the objective function.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `β = T(0) ∈ [0,1]` is the constant in the momentum term. If `β == 0`, R2 does not use momentum.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 
@@ -107,6 +108,7 @@ function SolverCore.solve!(
   σmin = zero(T),
   max_time::Float64 = 30.0,
   max_eval::Int = -1,
+  max_iter::Int = typemax(Int),
   β::T = T(0),
   verbose::Int = 0,
 ) where {T, V}
@@ -150,6 +152,8 @@ function SolverCore.solve!(
       elapsed_time = stats.elapsed_time,
       optimal = optimal,
       max_eval = max_eval,
+      iter = stats.iter,
+      max_iter = max_iter,
       max_time = max_time,
     ),
   )
@@ -206,6 +210,8 @@ function SolverCore.solve!(
         elapsed_time = stats.elapsed_time,
         optimal = optimal,
         max_eval = max_eval,
+        iter = stats.iter,
+        max_iter = max_iter,
         max_time = max_time,
       ),
     )

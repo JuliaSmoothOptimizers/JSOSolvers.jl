@@ -28,6 +28,7 @@ The keyword arguments may include
 - `Frtol::T = eps(T)`: relative tolerance on the residual, the algorithm stops when ‖F(xᵏ)‖ ≤ Fatol + Frtol * ‖F(x⁰)‖.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `bk_max::Int = 10`: algorithm parameter.
 - `monotone::Bool = true`: algorithm parameter.
 - `nm_itmax::Int = 25`: algorithm parameter.
@@ -147,6 +148,7 @@ function SolverCore.solve!(
   Fatol::T = zero(T),
   Frtol::T = zero(T),
   max_eval::Int = -1,
+  max_iter::Int = typemax(Int),
   max_time::Float64 = 30.0,
   bk_max::Int = 10,
   monotone::Bool = true,
@@ -228,6 +230,7 @@ function SolverCore.solve!(
       optimal = optimal,
       small_residual = small_residual,
       max_eval = max_eval,
+      max_iter = max_iter,
       max_time = max_time,
     ),
   )
@@ -405,6 +408,8 @@ function SolverCore.solve!(
         optimal = optimal,
         small_residual = small_residual,
         max_eval = max_eval,
+        iter = stats.iter,
+        max_iter = max_iter,
         max_time = max_time,
       ),
     )
