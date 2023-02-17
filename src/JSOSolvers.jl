@@ -10,47 +10,7 @@ import SolverCore.solve!
 import Krylov.solve!
 export solve!
 
-function get_status(
-  nlp;
-  elapsed_time = 0.0,
-  optimal = false,
-  unbounded = false,
-  max_eval = Inf,
-  max_time = Inf,
-)
-  if optimal
-    :first_order
-  elseif unbounded
-    :unbounded
-  elseif neval_obj(nlp) > max_eval ≥ 0
-    :max_eval
-  elseif elapsed_time > max_time
-    :max_time
-  else
-    :unknown
-  end
-end
-
-function get_status(
-  nls::AbstractNLSModel;
-  elapsed_time = 0.0,
-  optimal = false,
-  unbounded = false,
-  max_eval = Inf,
-  max_time = Inf,
-)
-  if optimal
-    :first_order
-  elseif unbounded
-    :unbounded
-  elseif neval_residual(nls) > max_eval ≥ 0
-    :max_eval
-  elseif elapsed_time > max_time
-    :max_time
-  else
-    :unknown
-  end
-end
+SolverCore.eval_fun(nls::AbstractNLSModel) = neval_residual(nls) + neval_cons(nls)
 
 # Unconstrained solvers
 include("lbfgs.jl")
