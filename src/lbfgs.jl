@@ -19,6 +19,7 @@ The keyword arguments may include
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `τ₁::T = T(0.9999)`: slope factor in the Wolfe condition when performing the line search.
 - `bk_max:: Int = 25`: maximum number of backtracks when performing the line search.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
@@ -118,6 +119,7 @@ function SolverCore.solve!(
   atol::T = √eps(T),
   rtol::T = √eps(T),
   max_eval::Int = -1,
+  max_iter::Int = typemax(Int),
   max_time::Float64 = 30.0,
   τ₁::T = T(0.9999),
   bk_max::Int = 25,
@@ -171,18 +173,15 @@ function SolverCore.solve!(
       elapsed_time = stats.elapsed_time,
       optimal = optimal,
       max_eval = max_eval,
+      iter = stats.iter,
+      max_iter = max_iter,
       max_time = max_time,
     ),
   )
 
   callback(nlp, solver, stats)
 
-  done =
-    (stats.status == :first_order) ||
-    (stats.status == :max_eval) ||
-    (stats.status == :max_time) ||
-    (stats.status == :user) ||
-    (stats.status == :not_desc)
+  done = stats.status != :unknown
 
   while !done
     mul!(d, H, ∇f, -one(T), zero(T))
@@ -230,18 +229,16 @@ function SolverCore.solve!(
         elapsed_time = stats.elapsed_time,
         optimal = optimal,
         max_eval = max_eval,
+        iter = stats.iter,
+        max_iter = max_iter,
         max_time = max_time,
       ),
     )
 
     callback(nlp, solver, stats)
 
-    done =
-      (stats.status == :first_order) ||
-      (stats.status == :max_eval) ||
-      (stats.status == :max_time) ||
-      (stats.status == :user) ||
-      (stats.status == :not_desc)
+    done = stats.status != :unknown
+
   end
   verbose > 0 && @info log_row(Any[stats.iter, f, ∇fNorm])
 

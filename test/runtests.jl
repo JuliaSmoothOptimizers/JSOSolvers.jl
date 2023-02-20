@@ -17,6 +17,24 @@ using JSOSolvers
   @test stats.objective_reliable && isapprox(stats.objective, 0, atol = 1e-6)
 end
 
+@testset "Test iteration limit" begin
+  @testset "$fun" for fun in (R2, lbfgs, tron, trunk)
+    f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
+    nlp = ADNLPModel(f, [-1.2; 1.0])
+
+    stats = eval(fun)(nlp, max_iter = 1)
+    @test stats.status == :max_iter
+  end
+
+  @testset "$(fun)-NLS" for fun in (tron, trunk)
+    f(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
+    nlp = ADNLSModel(f, [-1.2; 1.0], 2)
+
+    stats = eval(fun)(nlp, max_iter = 1)
+    @test stats.status == :max_iter
+  end
+end
+
 include("restart.jl")
 include("callback.jl")
 include("consistency.jl")

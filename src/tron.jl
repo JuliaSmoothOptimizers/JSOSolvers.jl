@@ -27,6 +27,7 @@ The keyword arguments may include
 - `σ::T = T(10)`: algorithm parameter in (1, +∞).
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `max_cgiter::Int = 50`: subproblem's iteration limit.
 - `use_only_objgrad::Bool = false`: If `true`, the algorithm uses only the function `objgrad` instead of `obj` and `grad`.
 - `cgtol::T = T(0.1)`: subproblem tolerance.
@@ -157,6 +158,7 @@ function SolverCore.solve!(
   μ₁::T = one(T),
   σ::T = T(10),
   max_eval::Int = -1,
+  max_iter::Int = typemax(Int),
   max_time::Float64 = 30.0,
   max_cgiter::Int = 50,
   use_only_objgrad::Bool = false,
@@ -228,19 +230,15 @@ function SolverCore.solve!(
       optimal = optimal,
       unbounded = unbounded,
       max_eval = max_eval,
+      iter = stats.iter,
+      max_iter = max_iter,
       max_time = max_time,
     ),
   )
 
   callback(nlp, solver, stats)
 
-  done =
-    (stats.status == :first_order) ||
-    (stats.status == :unbounded) ||
-    (stats.status == :max_eval) ||
-    (stats.status == :max_time) ||
-    (stats.status == :user) ||
-    (stats.status == :neg_pred)
+  done = stats.status != :unknown
 
   while !done
     # Current iteration
@@ -326,19 +324,15 @@ function SolverCore.solve!(
         optimal = optimal,
         unbounded = unbounded,
         max_eval = max_eval,
+        iter = stats.iter,
+        max_iter = max_iter,
         max_time = max_time,
       ),
     )
 
     callback(nlp, solver, stats)
 
-    done =
-      (stats.status == :first_order) ||
-      (stats.status == :unbounded) ||
-      (stats.status == :max_eval) ||
-      (stats.status == :max_time) ||
-      (stats.status == :user) ||
-      (stats.status == :neg_pred)
+    done = stats.status != :unknown
   end
   verbose > 0 && @info log_row(Any[stats.iter, fx, πx, tr.radius])
 
