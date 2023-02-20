@@ -408,7 +408,6 @@ function SolverCore.solve!(
     callback(nlp, solver, stats)
 
     done = stats.status != :unknown
-
   end
   verbose > 0 && @info log_row(Any[stats.iter, f, ∇fNorm2, tr.radius])
 
