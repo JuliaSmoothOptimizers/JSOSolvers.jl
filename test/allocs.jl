@@ -30,7 +30,7 @@ end
 
 if Sys.isunix()
   @testset "Allocation tests" begin
-    @testset "$solver" for solver in (:LBFGSSolver, :R2Solver)
+    @testset "$solver" for solver in (:LBFGSSolver, :R2Solver, :TrunkSolver)
       for model in NLPModelsTest.nlp_problems
         nlp = eval(Meta.parse(model))()
         if unconstrained(nlp)
