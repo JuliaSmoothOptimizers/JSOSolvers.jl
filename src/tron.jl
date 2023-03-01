@@ -94,6 +94,7 @@ mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperato
   gt::V
   gn::V
   gpx::V
+  s::V
   Hs::V
   H::Op
   tr::TRONTrustRegion{T, V}
@@ -112,11 +113,12 @@ function TronSolver(
   gt = V(undef, nvar)
   gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
   gpx = V(undef, nvar)
+  s = V(undef, nvar)
   Hs = V(undef, nvar)
   H = hess_op!(nlp, x, Hs)
   Op = typeof(H)
   tr = TRONTrustRegion(gt, min(one(T), max_radius - eps(T)); max_radius = max_radius, kwargs...)
-  return TronSolver{T, V, Op}(x, xc, temp, gx, gt, gn, gpx, Hs, H, tr)
+  return TronSolver{T, V, Op}(x, xc, temp, gx, gt, gn, gpx, s, Hs, H, tr)
 end
 
 function SolverCore.reset!(solver::TronSolver)
@@ -190,6 +192,7 @@ function SolverCore.solve!(
   gt = solver.gt
   gn = solver.gn
   gpx = solver.gpx
+  s = solver.s
   Hs = solver.Hs
 
   x .= max.(ℓ, min.(x, u))
@@ -247,7 +250,7 @@ function SolverCore.solve!(
     Δ = tr.radius
     H = hess_op!(nlp, xc, temp)
 
-    αC, s, cauchy_status = cauchy(x, H, gx, Δ, αC, ℓ, u, μ₀ = μ₀, μ₁ = μ₁, σ = σ)
+    αC, s, cauchy_status = cauchy!(x, H, gx, Δ, αC, ℓ, u, s, Hs, μ₀ = μ₀, μ₁ = μ₁, σ = σ)
 
     if cauchy_status != :success
       @error "Cauchy step returned: $cauchy_status"
@@ -256,7 +259,7 @@ function SolverCore.solve!(
       continue
     end
     s, Hs, cgits, cginfo = with_logger(subsolver_logger) do
-      projected_newton!(x, H, gx, Δ, cgtol, s, ℓ, u, max_cgiter = max_cgiter)
+      projected_newton!(x, H, gx, Δ, cgtol, ℓ, u, s, Hs, max_cgiter = max_cgiter)
     end
     slope = dot(n, gx, s)
     qs = dot(n, s, Hs) / 2 + slope
@@ -340,7 +343,7 @@ function SolverCore.solve!(
   stats
 end
 
-"""`s = projected_line_search!(x, H, g, d, ℓ, u; μ₀ = 1e-2)`
+"""`s = projected_line_search!(x, H, g, d, ℓ, u, Hs; μ₀ = 1e-2)`
 
 Performs a projected line search, searching for a step size `t` such that
 
@@ -355,7 +358,8 @@ function projected_line_search!(
   g::AbstractVector{T},
   d::AbstractVector{T},
   ℓ::AbstractVector{T},
-  u::AbstractVector{T};
+  u::AbstractVector{T},
+  Hs::AbstractVector{T};
   μ₀::Real = T(1e-2),
 ) where {T <: Real}
   α = one(T)
@@ -364,7 +368,7 @@ function projected_line_search!(
   n = length(x)
 
   s = zeros(T, n)
-  Hs = zeros(T, n)
+  Hs .= zero(T)
 
   search = true
   while search && α > brkmin
@@ -389,7 +393,7 @@ function projected_line_search!(
   return s
 end
 
-"""`α, s = cauchy(x, H, g, Δ, ℓ, u; μ₀ = 1e-2, μ₁ = 1.0, σ=10.0)`
+"""`α, s = cauchy!(x, H, g, Δ, ℓ, u, s, Hs; μ₀ = 1e-2, μ₁ = 1.0, σ=10.0)`
 
 Computes a Cauchy step `s = P(x - α g) - x` for
 
@@ -399,14 +403,16 @@ with the sufficient decrease condition
 
     q(s) ≦ μ₀sᵀg.
 """
-function cauchy(
+function cauchy!(
   x::AbstractVector{T},
   H::Union{AbstractMatrix, AbstractLinearOperator},
   g::AbstractVector{T},
   Δ::Real,
   α::Real,
   ℓ::AbstractVector{T},
-  u::AbstractVector{T};
+  u::AbstractVector{T},
+  s::AbstractVector{T},
+  Hs::AbstractVector{T};
   μ₀::Real = T(1e-2),
   μ₁::Real = one(T),
   σ::Real = T(10),
@@ -414,8 +420,8 @@ function cauchy(
   # TODO: Use brkmin to care for g direction
   _, _, brkmax = breakpoints(x, -g, ℓ, u)
   n = length(x)
-  s = zeros(T, n)
-  Hs = zeros(T, n)
+  s .= zero(T)
+  Hs .= zero(T)
 
   status = :success
 
@@ -469,7 +475,7 @@ function cauchy(
   return α, s, status
 end
 
-"""`projected_newton!(x, H, g, Δ, gctol, s, max_cgiter, ℓ, u)`
+"""`projected_newton!(x, H, g, Δ, cgtol, ℓ, u, s, Hs; max_cgiter = 50)`
 
 Compute an approximate solution `d` for
 
@@ -484,15 +490,16 @@ function projected_newton!(
   g::AbstractVector{T},
   Δ::Real,
   cgtol::Real,
-  s::AbstractVector{T},
   ℓ::AbstractVector{T},
-  u::AbstractVector{T};
+  u::AbstractVector{T},
+  s::AbstractVector{T},
+  Hs::AbstractVector{T};
   max_cgiter::Int = 50,
 ) where {T <: Real}
   n = length(x)
   status = ""
 
-  Hs = H * s
+  mul!(Hs, H, s)
 
   # Projected Newton Step
   exit_optimal = false
@@ -519,10 +526,10 @@ function projected_newton!(
 
     # Projected line search
     xfree = @view x[ifree]
-    @views w = projected_line_search!(xfree, ZHZ, gfree, st, ℓ[ifree], u[ifree])
+    @views w = projected_line_search!(xfree, ZHZ, gfree, st, ℓ[ifree], u[ifree], Hs[ifree])
     @views s[ifree] .+= w
 
-    Hs .= H * s
+    mul!(Hs, H, s)
 
     @views gfree .= Hs[ifree] .+ g[ifree]
     if norm(gfree) <= cgtol * gfnorm
