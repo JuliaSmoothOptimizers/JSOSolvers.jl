@@ -98,6 +98,7 @@ mutable struct TrunkSolverNLS{T, V <: AbstractVector{T}} <: AbstractOptimization
   gt::V
   tr::TrustRegion{T, V}
   Fx::V
+  rt::V
   Av::V
   Atv::V
 end
@@ -113,9 +114,10 @@ function TrunkSolverNLS(nlp::AbstractNLPModel{T, V}) where {T, V <: AbstractVect
   tr = TrustRegion(gt, one(T))
 
   Fx = V(undef, nequ)
+  rt = V(undef, nequ)
   Av = V(undef, nequ)
   Atv = V(undef, nvar)
-  return TrunkSolverNLS{T, V}(x, xt, temp, gx, gt, tr, Fx, Av, Atv)
+  return TrunkSolverNLS{T, V}(x, xt, temp, gx, gt, tr, rt, Fx, Av, Atv)
 end
 
 function SolverCore.reset!(solver::TrunkSolverNLS)
@@ -181,20 +183,20 @@ function SolverCore.solve!(
   # Armijo linesearch parameter.
   β = eps(T)^T(1 / 4)
 
-  r = solver.Fx
+  r, rt = solver.Fx, solver.rt
   residual!(nlp, x, r)
   f = dot(r, r) / 2
 
   # preallocate storage for products with A and A'
   Av = solver.Av
   Atv = solver.Atv
-  gt = solver.gt
   A = jac_op_residual!(nlp, x, Av, Atv)
   mul!(∇f, A', r)
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
   ϵF = Fatol + Frtol * 2 * √f
-  tr = TrustRegion(gt, min(max(∇fNorm2 / 10, one(T)), T(100)))
+  tr = solver.tr
+  tr.radius = min(max(∇fNorm2 / 10, one(T)), T(100))
 
   # Non-monotone mode parameters.
   # fmin: current best overall objective value
@@ -245,9 +247,9 @@ function SolverCore.solve!(
     # In this particular case, we may use an operator with preallocation.
     cgtol = max(rtol, min(T(0.1), 9 * cgtol / 10, sqrt(∇fNorm2)))
     (s, cg_stats) = with_logger(NullLogger()) do
-      trsolver(
+      trsolver( # allocate
         A,
-        -r,
+        -r, # -r allocate
         atol = atol,
         rtol = cgtol,
         radius = tr.radius,
@@ -264,9 +266,8 @@ function SolverCore.solve!(
     slope = dot(r, t)
     curv = dot(t, t)
     Δq = slope + curv / 2
-    rt = residual(nlp, xt)
+    residual!(nlp, xt, rt)
     ft = dot(rt, rt) / 2
-    @debug @sprintf("‖s‖ = %7.1e, slope = %8.1e, Δq = %15.7e", sNorm, slope, Δq)
 
     ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
     if pred ≥ 0
@@ -308,15 +309,13 @@ function SolverCore.solve!(
         bk = bk + 1
         α /= T(1.2)
         copyaxpy!(n, α, s, x, xt)
-        rt = residual(nlp, xt)
+        residual!(nlp, xt, rt)
         ft = dot(rt, rt) / 2
-        @debug "" α ft
       end
       sNorm *= α
       scal!(n, α, s)
       slope *= α
       Δq = slope + α * α * curv / 2
-      @debug "" slope Δq
       ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
       if pred ≥ 0
         stats.status = :neg_pred
@@ -378,14 +377,14 @@ function SolverCore.solve!(
       end
 
       x .= xt
-      r = rt
+      r .= rt
       f = ft
       A = jac_op_residual!(nlp, x, Av, Atv)
       if tr.good_grad
         ∇f .= tr.gt
         tr.good_grad = false
       else
-        ∇f = A' * r
+        mul!(∇f, A', r)
       end
       ∇fNorm2 = nrm2(n, ∇f)
     end
