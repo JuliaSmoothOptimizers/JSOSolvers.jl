@@ -367,7 +367,7 @@ function projected_line_search!(
   nsteps = 0
   n = length(x)
 
-  s = zeros(T, n)
+  s = zeros(T, n) # allocate
   Hs .= zero(T)
 
   search = true
@@ -509,7 +509,7 @@ function projected_newton!(
   x .= x .+ s
   project!(x, x, ℓ, u)
   while !(exit_optimal || exit_pcg || exit_itmax)
-    ifree = setdiff(1:n, active(x, ℓ, u))
+    ifree = setdiff(1:n, active(x, ℓ, u)) # allocate
     if length(ifree) == 0
       exit_optimal = true
       continue
@@ -520,7 +520,7 @@ function projected_newton!(
     gfnorm = norm(wa)
 
     ZHZ = Z' * H * Z
-    st, stats = Krylov.cg(ZHZ, -gfree, radius = Δ, rtol = cgtol, atol = zero(T))
+    st, stats = Krylov.cg(ZHZ, -gfree, radius = Δ, rtol = cgtol, atol = zero(T)) # allocate
     iters += 1
     status = stats.status
 

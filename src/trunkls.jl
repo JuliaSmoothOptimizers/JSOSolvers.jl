@@ -209,7 +209,7 @@ function SolverCore.solve!(
 
   # Preallocate xt.
   xt = solver.xt
-  temp = solver.temp
+  temp = solver.temp # not used
 
   optimal = ∇fNorm2 ≤ ϵ
   small_residual = 2 * √f ≤ ϵF
@@ -262,7 +262,7 @@ function SolverCore.solve!(
     sNorm = nrm2(n, s)
     copyaxpy!(n, one(T), s, x, xt)
     # slope = dot(∇f, s)
-    t = A * s
+    t = A * s # allocate
     slope = dot(r, t)
     curv = dot(t, t)
     Δq = slope + curv / 2
@@ -379,7 +379,7 @@ function SolverCore.solve!(
       x .= xt
       r .= rt
       f = ft
-      A = jac_op_residual!(nlp, x, Av, Atv)
+      A = jac_op_residual!(nlp, x, Av, Atv) # allocate
       if tr.good_grad
         ∇f .= tr.gt
         tr.good_grad = false
