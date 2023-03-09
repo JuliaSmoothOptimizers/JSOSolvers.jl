@@ -1,6 +1,8 @@
 function consistency()
-  unlp = ADNLPModel(x -> (x[1] - 1)^2 + 100 * (x[2] - x[1]^2)^2, zeros(2))
-  unls = ADNLSModel(x -> [x[1] - 1; 10 * (x[2] - x[1]^2)], zeros(2), 2)
+  f = x -> (x[1] - 1)^2 + 100 * (x[2] - x[1]^2)^2
+  unlp = ADNLPModel(f, zeros(2))
+  F = x -> [x[1] - 1; 10 * (x[2] - x[1]^2)]
+  unls = ADNLSModel(F, zeros(2), 2)
   #trunk and tron have special features for QuasiNewtonModel
   qnlp = LBFGSModel(unlp)
   qnls = LBFGSModel(unls)
@@ -18,7 +20,7 @@ function consistency()
         @test stats.status == :max_eval
         slow_nlp = ADNLPModel(x -> begin
           sleep(0.1)
-          unlp.f(x)
+          f(x)
         end, unlp.meta.x0)
         stats = mtd(slow_nlp; max_time = 0.0)
         @test stats.status == :max_time
@@ -43,7 +45,7 @@ function consistency()
         @test stats.status == :max_eval
         slow_nls = ADNLSModel(x -> begin
           sleep(0.1)
-          unls.F(x)
+          F(x)
         end, unls.meta.x0, nls_meta(unls).nequ)
         stats = mtd(slow_nls; max_time = 0.0)
         @test stats.status == :max_time
