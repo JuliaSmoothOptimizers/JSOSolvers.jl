@@ -211,9 +211,8 @@ function SolverCore.solve!(
 
   x .= max.(ℓ, min.(x, u))
   Fx = F(x)
-  fx = dot(Fx, Fx) / 2
   Ax = A(x)
-  mul!(gx, Ax', Fx)
+  fx, gx = objgrad!(nlp, x, gx, Fx, recompute = false)
   gt = solver.gt
 
   Fc = solver.Fc
@@ -294,7 +293,7 @@ function SolverCore.solve!(
     slope = dot(m, Fx, As)
     qs = dot(As, As) / 2 + slope
     Fx = F(x)
-    fx = dot(Fx, Fx) / 2
+    fx = obj(nlp, x, Fx, recompute = false)
 
     ared, pred = aredpred!(tr, nlp, fc, fx, qs, x, s, slope)
     if pred ≥ 0
@@ -322,7 +321,7 @@ function SolverCore.solve!(
         gx .= tr.gt
         tr.good_grad = false
       else
-        gx .= Ax' * Fx
+        grad!(nlp, x, gx, Fx, recompute = false)
       end
       project_step!(gpx, x, gx, ℓ, u, -one(T))
       πx = nrm2(n, gpx)
