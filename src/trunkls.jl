@@ -185,13 +185,13 @@ function SolverCore.solve!(
 
   r, rt = solver.Fx, solver.rt
   residual!(nlp, x, r)
-  f = dot(r, r) / 2
+  f, ∇f = objgrad!(nlp, x, ∇f, r, recompute = false)
 
   # preallocate storage for products with A and A'
   Av = solver.Av
   Atv = solver.Atv
   A = jac_op_residual!(nlp, x, Av, Atv)
-  mul!(∇f, A', r)
+
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
   ϵF = Fatol + Frtol * 2 * √f
@@ -267,7 +267,7 @@ function SolverCore.solve!(
     curv = dot(t, t)
     Δq = slope + curv / 2
     residual!(nlp, xt, rt)
-    ft = dot(rt, rt) / 2
+    ft = obj(nlp, x, rt, recompute = false)
 
     ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
     if pred ≥ 0
@@ -310,7 +310,7 @@ function SolverCore.solve!(
         α /= T(1.2)
         copyaxpy!(n, α, s, x, xt)
         residual!(nlp, xt, rt)
-        ft = dot(rt, rt) / 2
+        ft = obj(nlp, x, rt, recompute = false)
       end
       sNorm *= α
       scal!(n, α, s)
@@ -384,7 +384,7 @@ function SolverCore.solve!(
         ∇f .= tr.gt
         tr.good_grad = false
       else
-        mul!(∇f, A', r)
+        grad!(nlp, x, ∇f, r, recompute = false)
       end
       ∇fNorm2 = nrm2(n, ∇f)
     end
