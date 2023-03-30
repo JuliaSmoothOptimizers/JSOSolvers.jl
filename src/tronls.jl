@@ -188,8 +188,8 @@ function SolverCore.solve!(
   end
 
   reset!(stats)
-  ℓ = T.(nlp.meta.lvar)
-  u = T.(nlp.meta.uvar)
+  ℓ = nlp.meta.lvar
+  u = nlp.meta.uvar
   n = nlp.meta.nvar
   m = nlp.nls_meta.nequ
 
@@ -222,7 +222,7 @@ function SolverCore.solve!(
   project_step!(gpx, x, gx, ℓ, u, -one(T))
   πx = nrm2(n, gpx)
   ϵ = atol + rtol * πx
-  fmin = min(-one(T), fx) / eps(eltype(x))
+  fmin = min(-one(T), fx) / eps(T)
   optimal = πx <= ϵ
   unbounded = fx < fmin
   ϵF = Fatol + Frtol * 2 * √fx
