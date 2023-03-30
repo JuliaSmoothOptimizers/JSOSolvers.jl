@@ -204,7 +204,7 @@ function SolverCore.solve!(
   project_step!(gpx, x, gx, ℓ, u, -one(T))
   πx = nrm2(n, gpx)
   ϵ = atol + rtol * πx
-  fmin = min(-one(T), fx) / eps(eltype(x))
+  fmin = min(-one(T), fx) / eps(T)
   optimal = πx <= ϵ
   unbounded = fx < fmin
 
