@@ -1,6 +1,6 @@
 export TrunkSolverNLS
 
-const trunkls_allowed_subsolvers = [:cgls, :crls, :lsqr, :lsmr]
+const trunkls_allowed_subsolvers = [CglsSolver, CrlsSolver, LsqrSolver, LsmrSolver]
 
 trunk(nlp::AbstractNLSModel; variant = :GaussNewton, kwargs...) =
   trunk(Val(variant), nlp; kwargs...)
@@ -14,14 +14,13 @@ A pure Julia implementation of a trust-region solver for nonlinear least-squares
 
 For advanced usage, first define a `TrunkSolverNLS` to preallocate the memory used in the algorithm, and then call `solve!`:
 
-    solver = TrunkSolverNLS(nls)
+    solver = TrunkSolverNLS(nls, subsolver_type::Type{<:KrylovSolver} = LsmrSolver)
     solve!(solver, nls; kwargs...)
 
 # Arguments
 - `nls::AbstractNLSModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
-- `subsolver::Symbol = :lsmr`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.trunkls_allowed_subsolvers` for a list.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `Fatol::T = √eps(T)`: absolute tolerance on the residual.
@@ -32,9 +31,11 @@ The keyword arguments may include
 - `bk_max::Int = 10`: algorithm parameter.
 - `monotone::Bool = true`: algorithm parameter.
 - `nm_itmax::Int = 25`: algorithm parameter.
-- `trsolver_args::Dict{Symbol, Any} = Dict{Symbol, Any}()`: additional keyword arguments for the subproblem solver.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-  
+- `verbose_subsolver::Int = 0`: if > 0, display iteration information every `verbose_subsolver` iteration of the subsolver.
+
+See `JSOSolvers.trunkls_allowed_subsolvers` for a list of available `KrylovSolver`.
+
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 
@@ -90,7 +91,12 @@ stats = solve!(solver, nls)
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct TrunkSolverNLS{T, V <: AbstractVector{T}} <: AbstractOptimizationSolver
+mutable struct TrunkSolverNLS{
+  T,
+  V <: AbstractVector{T},
+  Sub <: KrylovSolver{T, T, V},
+  Op <: AbstractLinearOperator{T},
+} <: AbstractOptimizationSolver
   x::V
   xt::V
   temp::V
@@ -101,14 +107,23 @@ mutable struct TrunkSolverNLS{T, V <: AbstractVector{T}} <: AbstractOptimization
   rt::V
   Av::V
   Atv::V
+  A::Op
+  subsolver::Sub
 end
 
-function TrunkSolverNLS(nlp::AbstractNLPModel{T, V}) where {T, V <: AbstractVector{T}}
+function TrunkSolverNLS(
+  nlp::AbstractNLPModel{T, V};
+  subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
+) where {T, V <: AbstractVector{T}}
+
+  subsolver_type in trunkls_allowed_subsolvers ||
+    error("subproblem solver must be one of $(trunkls_allowed_subsolvers)")
+
   nvar = nlp.meta.nvar
   nequ = nlp.nls_meta.nequ
   x = V(undef, nvar)
   xt = V(undef, nvar)
-  temp = V(undef, nvar)
+  temp = V(undef, nequ)
   gx = V(undef, nvar)
   gt = V(undef, nvar)
   tr = TrustRegion(gt, one(T))
@@ -117,7 +132,13 @@ function TrunkSolverNLS(nlp::AbstractNLPModel{T, V}) where {T, V <: AbstractVect
   rt = V(undef, nequ)
   Av = V(undef, nequ)
   Atv = V(undef, nvar)
-  return TrunkSolverNLS{T, V}(x, xt, temp, gx, gt, tr, rt, Fx, Av, Atv)
+  A = jac_op_residual!(nlp, x, Av, Atv)
+  Op = typeof(A)
+
+  subsolver = subsolver_type(nequ, nvar, V)
+  Sub = typeof(subsolver)
+
+  return TrunkSolverNLS{T, V, Sub, Op}(x, xt, temp, gx, gt, tr, rt, Fx, Av, Atv, A, subsolver)
 end
 
 function SolverCore.reset!(solver::TrunkSolverNLS)
@@ -125,16 +146,21 @@ function SolverCore.reset!(solver::TrunkSolverNLS)
   solver.tr.radius = solver.tr.initial_radius
   solver
 end
-SolverCore.reset!(solver::TrunkSolverNLS, ::AbstractNLPModel) = reset!(solver)
+function SolverCore.reset!(solver::TrunkSolverNLS, nlp::AbstractNLSModel)
+  solver.A = jac_op_residual!(nlp, solver.x, solver.Av, solver.Atv)
+  solver.tr.good_grad = false
+  solver.tr.radius = solver.tr.initial_radius
+  solver
+end
 
 @doc (@doc TrunkSolverNLS) function trunk(
   ::Val{:GaussNewton},
   nlp::AbstractNLSModel;
   x::V = nlp.meta.x0,
-  subsolver_type::Type{<:KrylovSolver} = CgSolver,
+  subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
   kwargs...,
 ) where {V}
-  solver = TrunkSolverNLS(nlp)
+  solver = TrunkSolverNLS(nlp, subsolver_type = subsolver_type)
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
@@ -144,7 +170,6 @@ function SolverCore.solve!(
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
   x::V = nlp.meta.x0,
-  subsolver::Symbol = :lsmr,
   atol::Real = √eps(T),
   rtol::Real = √eps(T),
   Fatol::T = zero(T),
@@ -155,8 +180,8 @@ function SolverCore.solve!(
   bk_max::Int = 10,
   monotone::Bool = true,
   nm_itmax::Int = 25,
-  trsolver_args::Dict{Symbol, Any} = Dict{Symbol, Any}(),
   verbose::Int = 0,
+  verbose_subsolver::Int = 0,
 ) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("trunk only works for minimization problem")
@@ -172,10 +197,8 @@ function SolverCore.solve!(
   solver.x .= x
   x = solver.x
   ∇f = solver.gx
+  subsolver = solver.subsolver
 
-  subsolver in trunkls_allowed_subsolvers ||
-    error("subproblem solver must be one of $(trunkls_allowed_subsolvers)")
-  trsolver = eval(subsolver)
   n = nlp.nls_meta.nvar
   m = nlp.nls_meta.nequ
   cgtol = one(T)  # Must be ≤ 1.
@@ -188,10 +211,8 @@ function SolverCore.solve!(
   f, ∇f = objgrad!(nlp, x, ∇f, r, recompute = false)
 
   # preallocate storage for products with A and A'
-  Av = solver.Av
-  Atv = solver.Atv
-  A = jac_op_residual!(nlp, x, Av, Atv)
-
+  A = solver.A # jac_op_residual!(nlp, x, Av, Atv)
+  mul!(∇f, A', r)
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
   ϵF = Fatol + Frtol * 2 * √f
@@ -246,25 +267,26 @@ function SolverCore.solve!(
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
     cgtol = max(rtol, min(T(0.1), 9 * cgtol / 10, sqrt(∇fNorm2)))
-    (s, cg_stats) = with_logger(NullLogger()) do
-      trsolver( # allocate
-        A,
-        -r, # -r allocate
-        atol = atol,
-        rtol = cgtol,
-        radius = tr.radius,
-        itmax = max(2 * (n + m), 50);
-        trsolver_args...,
-      )
-    end
+    temp .= .-r
+    Krylov.solve!(
+      subsolver,
+      A,
+      temp,
+      atol = atol,
+      rtol = cgtol,
+      radius = tr.radius,
+      itmax = max(2 * (n + m), 50),
+      verbose = verbose_subsolver,
+    )
+    s, cg_stats = subsolver.x, subsolver.stats
 
     # Compute actual vs. predicted reduction.
     sNorm = nrm2(n, s)
     copyaxpy!(n, one(T), s, x, xt)
     # slope = dot(∇f, s)
-    t = A * s
-    slope = dot(r, t)
-    curv = dot(t, t)
+    mul!(temp, A, s)
+    slope = dot(r, temp)
+    curv = dot(temp, temp)
     Δq = slope + curv / 2
     residual!(nlp, xt, rt)
     ft = obj(nlp, x, rt, recompute = false)
@@ -376,10 +398,9 @@ function SolverCore.solve!(
         end
       end
 
-      x .= xt
+      x .= xt # update A implicitly
       r .= rt
       f = ft
-      A = jac_op_residual!(nlp, x, Av, Atv)
       if tr.good_grad
         ∇f .= tr.gt
         tr.good_grad = false
