@@ -115,7 +115,6 @@ function TrunkSolverNLS(
   nlp::AbstractNLPModel{T, V};
   subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
 ) where {T, V <: AbstractVector{T}}
-
   subsolver_type in trunkls_allowed_subsolvers ||
     error("subproblem solver must be one of $(trunkls_allowed_subsolvers)")
 
