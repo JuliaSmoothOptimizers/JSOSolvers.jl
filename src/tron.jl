@@ -530,7 +530,7 @@ function projected_newton!(
     end
   
     cgs_rhs .= 0
-    cg_op_diag .= 0
+    cg_op_diag .= 0 # implictly changes cg_op and so ZHZ
     for i in ifree
       cgs_rhs[i] = -g[i]
       cg_op_diag[i] = 1
