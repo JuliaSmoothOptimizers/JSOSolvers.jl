@@ -98,6 +98,10 @@ mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperato
   Hs::V
   H::Op
   tr::TRONTrustRegion{T, V}
+
+  cg_solver::CgSolver{T, T, V}
+  cg_op_diag::V
+  cg_op::LinearOperator{T}
 end
 
 function TronSolver(
@@ -118,7 +122,11 @@ function TronSolver(
   H = hess_op!(nlp, x, Hs)
   Op = typeof(H)
   tr = TRONTrustRegion(gt, min(one(T), max_radius - eps(T)); max_radius = max_radius, kwargs...)
-  return TronSolver{T, V, Op}(x, xc, temp, gx, gt, gn, gpx, s, Hs, H, tr)
+  
+  cg_solver = CgSolver(H, Hs)
+  cg_op_diag = V(undef, nvar)
+  cg_op = opDiagonal(cg_op_diag)
+  return TronSolver{T, V, Op}(x, xc, temp, gx, gt, gn, gpx, s, Hs, H, tr, cg_solver, cg_op_diag, cg_op)
 end
 
 function SolverCore.reset!(solver::TronSolver)
@@ -259,7 +267,7 @@ function SolverCore.solve!(
       continue
     end
     s, Hs, cgits, cginfo = with_logger(subsolver_logger) do
-      projected_newton!(x, H, gx, Δ, cgtol, ℓ, u, s, Hs, max_cgiter = max_cgiter)
+      projected_newton!(solver, x, H, gx, Δ, cgtol, ℓ, u, s, Hs, max_cgiter = max_cgiter)
     end
     slope = dot(n, gx, s)
     qs = dot(n, s, Hs) / 2 + slope
@@ -475,7 +483,7 @@ function cauchy!(
   return α, s, status
 end
 
-"""`projected_newton!(x, H, g, Δ, cgtol, ℓ, u, s, Hs; max_cgiter = 50)`
+"""`projected_newton!(solver, x, H, g, Δ, cgtol, ℓ, u, s, Hs; max_cgiter = 50)`
 
 Compute an approximate solution `d` for
 
@@ -485,6 +493,7 @@ starting from `s`.  The steps are computed using the conjugate gradient method
 projected on the active bounds.
 """
 function projected_newton!(
+  solver::TronSolver{T},
   x::AbstractVector{T},
   H::Union{AbstractMatrix, AbstractLinearOperator},
   g::AbstractVector{T},
@@ -498,6 +507,11 @@ function projected_newton!(
 ) where {T <: Real}
   n = length(x)
   status = ""
+
+  cg_solver, cgs_rhs = solver.cg_solver, solver.temp
+  cg_op_diag, cg_op = solver.cg_op_diag, solver.cg_op
+
+  ZHZ = cg_op' * H * cg_op
 
   mul!(Hs, H, s)
 
@@ -514,25 +528,32 @@ function projected_newton!(
       exit_optimal = true
       continue
     end
-    Z = opExtension(ifree, n)
-    @views wa = g[ifree]
-    @views gfree = Hs[ifree] + wa
-    gfnorm = norm(wa)
+  
+    cgs_rhs .= 0
+    cg_op_diag .= 0 # implictly changes cg_op and so ZHZ
+    for i in ifree
+      cgs_rhs[i] = -g[i]
+      cg_op_diag[i] = 1
+    end
+    gfnorm = norm(cgs_rhs)
+    for i in ifree
+      cgs_rhs[i] -= Hs[i]
+    end
 
-    ZHZ = Z' * H * Z
-    st, stats = Krylov.cg(ZHZ, -gfree, radius = Δ, rtol = cgtol, atol = zero(T))
-    iters += 1
+    Krylov.solve!(cg_solver, ZHZ, cgs_rhs, radius = Δ, rtol = cgtol, atol = zero(T))
+    st, stats = cg_solver.x, cg_solver.stats
     status = stats.status
+    iters += 1
 
     # Projected line search
-    xfree = @view x[ifree]
-    @views w = projected_line_search!(xfree, ZHZ, gfree, st, ℓ[ifree], u[ifree], Hs[ifree])
-    @views s[ifree] .+= w
+    cgs_rhs .*= -1
+    w = projected_line_search!(x, ZHZ, cgs_rhs, st, ℓ, u, Hs)
+    s .+= w
 
     mul!(Hs, H, s)
 
-    @views gfree .= Hs[ifree] .+ g[ifree]
-    if norm(gfree) <= cgtol * gfnorm
+    @views cgs_rhs[ifree] .= Hs[ifree] .+ g[ifree]
+    if norm(cgs_rhs) <= cgtol * gfnorm
       exit_optimal = true
     elseif status == "on trust-region boundary"
       exit_pcg = true
