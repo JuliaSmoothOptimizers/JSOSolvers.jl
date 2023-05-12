@@ -122,11 +122,26 @@ function TronSolver(
   H = hess_op!(nlp, x, Hs)
   Op = typeof(H)
   tr = TRONTrustRegion(gt, min(one(T), max_radius - eps(T)); max_radius = max_radius, kwargs...)
-  
+
   cg_solver = CgSolver(H, Hs)
   cg_op_diag = V(undef, nvar)
   cg_op = opDiagonal(cg_op_diag)
-  return TronSolver{T, V, Op}(x, xc, temp, gx, gt, gn, gpx, s, Hs, H, tr, cg_solver, cg_op_diag, cg_op)
+  return TronSolver{T, V, Op}(
+    x,
+    xc,
+    temp,
+    gx,
+    gt,
+    gn,
+    gpx,
+    s,
+    Hs,
+    H,
+    tr,
+    cg_solver,
+    cg_op_diag,
+    cg_op,
+  )
 end
 
 function SolverCore.reset!(solver::TronSolver)
@@ -528,7 +543,7 @@ function projected_newton!(
       exit_optimal = true
       continue
     end
-  
+
     cgs_rhs .= 0
     cg_op_diag .= 0 # implictly changes cg_op and so ZHZ
     for i in ifree
