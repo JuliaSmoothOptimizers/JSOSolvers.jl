@@ -122,7 +122,7 @@ function TronSolver(
   gpx = V(undef, nvar)
   s = V(undef, nvar)
   Hs = V(undef, nvar)
-  H = hess_op!(nlp, x, Hs)
+  H = hess_op!(nlp, xc, Hs)
   Op = typeof(H)
   tr = TRONTrustRegion(gt, min(one(T), max_radius - eps(T)); max_radius = max_radius, kwargs...)
 
@@ -159,7 +159,7 @@ end
 
 function SolverCore.reset!(solver::TronSolver, nlp::AbstractNLPModel)
   @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
-  solver.H = hess_op!(nlp, solver.x, solver.Hs)
+  solver.H = hess_op!(nlp, solver.xc, solver.Hs)
   solver.tr.good_grad = false
   solver
 end
@@ -218,13 +218,13 @@ function SolverCore.solve!(
   solver.x .= x
   x = solver.x
   xc = solver.xc
-  temp = solver.temp
   gx = solver.gx
   gt = solver.gt
   gn = solver.gn
   gpx = solver.gpx
   s = solver.s
   Hs = solver.Hs
+  H = solver.H
 
   x .= max.(ℓ, min.(x, u))
   fx, _ = objgrad!(nlp, x, gx)
@@ -276,10 +276,9 @@ function SolverCore.solve!(
 
   while !done
     # Current iteration
-    xc .= x
+    xc .= x # implicitly update H = hess_op!(nlp, xc, Hs)
     fc = fx
     Δ = tr.radius
-    H = hess_op!(nlp, xc, temp)
 
     αC, s, cauchy_status = cauchy!(x, H, gx, Δ, αC, ℓ, u, s, Hs, μ₀ = μ₀, μ₁ = μ₁, σ = σ)
 
