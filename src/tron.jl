@@ -100,6 +100,7 @@ mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperato
   tr::TRONTrustRegion{T, V}
 
   cg_solver::CgSolver{T, T, V}
+  cg_rhs::V
   cg_op_diag::V
   cg_op::LinearOperator{T}
 end
@@ -124,6 +125,7 @@ function TronSolver(
   tr = TRONTrustRegion(gt, min(one(T), max_radius - eps(T)); max_radius = max_radius, kwargs...)
 
   cg_solver = CgSolver(H, Hs)
+  cg_rhs = V(undef, nvar)
   cg_op_diag = V(undef, nvar)
   cg_op = opDiagonal(cg_op_diag)
   return TronSolver{T, V, Op}(
@@ -139,6 +141,7 @@ function TronSolver(
     H,
     tr,
     cg_solver,
+    cg_rhs,
     cg_op_diag,
     cg_op,
   )
@@ -382,15 +385,15 @@ function projected_line_search!(
   d::AbstractVector{T},
   ℓ::AbstractVector{T},
   u::AbstractVector{T},
-  Hs::AbstractVector{T};
+  Hs::AbstractVector{T},
+  s::AbstractVector{T};
   μ₀::Real = T(1e-2),
 ) where {T <: Real}
   α = one(T)
   _, brkmin, _ = breakpoints(x, d, ℓ, u)
   nsteps = 0
-  n = length(x)
 
-  s = zeros(T, n)
+  s .= zero(T)
   Hs .= zero(T)
 
   search = true
@@ -523,10 +526,11 @@ function projected_newton!(
   n = length(x)
   status = ""
 
-  cg_solver, cgs_rhs = solver.cg_solver, solver.temp
+  cg_solver, cgs_rhs = solver.cg_solver, solver.cg_rhs
   cg_op_diag, cg_op = solver.cg_op_diag, solver.cg_op
+  w = solver.temp
 
-  ZHZ = cg_op' * H * cg_op
+  ZHZ = cg_op' * H * cg_op # allocates
 
   mul!(Hs, H, s)
 
@@ -538,7 +542,7 @@ function projected_newton!(
   x .= x .+ s
   project!(x, x, ℓ, u)
   while !(exit_optimal || exit_pcg || exit_itmax)
-    ifree = setdiff(1:n, active(x, ℓ, u))
+    ifree = setdiff(1:n, active(x, ℓ, u)) # allocates
     if length(ifree) == 0
       exit_optimal = true
       continue
@@ -562,12 +566,12 @@ function projected_newton!(
 
     # Projected line search
     cgs_rhs .*= -1
-    w = projected_line_search!(x, ZHZ, cgs_rhs, st, ℓ, u, Hs)
+    projected_line_search!(x, ZHZ, cgs_rhs, st, ℓ, u, Hs, w)
     s .+= w
 
     mul!(Hs, H, s)
 
-    @views cgs_rhs[ifree] .= Hs[ifree] .+ g[ifree]
+    @views cgs_rhs[ifree] .= Hs[ifree] .+ g[ifree] # allocates
     if norm(cgs_rhs) <= cgtol * gfnorm
       exit_optimal = true
     elseif status == "on trust-region boundary"
