@@ -99,6 +99,8 @@ mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperato
   H::Op
   tr::TRONTrustRegion{T, V}
 
+  ifix::BitVector
+
   cg_solver::CgSolver{T, T, V}
   cg_rhs::V
   cg_op_diag::V
@@ -124,6 +126,8 @@ function TronSolver(
   Op = typeof(H)
   tr = TRONTrustRegion(gt, min(one(T), max_radius - eps(T)); max_radius = max_radius, kwargs...)
 
+  ifix = BitVector(undef, nvar)
+
   cg_solver = CgSolver(H, Hs)
   cg_rhs = V(undef, nvar)
   cg_op_diag = V(undef, nvar)
@@ -140,6 +144,7 @@ function TronSolver(
     Hs,
     H,
     tr,
+    ifix,
     cg_solver,
     cg_rhs,
     cg_op_diag,
@@ -529,6 +534,7 @@ function projected_newton!(
   cg_solver, cgs_rhs = solver.cg_solver, solver.cg_rhs
   cg_op_diag, cg_op = solver.cg_op_diag, solver.cg_op
   w = solver.temp
+  ifix = solver.ifix
 
   ZHZ = cg_op' * H * cg_op # allocates
 
@@ -542,21 +548,18 @@ function projected_newton!(
   x .= x .+ s
   project!(x, x, ℓ, u)
   while !(exit_optimal || exit_pcg || exit_itmax)
-    ifree = setdiff(1:n, active(x, ℓ, u)) # allocates
-    if length(ifree) == 0
+    active!(ifix, x, ℓ, u)
+    if sum(ifix) == n
       exit_optimal = true
       continue
     end
 
-    cgs_rhs .= 0
-    cg_op_diag .= 0 # implictly changes cg_op and so ZHZ
-    for i in ifree
-      cgs_rhs[i] = -g[i]
-      cg_op_diag[i] = 1
-    end
-    gfnorm = norm(cgs_rhs)
-    for i in ifree
-      cgs_rhs[i] -= Hs[i]
+    gfnorm = 0
+    for i = 1:n
+      cgs_rhs[i] = ifix[i] ? 0 : -g[i]
+      gfnorm += cgs_rhs[i]^2
+      cgs_rhs[i] -= ifix[i] ? 0 : Hs[i]
+      cg_op_diag[i] = ifix[i] ? 0 : 1 # implictly changes cg_op and so ZHZ
     end
 
     Krylov.solve!(cg_solver, ZHZ, cgs_rhs, radius = Δ, rtol = cgtol, atol = zero(T))
@@ -571,8 +574,13 @@ function projected_newton!(
 
     mul!(Hs, H, s)
 
-    @views cgs_rhs[ifree] .= Hs[ifree] .+ g[ifree] # allocates
-    if norm(cgs_rhs) <= cgtol * gfnorm
+    newnorm = 0
+    for i = 1:n
+      cgs_rhs[i] = ifix[i] ? 0 : Hs[i] + g[i]
+      newnorm += cgs_rhs[i]^2
+    end
+
+    if √newnorm <= cgtol * √gfnorm
       exit_optimal = true
     elseif status == "on trust-region boundary"
       exit_pcg = true
