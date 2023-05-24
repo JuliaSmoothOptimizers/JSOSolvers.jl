@@ -454,7 +454,9 @@ function cauchy!(
   σ::Real = T(10),
 ) where {T <: Real}
   # TODO: Use brkmin to care for g direction
-  _, _, brkmax = breakpoints(x, -g, ℓ, u)
+  s .= .-g
+  _, _, brkmax = breakpoints(x, s, ℓ, u)
+
   n = length(x)
   s .= zero(T)
   Hs .= zero(T)
