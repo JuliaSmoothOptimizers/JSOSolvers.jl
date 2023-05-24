@@ -105,6 +105,8 @@ mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperato
   cg_rhs::V
   cg_op_diag::V
   cg_op::LinearOperator{T}
+
+  ZHZ::LinearOperator{T}
 end
 
 function TronSolver(
@@ -132,6 +134,8 @@ function TronSolver(
   cg_rhs = V(undef, nvar)
   cg_op_diag = V(undef, nvar)
   cg_op = opDiagonal(cg_op_diag)
+
+  ZHZ = cg_op' * H * cg_op
   return TronSolver{T, V, Op}(
     x,
     xc,
@@ -149,6 +153,7 @@ function TronSolver(
     cg_rhs,
     cg_op_diag,
     cg_op,
+    ZHZ,
   )
 end
 
@@ -160,6 +165,7 @@ end
 function SolverCore.reset!(solver::TronSolver, nlp::AbstractNLPModel)
   @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
   solver.H = hess_op!(nlp, solver.xc, solver.Hs)
+  solver.ZHZ = solver.cg_op' * solver.H * solver.cg_op
   solver.tr.good_grad = false
   solver
 end
@@ -531,11 +537,9 @@ function projected_newton!(
   status = ""
 
   cg_solver, cgs_rhs = solver.cg_solver, solver.cg_rhs
-  cg_op_diag, cg_op = solver.cg_op_diag, solver.cg_op
+  cg_op_diag, ZHZ = solver.cg_op_diag, solver.ZHZ
   w = solver.temp
   ifix = solver.ifix
-
-  ZHZ = cg_op' * H * cg_op # allocates
 
   mul!(Hs, H, s)
 
