@@ -10,8 +10,6 @@ import SolverCore.solve!
 import Krylov.solve!
 export solve!
 
-SolverCore.eval_fun(nls::AbstractNLSModel) = neval_residual(nls) + neval_cons(nls)
-
 # Unconstrained solvers
 include("lbfgs.jl")
 include("trunk.jl")

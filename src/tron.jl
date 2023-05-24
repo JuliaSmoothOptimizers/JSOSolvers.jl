@@ -20,7 +20,6 @@ For advanced usage, first define a `TronSolver` to preallocate the memory used i
 # Arguments
 - `nlp::AbstractNLPModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
-- `subsolver_logger::AbstractLogger = NullLogger()`: subproblem's logger.
 - `x::V = nlp.meta.x0`: the initial guess.
 - `μ₀::T = T(1e-2)`: algorithm parameter in (0, 0.5).
 - `μ₁::T = one(T)`: algorithm parameter in (0, +∞).
@@ -191,7 +190,6 @@ function SolverCore.solve!(
   nlp::AbstractNLPModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
-  subsolver_logger::AbstractLogger = NullLogger(),
   x::V = nlp.meta.x0,
   μ₀::T = T(1e-2),
   μ₁::T = one(T),
@@ -294,9 +292,9 @@ function SolverCore.solve!(
       done = true
       continue
     end
-    s, Hs, cgits, cginfo = with_logger(subsolver_logger) do
-      projected_newton!(solver, x, H, gx, Δ, cgtol, ℓ, u, s, Hs, max_cgiter = max_cgiter)
-    end
+
+    s, Hs, cgits, cginfo =  projected_newton!(solver, x, H, gx, Δ, cgtol, ℓ, u, s, Hs, max_cgiter = max_cgiter)
+
     slope = dot(n, gx, s)
     qs = dot(n, s, Hs) / 2 + slope
     fx = if use_only_objgrad
