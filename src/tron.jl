@@ -165,6 +165,7 @@ end
 function SolverCore.reset!(solver::TronSolver, nlp::AbstractNLPModel)
   @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
   solver.H = hess_op!(nlp, solver.xc, solver.Hs)
+  solver.ZHZ = solver.cg_op' * solver.H * solver.cg_op
   solver.tr.good_grad = false
   solver
 end
