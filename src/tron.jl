@@ -293,7 +293,8 @@ function SolverCore.solve!(
       continue
     end
 
-    s, Hs, cgits, cginfo =  projected_newton!(solver, x, H, gx, Δ, cgtol, ℓ, u, s, Hs, max_cgiter = max_cgiter)
+    s, Hs, cgits, cginfo =
+      projected_newton!(solver, x, H, gx, Δ, cgtol, ℓ, u, s, Hs, max_cgiter = max_cgiter)
 
     slope = dot(n, gx, s)
     qs = dot(n, s, Hs) / 2 + slope
