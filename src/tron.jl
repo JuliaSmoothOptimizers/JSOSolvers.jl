@@ -129,12 +129,12 @@ function TronSolver(
 
   ifix = BitVector(undef, nvar)
 
-  cg_solver = CgSolver(H, Hs)
   cg_rhs = V(undef, nvar)
   cg_op_diag = V(undef, nvar)
   cg_op = opDiagonal(cg_op_diag)
 
   ZHZ = cg_op' * H * cg_op
+  cg_solver = CgSolver(ZHZ, Hs)
   return TronSolver{T, V, Op}(
     x,
     xc,
@@ -526,8 +526,8 @@ function projected_newton!(
   x::AbstractVector{T},
   H::Union{AbstractMatrix, AbstractLinearOperator},
   g::AbstractVector{T},
-  Δ::Real,
-  cgtol::Real,
+  Δ::T,
+  cgtol::T,
   ℓ::AbstractVector{T},
   u::AbstractVector{T},
   s::AbstractVector{T},
@@ -566,7 +566,8 @@ function projected_newton!(
       cg_op_diag[i] = ifix[i] ? 0 : 1 # implictly changes cg_op and so ZHZ
     end
 
-    Krylov.solve!(cg_solver, ZHZ, cgs_rhs, radius = Δ, rtol = cgtol, atol = zero(T))
+    Krylov.cg!(cg_solver, ZHZ, cgs_rhs, radius = Δ, rtol = cgtol, atol = zero(T))
+  
     st, stats = cg_solver.x, cg_solver.stats
     status = stats.status
     iters += 1
