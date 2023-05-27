@@ -567,7 +567,7 @@ function projected_newton!(
     end
 
     Krylov.cg!(cg_solver, ZHZ, cgs_rhs, radius = Δ, rtol = cgtol, atol = zero(T))
-  
+
     st, stats = cg_solver.x, cg_solver.stats
     status = stats.status
     iters += 1
