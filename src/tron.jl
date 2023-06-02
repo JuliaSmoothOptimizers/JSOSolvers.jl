@@ -311,17 +311,6 @@ function SolverCore.solve!(
       continue
     end
     tr.ratio = ared / pred
-    verbose > 0 &&
-      mod(stats.iter, verbose) == 0 &&
-      @info log_row([stats.iter, fx, πx, Δ, tr.ratio, cginfo])
-
-    s_norm = nrm2(n, s)
-    if num_success_iters == 0
-      tr.radius = min(Δ, s_norm)
-    end
-
-    # Update the trust region
-    update!(tr, s_norm)
 
     if acceptable(tr)
       num_success_iters += 1
@@ -346,11 +335,24 @@ function SolverCore.solve!(
       x .= xc
     end
 
+    set_iter!(stats, stats.iter + 1)
+
+    verbose > 0 &&
+      mod(stats.iter, verbose) == 0 &&
+      @info log_row([stats.iter, fx, πx, Δ, tr.ratio, cginfo])
+
+    s_norm = nrm2(n, s)
+    if num_success_iters == 0
+      tr.radius = min(Δ, s_norm)
+    end
+
+    # Update the trust region
+    update!(tr, s_norm)
+
     optimal = πx <= ϵ
     unbounded = fx < fmin
 
     set_objective!(stats, fx)
-    set_iter!(stats, stats.iter + 1)
     set_time!(stats, time() - start_time)
     set_dual_residual!(stats, πx)
 
