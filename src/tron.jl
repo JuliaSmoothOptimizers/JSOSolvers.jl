@@ -105,7 +105,7 @@ mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperato
   cg_op_diag::V
   cg_op::LinearOperator{T}
 
-  ZHZ::Aop # LinearOperator{T}
+  ZHZ::Aop
 end
 
 function TronSolver(
