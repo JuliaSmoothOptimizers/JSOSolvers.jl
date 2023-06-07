@@ -84,7 +84,7 @@ stats = solve!(solver, nlp)
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <:
+mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}, Aop <: AbstractLinearOperator{T}} <:
                AbstractOptimizationSolver
   x::V
   xc::V
@@ -105,7 +105,7 @@ mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperato
   cg_op_diag::V
   cg_op::LinearOperator{T}
 
-  ZHZ::LinearOperator{T}
+  ZHZ::Aop
 end
 
 function TronSolver(
@@ -135,7 +135,7 @@ function TronSolver(
 
   ZHZ = cg_op' * H * cg_op
   cg_solver = CgSolver(ZHZ, Hs)
-  return TronSolver{T, V, Op}(
+  return TronSolver{T, V, Op, typeof(ZHZ)}(
     x,
     xc,
     temp,
@@ -293,8 +293,7 @@ function SolverCore.solve!(
       continue
     end
 
-    s, Hs, cgits, cginfo =
-      projected_newton!(solver, x, H, gx, Δ, cgtol, ℓ, u, s, Hs, max_cgiter = max_cgiter)
+    cginfo = projected_newton!(solver, x, H, gx, Δ, cgtol, ℓ, u, s, Hs, max_cgiter = max_cgiter)
 
     slope = dot(n, gx, s)
     qs = dot(n, s, Hs) / 2 + slope
@@ -603,5 +602,5 @@ function projected_newton!(
     status # on trust-region
   end
 
-  return s, Hs, iters, status
+  return status
 end
