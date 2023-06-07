@@ -110,6 +110,7 @@ mutable struct TronSolverNLS{T, V <: AbstractVector{T}} <: AbstractOptimizationS
   gt::V
   gpx::V
   tr::TRONTrustRegion{T, V}
+  Fx::V
   Fc::V
   Av::V
   Atv::V
@@ -130,12 +131,14 @@ function TronSolverNLS(
   gpx = V(undef, nvar)
   tr = TRONTrustRegion(gt, min(one(T), max_radius - eps(T)); max_radius = max_radius, kwargs...)
 
+  Fx = V(undef, nequ)
   Fc = V(undef, nequ)
+
   Av = V(undef, nequ)
   Atv = V(undef, nvar)
   As = V(undef, nequ)
 
-  return TronSolverNLS{T, V}(x, xc, gx, gt, gpx, tr, Fc, Av, Atv, As)
+  return TronSolverNLS{T, V}(x, xc, gx, gt, gpx, tr, Fx, Fc, Av, Atv, As)
 end
 
 function SolverCore.reset!(solver::TronSolverNLS)
@@ -208,17 +211,16 @@ function SolverCore.solve!(
   As = solver.As
   gpx = solver.gpx
   xc = solver.xc
+  Fx, Fc = solver.Fc, solver.Fx
 
-  F(x) = residual(nlp, x)
   A(x) = jac_op_residual!(nlp, x, Av, Atv)
 
   x .= max.(ℓ, min.(x, u))
-  Fx = F(x)
+  residual!(nlp, x, Fx)
   Ax = A(x)
   fx, gx = objgrad!(nlp, x, gx, Fx, recompute = false)
   gt = solver.gt
 
-  Fc = solver.Fc
   num_success_iters = 0
 
   # Optimality measure
@@ -297,7 +299,7 @@ function SolverCore.solve!(
     end
     slope = dot(m, Fx, As)
     qs = dot(As, As) / 2 + slope
-    Fx = F(x)
+    residual!(nlp, x, Fx)
     fx = obj(nlp, x, Fx, recompute = false)
 
     ared, pred = aredpred!(tr, nlp, fc, fx, qs, x, s, slope)
