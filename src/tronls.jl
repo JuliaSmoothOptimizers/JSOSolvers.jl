@@ -15,7 +15,7 @@ function compute_As_slope_qs!(
   s::AbstractVector{T},
   Fx::AbstractVector{T},
 ) where {T <: Real}
-  As .= A * s
+  mul!(As, A, s)
   slope = dot(As, Fx)
   qs = dot(As, As) / 2 + slope
   return slope, qs
@@ -113,6 +113,7 @@ mutable struct TronSolverNLS{T, V <: AbstractVector{T}} <: AbstractOptimizationS
   Fc::V
   Av::V
   Atv::V
+  As::V
 end
 
 function TronSolverNLS(
@@ -132,8 +133,9 @@ function TronSolverNLS(
   Fc = V(undef, nequ)
   Av = V(undef, nequ)
   Atv = V(undef, nvar)
+  As = V(undef, nequ)
 
-  return TronSolverNLS{T, V}(x, xc, gx, gt, gpx, tr, Fc, Av, Atv)
+  return TronSolverNLS{T, V}(x, xc, gx, gt, gpx, tr, Fc, Av, Atv, As)
 end
 
 function SolverCore.reset!(solver::TronSolverNLS)
@@ -203,6 +205,7 @@ function SolverCore.solve!(
   # Preallocation
   Av = solver.Av
   Atv = solver.Atv
+  As = solver.As
   gpx = solver.gpx
   xc = solver.xc
 
@@ -276,8 +279,9 @@ function SolverCore.solve!(
       done = true
       continue
     end
-    s, As, cgits, cginfo = with_logger(subsolver_logger) do
+    cginfo = with_logger(subsolver_logger) do
       projected_gauss_newton!(
+        solver,
         x,
         Ax,
         Fx,
@@ -286,6 +290,7 @@ function SolverCore.solve!(
         s,
         ℓ,
         u,
+        As,
         subsolver = subsolver,
         max_cgiter = max_cgiter,
       )
@@ -504,7 +509,7 @@ function cauchy_ls(
   return α, s, status
 end
 
-"""`projected_gauss_newton!(x, A, Fx, Δ, gctol, s, max_cgiter, ℓ, u)`
+"""`projected_gauss_newton!(solver, x, A, Fx, Δ, gctol, s, max_cgiter, ℓ, u)`
 
 Compute an approximate solution `d` for
 
@@ -514,24 +519,27 @@ starting from `s`.  The steps are computed using the conjugate gradient method
 projected on the active bounds.
 """
 function projected_gauss_newton!(
+  solver::TronSolverNLS{T},
   x::AbstractVector{T},
   A::Union{AbstractMatrix, AbstractLinearOperator},
   Fx::AbstractVector{T},
-  Δ::Real,
-  cgtol::Real,
+  Δ::T,
+  cgtol::T,
   s::AbstractVector{T},
   ℓ::AbstractVector{T},
-  u::AbstractVector{T};
+  u::AbstractVector{T},
+  As::AbstractVector{T};
   subsolver::Symbol = :lsmr,
   max_cgiter::Int = 50,
 ) where {T <: Real}
   n = length(x)
   status = ""
+
   subsolver in tronls_allowed_subsolvers ||
     error("subproblem solver must be one of $tronls_allowed_subsolvers")
-  lssolver = eval(subsolver)
+  lssolver = eval(subsolver) # allocate
 
-  As = A * s
+  mul!(As, A, s)
 
   # Projected Newton Step
   exit_optimal = false
@@ -561,7 +569,7 @@ function projected_gauss_newton!(
     @views w = projected_line_search_ls!(xfree, AZ, Ffree, st, ℓ[ifree], u[ifree])
     @views s[ifree] .+= w
 
-    As .= A * s
+    mul!(As, A, s)
 
     @views Ffree .= As .+ Fx
     if norm(Z' * A' * Ffree) <= cgtol * wanorm
@@ -582,5 +590,5 @@ function projected_gauss_newton!(
 
   x .= xt
 
-  return s, As, iters, status
+  return status
 end
