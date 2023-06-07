@@ -103,7 +103,7 @@ stats = solve!(solver, nls)
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct TronSolverNLS{T, V <: AbstractVector{T}} <: AbstractOptimizationSolver
+mutable struct TronSolverNLS{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <: AbstractOptimizationSolver
   x::V
   xc::V
   gx::V
@@ -114,6 +114,7 @@ mutable struct TronSolverNLS{T, V <: AbstractVector{T}} <: AbstractOptimizationS
   Fc::V
   Av::V
   Atv::V
+  A::Op
   As::V
 end
 
@@ -136,16 +137,21 @@ function TronSolverNLS(
 
   Av = V(undef, nequ)
   Atv = V(undef, nvar)
+  A = jac_op_residual!(nlp, xc, Av, Atv)
   As = V(undef, nequ)
 
-  return TronSolverNLS{T, V}(x, xc, gx, gt, gpx, tr, Fx, Fc, Av, Atv, As)
+  return TronSolverNLS{T, V, typeof(A)}(x, xc, gx, gt, gpx, tr, Fx, Fc, Av, Atv, A, As)
 end
 
 function SolverCore.reset!(solver::TronSolverNLS)
   solver.tr.good_grad = false
   solver
 end
-SolverCore.reset!(solver::TronSolverNLS, ::AbstractNLPModel) = reset!(solver)
+function SolverCore.reset!(solver::TronSolverNLS, nlp::AbstractNLPModel)
+  solver.A = jac_op_residual!(nlp, solver.xc, solver.Av, solver.Atv)
+  reset!(solver)
+  solver
+end
 
 @doc (@doc TronSolverNLS) function tron(
   ::Val{:GaussNewton},
@@ -203,21 +209,18 @@ function SolverCore.solve!(
 
   solver.x .= x
   x = solver.x
+  xc = solver.xc 
   gx = solver.gx
 
   # Preallocation
-  Av = solver.Av
-  Atv = solver.Atv
   As = solver.As
-  gpx = solver.gpx
-  xc = solver.xc
-  Fx, Fc = solver.Fc, solver.Fx
+  Ax = solver.A
 
-  A(x) = jac_op_residual!(nlp, x, Av, Atv)
+  gpx = solver.gpx
+  Fx, Fc = solver.Fc, solver.Fx
 
   x .= max.(ℓ, min.(x, u))
   residual!(nlp, x, Fx)
-  Ax = A(x)
   fx, gx = objgrad!(nlp, x, gx, Fx, recompute = false)
   gt = solver.gt
 
@@ -268,7 +271,7 @@ function SolverCore.solve!(
 
   while !done
     # Current iteration
-    xc .= x
+    xc .= x # implicitly update Ax
     fc = fx
     Fc .= Fx
     Δ = tr.radius
@@ -323,7 +326,6 @@ function SolverCore.solve!(
 
     if acceptable(tr)
       num_success_iters += 1
-      Ax = A(x)
       if tr.good_grad
         gx .= tr.gt
         tr.good_grad = false
