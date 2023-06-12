@@ -47,5 +47,23 @@ if Sys.isunix()
         end
       end
     end
+
+    @testset "$solver" for solver in (:TrunkSolverNLS, :TronSolverNLS)
+      for model in NLPModelsTest.nls_problems
+        nlp = eval(Meta.parse(model))()
+        if unconstrained(nlp)
+          solver = eval(solver)(nlp)
+          x = copy(nlp.meta.x0)
+          stats = GenericExecutionStats(nlp)
+          with_logger(NullLogger()) do
+            SolverCore.solve!(solver, nlp, stats)
+            reset!(solver)
+            reset!(nlp)
+            al = @wrappedallocs SolverCore.solve!(solver, nlp, stats)
+            @test al == 0
+          end
+        end
+      end
+    end
   end
 end
