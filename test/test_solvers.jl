@@ -1,7 +1,6 @@
 using SolverTest
 
 function tests()
-#=
   @testset "Testing NLP solvers" begin
     @testset "Unconstrained solvers" begin
       @testset "$name" for (name, solver) in [
@@ -22,7 +21,6 @@ function tests()
       end
     end
   end
-=#
   @testset "Testing NLS solvers" begin
     @testset "Unconstrained solvers" begin
       @testset "$name" for (name, solver) in [
