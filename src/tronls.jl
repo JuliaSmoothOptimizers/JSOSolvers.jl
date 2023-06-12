@@ -36,7 +36,6 @@ For advanced usage, first define a `TronSolverNLS` to preallocate the memory use
 # Arguments
 - `nls::AbstractNLSModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
-- `subsolver_logger::AbstractLogger = NullLogger()`: subproblem's logger.
 - `x::V = nlp.meta.x0`: the initial guess.
 - `subsolver::Symbol = :lsmr`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.tronls_allowed_subsolvers` for a list.
 - `μ₀::T = T(1e-2)`: algorithm parameter in (0, 0.5).
@@ -178,7 +177,6 @@ function SolverCore.solve!(
   nlp::AbstractNLSModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
-  subsolver_logger::AbstractLogger = NullLogger(),
   x::V = nlp.meta.x0,
   subsolver::Symbol = :lsmr,
   μ₀::Real = T(1e-2),
@@ -289,8 +287,7 @@ function SolverCore.solve!(
       done = true
       continue
     end
-    cginfo = with_logger(subsolver_logger) do
-      projected_gauss_newton!(
+    cginfo = projected_gauss_newton!(
         solver,
         x,
         Ax,
@@ -304,7 +301,7 @@ function SolverCore.solve!(
         subsolver = subsolver,
         max_cgiter = max_cgiter,
       )
-    end
+
     slope = dot(m, Fx, As)
     qs = dot(As, As) / 2 + slope
     residual!(nlp, x, Fx)
