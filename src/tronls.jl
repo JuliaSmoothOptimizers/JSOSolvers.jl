@@ -397,7 +397,9 @@ function projected_line_search_ls!(
   Fx::AbstractVector{T},
   d::AbstractVector{T},
   ℓ::AbstractVector{T},
-  u::AbstractVector{T};
+  u::AbstractVector{T},
+  As::AbstractVector{T},
+  s::AbstractVector{T};
   μ₀::Real = T(1e-2),
 ) where {T <: Real}
   α = one(T)
@@ -406,8 +408,8 @@ function projected_line_search_ls!(
   n = length(x)
   m = length(Fx)
 
-  s = zeros(T, n)
-  As = zeros(T, m)
+  s .= zero(T)
+  As .= zero(T)
 
   search = true
   while search && α > brkmin
