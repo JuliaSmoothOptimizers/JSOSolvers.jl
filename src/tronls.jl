@@ -106,6 +106,7 @@ stats = solve!(solver, nls)
 mutable struct TronSolverNLS{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <: AbstractOptimizationSolver
   x::V
   xc::V
+  temp::V
   gx::V
   gt::V
   gpx::V
@@ -128,6 +129,7 @@ function TronSolverNLS(
   nequ = nlp.nls_meta.nequ
   x = V(undef, nvar)
   xc = V(undef, nvar)
+  temp = V(undef, nvar)
   gx = V(undef, nvar)
   gt = V(undef, nvar)
   gpx = V(undef, nvar)
@@ -142,7 +144,7 @@ function TronSolverNLS(
   A = jac_op_residual!(nlp, xc, Av, Atv)
   As = V(undef, nequ)
 
-  return TronSolverNLS{T, V, typeof(A)}(x, xc, gx, gt, gpx, s, tr, Fx, Fc, Av, Atv, A, As)
+  return TronSolverNLS{T, V, typeof(A)}(x, xc, temp, gx, gt, gpx, s, tr, Fx, Fc, Av, Atv, A, As)
 end
 
 function SolverCore.reset!(solver::TronSolverNLS)
@@ -382,7 +384,7 @@ function SolverCore.solve!(
   stats
 end
 
-"""`s = projected_line_search_ls!(x, A, g, d, ℓ, u; μ₀ = 1e-2)`
+"""`s = projected_line_search_ls!(x, A, g, d, ℓ, u, As, s; μ₀ = 1e-2)`
 
 Performs a projected line search, searching for a step size `t` such that
 
@@ -547,6 +549,8 @@ function projected_gauss_newton!(
   n = length(x)
   status = ""
 
+  w = solver.temp
+
   subsolver in tronls_allowed_subsolvers ||
     error("subproblem solver must be one of $tronls_allowed_subsolvers")
   lssolver = eval(subsolver) # allocate
@@ -578,8 +582,8 @@ function projected_gauss_newton!(
 
     # Projected line search
     xfree = @view xt[ifree]
-    @views w = projected_line_search_ls!(xfree, AZ, Ffree, st, ℓ[ifree], u[ifree])
-    @views s[ifree] .+= w
+    @views projected_line_search_ls!(xfree, AZ, Ffree, st, ℓ[ifree], u[ifree], As, w[ifree])
+    @views s[ifree] .+= w[ifree]
 
     mul!(As, A, s)
 
