@@ -28,7 +28,7 @@ macro wrappedallocs(expr)
   end
 end
 
-if Sys.isunix()
+if Sys.isunix() && (VERSION ≥ v"1.7")
   @testset "Allocation tests" begin
     @testset "$solver" for solver in (:LBFGSSolver, :R2Solver, :TrunkSolver, :TronSolver)
       for model in NLPModelsTest.nlp_problems
