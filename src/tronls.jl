@@ -36,7 +36,6 @@ For advanced usage, first define a `TronSolverNLS` to preallocate the memory use
 # Arguments
 - `nls::AbstractNLSModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
-- `subsolver_logger::AbstractLogger = NullLogger()`: subproblem's logger.
 - `x::V = nlp.meta.x0`: the initial guess.
 - `subsolver::Symbol = :lsmr`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.tronls_allowed_subsolvers` for a list.
 - `μ₀::T = T(1e-2)`: algorithm parameter in (0, 0.5).
@@ -106,6 +105,7 @@ stats = solve!(solver, nls)
 mutable struct TronSolverNLS{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <: AbstractOptimizationSolver
   x::V
   xc::V
+  temp::V
   gx::V
   gt::V
   gpx::V
@@ -128,6 +128,7 @@ function TronSolverNLS(
   nequ = nlp.nls_meta.nequ
   x = V(undef, nvar)
   xc = V(undef, nvar)
+  temp = V(undef, nvar)
   gx = V(undef, nvar)
   gt = V(undef, nvar)
   gpx = V(undef, nvar)
@@ -142,7 +143,7 @@ function TronSolverNLS(
   A = jac_op_residual!(nlp, xc, Av, Atv)
   As = V(undef, nequ)
 
-  return TronSolverNLS{T, V, typeof(A)}(x, xc, gx, gt, gpx, s, tr, Fx, Fc, Av, Atv, A, As)
+  return TronSolverNLS{T, V, typeof(A)}(x, xc, temp, gx, gt, gpx, s, tr, Fx, Fc, Av, Atv, A, As)
 end
 
 function SolverCore.reset!(solver::TronSolverNLS)
@@ -176,7 +177,6 @@ function SolverCore.solve!(
   nlp::AbstractNLSModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
-  subsolver_logger::AbstractLogger = NullLogger(),
   x::V = nlp.meta.x0,
   subsolver::Symbol = :lsmr,
   μ₀::Real = T(1e-2),
@@ -287,8 +287,7 @@ function SolverCore.solve!(
       done = true
       continue
     end
-    cginfo = with_logger(subsolver_logger) do
-      projected_gauss_newton!(
+    cginfo = projected_gauss_newton!(
         solver,
         x,
         Ax,
@@ -302,7 +301,7 @@ function SolverCore.solve!(
         subsolver = subsolver,
         max_cgiter = max_cgiter,
       )
-    end
+
     slope = dot(m, Fx, As)
     qs = dot(As, As) / 2 + slope
     residual!(nlp, x, Fx)
@@ -382,7 +381,7 @@ function SolverCore.solve!(
   stats
 end
 
-"""`s = projected_line_search_ls!(x, A, g, d, ℓ, u; μ₀ = 1e-2)`
+"""`s = projected_line_search_ls!(x, A, g, d, ℓ, u, As, s; μ₀ = 1e-2)`
 
 Performs a projected line search, searching for a step size `t` such that
 
@@ -397,7 +396,9 @@ function projected_line_search_ls!(
   Fx::AbstractVector{T},
   d::AbstractVector{T},
   ℓ::AbstractVector{T},
-  u::AbstractVector{T};
+  u::AbstractVector{T},
+  As::AbstractVector{T},
+  s::AbstractVector{T};
   μ₀::Real = T(1e-2),
 ) where {T <: Real}
   α = one(T)
@@ -406,8 +407,8 @@ function projected_line_search_ls!(
   n = length(x)
   m = length(Fx)
 
-  s = zeros(T, n)
-  As = zeros(T, m)
+  s .= zero(T)
+  As .= zero(T)
 
   search = true
   while search && α > brkmin
@@ -545,6 +546,8 @@ function projected_gauss_newton!(
   n = length(x)
   status = ""
 
+  w = solver.temp
+
   subsolver in tronls_allowed_subsolvers ||
     error("subproblem solver must be one of $tronls_allowed_subsolvers")
   lssolver = eval(subsolver) # allocate
@@ -576,8 +579,8 @@ function projected_gauss_newton!(
 
     # Projected line search
     xfree = @view xt[ifree]
-    @views w = projected_line_search_ls!(xfree, AZ, Ffree, st, ℓ[ifree], u[ifree])
-    @views s[ifree] .+= w
+    @views projected_line_search_ls!(xfree, AZ, Ffree, st, ℓ[ifree], u[ifree], As, w[ifree])
+    @views s[ifree] .+= w[ifree]
 
     mul!(As, A, s)
 
