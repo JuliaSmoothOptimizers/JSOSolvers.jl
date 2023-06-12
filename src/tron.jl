@@ -84,8 +84,12 @@ stats = solve!(solver, nlp)
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct TronSolver{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}, Aop <: AbstractLinearOperator{T}} <:
-               AbstractOptimizationSolver
+mutable struct TronSolver{
+  T,
+  V <: AbstractVector{T},
+  Op <: AbstractLinearOperator{T},
+  Aop <: AbstractLinearOperator{T},
+} <: AbstractOptimizationSolver
   x::V
   xc::V
   temp::V

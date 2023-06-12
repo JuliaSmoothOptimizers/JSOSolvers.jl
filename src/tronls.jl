@@ -102,7 +102,8 @@ stats = solve!(solver, nls)
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct TronSolverNLS{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <: AbstractOptimizationSolver
+mutable struct TronSolverNLS{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <:
+               AbstractOptimizationSolver
   x::V
   xc::V
   temp::V
@@ -211,7 +212,7 @@ function SolverCore.solve!(
 
   solver.x .= x
   x = solver.x
-  xc = solver.xc 
+  xc = solver.xc
   gx = solver.gx
 
   # Preallocation
@@ -288,19 +289,19 @@ function SolverCore.solve!(
       continue
     end
     cginfo = projected_gauss_newton!(
-        solver,
-        x,
-        Ax,
-        Fx,
-        Δ,
-        cgtol,
-        s,
-        ℓ,
-        u,
-        As,
-        subsolver = subsolver,
-        max_cgiter = max_cgiter,
-      )
+      solver,
+      x,
+      Ax,
+      Fx,
+      Δ,
+      cgtol,
+      s,
+      ℓ,
+      u,
+      As,
+      subsolver = subsolver,
+      max_cgiter = max_cgiter,
+    )
 
     slope = dot(m, Fx, As)
     qs = dot(As, As) / 2 + slope
