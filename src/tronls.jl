@@ -1,6 +1,6 @@
 export TronSolverNLS
 
-const tronls_allowed_subsolvers = [:cgls, :crls, :lsqr, :lsmr]
+const tronls_allowed_subsolvers = [CglsSolver, CrlsSolver, LsqrSolver, LsmrSolver]
 
 tron(nls::AbstractNLSModel; variant = :GaussNewton, kwargs...) = tron(Val(variant), nls; kwargs...)
 
@@ -30,14 +30,14 @@ nonlinear least-squares problems:
     min ½‖F(x)‖²    s.t.    ℓ ≦ x ≦ u
 
 For advanced usage, first define a `TronSolverNLS` to preallocate the memory used in the algorithm, and then call `solve!`:
-    solver = TronSolverNLS(nls; kwargs...)
+    solver = TronSolverNLS(nls, subsolver_type::Type{<:KrylovSolver} = LsmrSolver; kwargs...)
     solve!(solver, nls; kwargs...)
 
 # Arguments
 - `nls::AbstractNLSModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
-- `subsolver::Symbol = :lsmr`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.tronls_allowed_subsolvers` for a list.
+- `subsolver_type::Symbol = LsmrSolver`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.tronls_allowed_subsolvers` for a list.
 - `μ₀::T = T(1e-2)`: algorithm parameter in (0, 0.5).
 - `μ₁::T = one(T)`: algorithm parameter in (0, +∞).
 - `σ::T = T(10)`: algorithm parameter in (1, +∞).
@@ -102,8 +102,13 @@ stats = solve!(solver, nls)
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct TronSolverNLS{T, V <: AbstractVector{T}, Op <: AbstractLinearOperator{T}} <:
-               AbstractOptimizationSolver
+mutable struct TronSolverNLS{
+  T,
+  V <: AbstractVector{T},
+  Sub <: KrylovSolver{T, T, V},
+  Op <: AbstractLinearOperator{T},
+  Aop <: AbstractLinearOperator{T},
+} <: AbstractOptimizationSolver
   x::V
   xc::V
   temp::V
@@ -118,13 +123,26 @@ mutable struct TronSolverNLS{T, V <: AbstractVector{T}, Op <: AbstractLinearOper
   Atv::V
   A::Op
   As::V
+
+  ifix::BitVector
+
+  ls_rhs::V
+  ls_op_diag::V
+  ls_op::LinearOperator{T}
+
+  AZ::Aop
+  ls_subsolver::Sub
 end
 
 function TronSolverNLS(
   nlp::AbstractNLSModel{T, V};
+  subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
   max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
   kwargs...,
 ) where {T, V <: AbstractVector{T}}
+  subsolver_type in tronls_allowed_subsolvers ||
+  error("subproblem solver must be one of $(tronls_allowed_subsolvers)")
+
   nvar = nlp.meta.nvar
   nequ = nlp.nls_meta.nequ
   x = V(undef, nvar)
@@ -144,7 +162,17 @@ function TronSolverNLS(
   A = jac_op_residual!(nlp, xc, Av, Atv)
   As = V(undef, nequ)
 
-  return TronSolverNLS{T, V, typeof(A)}(x, xc, temp, gx, gt, gpx, s, tr, Fx, Fc, Av, Atv, A, As)
+  ifix = BitVector(undef, nvar)
+
+  ls_rhs = V(undef, nequ)
+  ls_op_diag = V(undef, nvar)
+  ls_op = opDiagonal(ls_op_diag)
+
+  AZ = A * ls_op
+  ls_subsolver = subsolver_type(AZ, As)
+  Sub = typeof(ls_subsolver)
+
+  return TronSolverNLS{T, V, Sub, typeof(A), typeof(AZ)}(x, xc, temp, gx, gt, gpx, s, tr, Fx, Fc, Av, Atv, A, As, ifix, ls_rhs, ls_op_diag, ls_op, AZ, ls_subsolver)
 end
 
 function SolverCore.reset!(solver::TronSolverNLS)
@@ -153,6 +181,7 @@ function SolverCore.reset!(solver::TronSolverNLS)
 end
 function SolverCore.reset!(solver::TronSolverNLS, nlp::AbstractNLPModel)
   solver.A = jac_op_residual!(nlp, solver.xc, solver.Av, solver.Atv)
+  solver.AZ = solver.A * solver.ls_op
   reset!(solver)
   solver
 end
@@ -161,12 +190,13 @@ end
   ::Val{:GaussNewton},
   nlp::AbstractNLSModel{T, V};
   x::V = nlp.meta.x0,
+  subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
   kwargs...,
 ) where {T, V}
   dict = Dict(kwargs)
   subsolver_keys = intersect(keys(dict), tron_keys)
   subsolver_kwargs = Dict(k => dict[k] for k in subsolver_keys)
-  solver = TronSolverNLS(nlp; subsolver_kwargs...)
+  solver = TronSolverNLS(nlp, subsolver_type = subsolver_type; subsolver_kwargs...)
   for k in subsolver_keys
     pop!(dict, k)
   end
@@ -179,7 +209,6 @@ function SolverCore.solve!(
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
   x::V = nlp.meta.x0,
-  subsolver::Symbol = :lsmr,
   μ₀::Real = T(1e-2),
   μ₁::Real = one(T),
   σ::Real = T(10),
@@ -299,7 +328,6 @@ function SolverCore.solve!(
       ℓ,
       u,
       As,
-      subsolver = subsolver,
       max_cgiter = max_cgiter,
     )
 
@@ -541,52 +569,57 @@ function projected_gauss_newton!(
   ℓ::AbstractVector{T},
   u::AbstractVector{T},
   As::AbstractVector{T};
-  subsolver::Symbol = :lsmr,
   max_cgiter::Int = 50,
 ) where {T <: Real}
   n = length(x)
   status = ""
 
   w = solver.temp
+  ls_rhs = solver.ls_rhs
+  ls_op_diag, AZ = solver.ls_op_diag, solver.AZ
 
-  subsolver in tronls_allowed_subsolvers ||
-    error("subproblem solver must be one of $tronls_allowed_subsolvers")
-  lssolver = eval(subsolver) # allocate
+  ifix = solver.ifix
+  ls_subsolver = solver.ls_subsolver
 
   mul!(As, A, s)
+
+  Fxnorm = norm(Fx)
 
   # Projected Newton Step
   exit_optimal = false
   exit_pcg = false
   exit_itmax = false
   iters = 0
-  xt = x .+ s
-  project!(xt, xt, ℓ, u)
+  x .= x .+ s
+  project!(x, x, ℓ, u)
   while !(exit_optimal || exit_pcg || exit_itmax)
-    ifree = setdiff(1:n, active(xt, ℓ, u))
-    if length(ifree) == 0
+    active!(ifix, x, ℓ, u)
+    if sum(ifix) == n
       exit_optimal = true
       continue
     end
-    Z = opExtension(ifree, n)
-    @views wa = Fx
-    @views Ffree = As + wa
-    wanorm = norm(wa)
 
-    AZ = A * Z
-    st, stats = lssolver(AZ, -Ffree, radius = Δ, rtol = cgtol, atol = zero(T))
+    for i = 1:n
+      ls_op_diag[i] = ifix[i] ? 0 : 1 # implictly changes ls_op and so AZ
+    end
+
+    ls_rhs .= .- As .- Fx
+    Krylov.solve!(ls_subsolver, AZ, ls_rhs, radius = Δ, rtol = cgtol, atol = zero(T))
+    
+    st, stats = ls_subsolver.x, ls_subsolver.stats
     iters += 1
     status = stats.status
 
     # Projected line search
-    xfree = @view xt[ifree]
-    @views projected_line_search_ls!(xfree, AZ, Ffree, st, ℓ[ifree], u[ifree], As, w[ifree])
-    @views s[ifree] .+= w[ifree]
+    ls_rhs .*= -1
+    projected_line_search_ls!(x, AZ, ls_rhs, st, ℓ, u, As, w)
+    s .+= w
 
     mul!(As, A, s)
 
-    @views Ffree .= As .+ Fx
-    if norm(Z' * A' * Ffree) <= cgtol * wanorm
+    ls_rhs .= .- As .- Fx
+    mul!(w, AZ', ls_rhs)
+    if norm(w) <= cgtol * Fxnorm
       exit_optimal = true
     elseif status == "on trust-region boundary"
       exit_pcg = true
@@ -601,8 +634,6 @@ function projected_gauss_newton!(
   else
     status # on trust-region
   end
-
-  x .= xt
 
   return status
 end
