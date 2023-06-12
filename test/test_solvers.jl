@@ -21,13 +21,12 @@ function tests()
       end
     end
   end
-
   @testset "Testing NLS solvers" begin
     @testset "Unconstrained solvers" begin
       @testset "$name" for (name, solver) in [
         ("trunk+cgls", (nls; kwargs...) -> trunk(nls, subsolver_type = CglsSolver; kwargs...)), # trunk with cgls due to multiprecision
         ("trunk full Hessian", (nls; kwargs...) -> trunk(nls, variant = :Newton; kwargs...)),
-        ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver = :cgls; kwargs...)),
+        ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver_type = CglsSolver; kwargs...)),
         ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant = :Newton; kwargs...)),
       ]
         unconstrained_nls(solver)
@@ -36,7 +35,7 @@ function tests()
     end
     @testset "Bound-constrained solvers" begin
       @testset "$name" for (name, solver) in [
-        ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver = :cgls; kwargs...)),
+        ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver_type = CglsSolver; kwargs...)),
         ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant = :Newton; kwargs...)),
       ]
         bound_constrained_nls(solver)
