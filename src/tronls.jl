@@ -109,6 +109,7 @@ mutable struct TronSolverNLS{T, V <: AbstractVector{T}, Op <: AbstractLinearOper
   gx::V
   gt::V
   gpx::V
+  s::V
   tr::TRONTrustRegion{T, V}
   Fx::V
   Fc::V
@@ -130,6 +131,7 @@ function TronSolverNLS(
   gx = V(undef, nvar)
   gt = V(undef, nvar)
   gpx = V(undef, nvar)
+  s = V(undef, nvar)
   tr = TRONTrustRegion(gt, min(one(T), max_radius - eps(T)); max_radius = max_radius, kwargs...)
 
   Fx = V(undef, nequ)
@@ -140,7 +142,7 @@ function TronSolverNLS(
   A = jac_op_residual!(nlp, xc, Av, Atv)
   As = V(undef, nequ)
 
-  return TronSolverNLS{T, V, typeof(A)}(x, xc, gx, gt, gpx, tr, Fx, Fc, Av, Atv, A, As)
+  return TronSolverNLS{T, V, typeof(A)}(x, xc, gx, gt, gpx, s, tr, Fx, Fc, Av, Atv, A, As)
 end
 
 function SolverCore.reset!(solver::TronSolverNLS)
@@ -213,6 +215,7 @@ function SolverCore.solve!(
   gx = solver.gx
 
   # Preallocation
+  s = solver.s
   As = solver.As
   Ax = solver.A
 
@@ -276,7 +279,7 @@ function SolverCore.solve!(
     Fc .= Fx
     Δ = tr.radius
 
-    αC, s, cauchy_status = cauchy_ls(x, Ax, Fx, gx, Δ, αC, ℓ, u, μ₀ = μ₀, μ₁ = μ₁, σ = σ)
+    αC, s, cauchy_status = cauchy_ls!(x, Ax, Fx, gx, Δ, αC, ℓ, u, s, As, μ₀ = μ₀, μ₁ = μ₁, σ = σ)
 
     if cauchy_status != :success
       @error "Cauchy step returned: $cauchy_status"
@@ -429,7 +432,7 @@ function projected_line_search_ls!(
   return s
 end
 
-"""`α, s = cauchy_ls(x, A, Fx, g, Δ, ℓ, u; μ₀ = 1e-2, μ₁ = 1.0, σ=10.0)`
+"""`α, s = cauchy_ls!(x, A, Fx, g, Δ, ℓ, u, s, As; μ₀ = 1e-2, μ₁ = 1.0, σ=10.0)`
 
 Computes a Cauchy step `s = P(x - α g) - x` for
 
@@ -441,7 +444,7 @@ with the sufficient decrease condition
 
 where g = AᵀFx.
 """
-function cauchy_ls(
+function cauchy_ls!(
   x::AbstractVector{T},
   A::Union{AbstractMatrix, AbstractLinearOperator},
   Fx::AbstractVector{T},
@@ -449,17 +452,20 @@ function cauchy_ls(
   Δ::Real,
   α::Real,
   ℓ::AbstractVector{T},
-  u::AbstractVector{T};
+  u::AbstractVector{T},
+  s::AbstractVector{T},
+  As::AbstractVector{T};
   μ₀::Real = T(1e-2),
   μ₁::Real = one(T),
   σ::Real = T(10),
 ) where {T <: Real}
   # TODO: Use brkmin to care for g direction
-  _, _, brkmax = breakpoints(x, -g, ℓ, u)
+  s .= .-g
+  _, _, brkmax = breakpoints(x, s, ℓ, u)
+
   n = length(x)
-  m = length(Fx)
-  s = zeros(T, n)
-  As = zeros(T, m)
+  s .= zero(T)
+  As .= zero(T)
 
   status = :success
 
