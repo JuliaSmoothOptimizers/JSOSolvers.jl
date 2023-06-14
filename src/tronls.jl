@@ -141,7 +141,7 @@ function TronSolverNLS(
   kwargs...,
 ) where {T, V <: AbstractVector{T}}
   subsolver_type in tronls_allowed_subsolvers ||
-  error("subproblem solver must be one of $(tronls_allowed_subsolvers)")
+    error("subproblem solver must be one of $(tronls_allowed_subsolvers)")
 
   nvar = nlp.meta.nvar
   nequ = nlp.nls_meta.nequ
@@ -172,7 +172,28 @@ function TronSolverNLS(
   ls_subsolver = subsolver_type(AZ, As)
   Sub = typeof(ls_subsolver)
 
-  return TronSolverNLS{T, V, Sub, typeof(A), typeof(AZ)}(x, xc, temp, gx, gt, gpx, s, tr, Fx, Fc, Av, Atv, A, As, ifix, ls_rhs, ls_op_diag, ls_op, AZ, ls_subsolver)
+  return TronSolverNLS{T, V, Sub, typeof(A), typeof(AZ)}(
+    x,
+    xc,
+    temp,
+    gx,
+    gt,
+    gpx,
+    s,
+    tr,
+    Fx,
+    Fc,
+    Av,
+    Atv,
+    A,
+    As,
+    ifix,
+    ls_rhs,
+    ls_op_diag,
+    ls_op,
+    AZ,
+    ls_subsolver,
+  )
 end
 
 function SolverCore.reset!(solver::TronSolverNLS)
@@ -317,19 +338,8 @@ function SolverCore.solve!(
       done = true
       continue
     end
-    cginfo = projected_gauss_newton!(
-      solver,
-      x,
-      Ax,
-      Fx,
-      Δ,
-      cgtol,
-      s,
-      ℓ,
-      u,
-      As,
-      max_cgiter = max_cgiter,
-    )
+    cginfo =
+      projected_gauss_newton!(solver, x, Ax, Fx, Δ, cgtol, s, ℓ, u, As, max_cgiter = max_cgiter)
 
     slope = dot(m, Fx, As)
     qs = dot(As, As) / 2 + slope
@@ -603,9 +613,9 @@ function projected_gauss_newton!(
       ls_op_diag[i] = ifix[i] ? 0 : 1 # implictly changes ls_op and so AZ
     end
 
-    ls_rhs .= .- As .- Fx
+    ls_rhs .= .-As .- Fx
     Krylov.solve!(ls_subsolver, AZ, ls_rhs, radius = Δ, rtol = cgtol, atol = zero(T))
-    
+
     st, stats = ls_subsolver.x, ls_subsolver.stats
     iters += 1
     status = stats.status
@@ -617,7 +627,7 @@ function projected_gauss_newton!(
 
     mul!(As, A, s)
 
-    ls_rhs .= .- As .- Fx
+    ls_rhs .= .-As .- Fx
     mul!(w, AZ', ls_rhs)
     if norm(w) <= cgtol * Fxnorm
       exit_optimal = true
