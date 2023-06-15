@@ -346,7 +346,7 @@ function SolverCore.solve!(
     residual!(nlp, x, Fx)
     fx = obj(nlp, x, Fx, recompute = false)
 
-    ared, pred = aredpred!(tr, nlp, fc, fx, qs, x, s, slope)
+    ared, pred = aredpred!(tr, nlp, Fx, fc, fx, qs, x, s, slope)
     if pred ≥ 0
       stats.status = :neg_pred
       done = true
