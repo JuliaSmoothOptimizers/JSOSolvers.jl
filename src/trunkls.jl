@@ -290,7 +290,7 @@ function SolverCore.solve!(
     residual!(nlp, xt, rt)
     ft = obj(nlp, x, rt, recompute = false)
 
-    ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
+    ared, pred = aredpred!(tr, nlp, rt, f, ft, Δq, xt, s, slope)
     if pred ≥ 0
       stats.status = :neg_pred
       done = true
@@ -299,7 +299,7 @@ function SolverCore.solve!(
     tr.ratio = ared / pred
 
     if !monotone
-      ared_hist, pred_hist = aredpred!(tr, nlp, fref, ft, σref + Δq, xt, s, slope)
+      ared_hist, pred_hist = aredpred!(tr, nlp, rt, fref, ft, σref + Δq, xt, s, slope)
       if pred_hist ≥ 0
         stats.status = :neg_pred
         done = true
@@ -337,7 +337,7 @@ function SolverCore.solve!(
       scal!(n, α, s)
       slope *= α
       Δq = slope + α * α * curv / 2
-      ared, pred = aredpred!(tr, nlp, f, ft, Δq, xt, s, slope)
+      ared, pred = aredpred!(tr, nlp, rt, f, ft, Δq, xt, s, slope)
       if pred ≥ 0
         stats.status = :neg_pred
         done = true
@@ -345,7 +345,7 @@ function SolverCore.solve!(
       end
       tr.ratio = ared / pred
       if !monotone
-        ared_hist, pred_hist = aredpred!(tr, nlp, fref, ft, σref + Δq, xt, s, slope)
+        ared_hist, pred_hist = aredpred!(tr, nlp, rt, fref, ft, σref + Δq, xt, s, slope)
         if pred_hist ≥ 0
           stats.status = :neg_pred
           done = true
