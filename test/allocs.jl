@@ -28,13 +28,13 @@ macro wrappedallocs(expr)
   end
 end
 
-if Sys.isunix() && (VERSION ≥ v"1.7")
+if Sys.isunix()
   @testset "Allocation tests" begin
-    @testset "$solver" for solver in (:LBFGSSolver, :R2Solver, :TrunkSolver, :TronSolver)
+    @testset "$symsolver" for symsolver in (:LBFGSSolver, :R2Solver, :TrunkSolver, :TronSolver)
       for model in NLPModelsTest.nlp_problems
         nlp = eval(Meta.parse(model))()
-        if unconstrained(nlp)
-          solver = eval(solver)(nlp)
+        if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolver))
+          solver = eval(symsolver)(nlp)
           x = copy(nlp.meta.x0)
           stats = GenericExecutionStats(nlp)
           with_logger(NullLogger()) do
@@ -48,11 +48,11 @@ if Sys.isunix() && (VERSION ≥ v"1.7")
       end
     end
 
-    @testset "$solver" for solver in (:TrunkSolverNLS, :TronSolverNLS)
+    @testset "$symsolver" for symsolver in (:TrunkSolverNLS, :TronSolverNLS)
       for model in NLPModelsTest.nls_problems
         nlp = eval(Meta.parse(model))()
-        if unconstrained(nlp)
-          solver = eval(solver)(nlp)
+        if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolverNLS))
+          solver = eval(symsolver)(nlp)
           x = copy(nlp.meta.x0)
           stats = GenericExecutionStats(nlp)
           with_logger(NullLogger()) do
