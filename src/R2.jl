@@ -72,6 +72,7 @@ mutable struct R2Solver{T, V} <: AbstractOptimizationSolver
   gx::V
   cx::V
   d::V   # used for momentum term
+  σk::T
 end
 
 function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
@@ -79,7 +80,8 @@ function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   gx = similar(nlp.meta.x0)
   cx = similar(nlp.meta.x0)
   d = fill!(similar(nlp.meta.x0), 0)
-  return R2Solver{T, V}(x, gx, cx, d)
+  σk = zero(T) # init it to zero for now 
+  return SR2Solver{T, V}(x, gx, cx, d, σk)
 end
 
 @doc (@doc R2Solver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
@@ -122,6 +124,7 @@ function SolverCore.solve!(
   ∇fk = solver.gx
   ck = solver.cx
   d = solver.d
+  σk = solver.σk
 
   set_iter!(stats, 0)
   set_objective!(stats, obj(nlp, x))
@@ -131,7 +134,6 @@ function SolverCore.solve!(
   set_dual_residual!(stats, norm_∇fk)
 
   σk = 2^round(log2(norm_∇fk + 1))
-
   # Stopping criterion: 
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
