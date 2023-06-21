@@ -81,7 +81,7 @@ function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   cx = similar(nlp.meta.x0)
   d = fill!(similar(nlp.meta.x0), 0)
   σ = zero(T) # init it to zero for now 
-  return SR2Solver{T, V}(x, gx, cx, d, σ)
+  return R2Solver{T, V}(x, gx, cx, d, σ)
 end
 
 @doc (@doc R2Solver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
