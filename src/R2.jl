@@ -159,7 +159,8 @@ function SolverCore.solve!(
       max_time = max_time,
     ),
   )
-
+  
+  solver.σ = σk 
   callback(nlp, solver, stats)
 
   done = stats.status != :unknown
@@ -217,7 +218,7 @@ function SolverCore.solve!(
         max_time = max_time,
       ),
     )
-
+    solver.σ = σk 
     callback(nlp, solver, stats)
 
     done = stats.status != :unknown
