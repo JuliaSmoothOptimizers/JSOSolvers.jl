@@ -80,8 +80,8 @@ function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   gx = similar(nlp.meta.x0)
   cx = similar(nlp.meta.x0)
   d = fill!(similar(nlp.meta.x0), 0)
-  σk = zero(T) # init it to zero for now 
-  return SR2Solver{T, V}(x, gx, cx, d, σk)
+  σ = zero(T) # init it to zero for now 
+  return SR2Solver{T, V}(x, gx, cx, d, σ)
 end
 
 @doc (@doc R2Solver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
@@ -124,7 +124,7 @@ function SolverCore.solve!(
   ∇fk = solver.gx
   ck = solver.cx
   d = solver.d
-  σk = solver.σk
+  σk = solver.σ
 
   set_iter!(stats, 0)
   set_objective!(stats, obj(nlp, x))

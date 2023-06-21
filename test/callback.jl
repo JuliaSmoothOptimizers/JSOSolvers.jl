@@ -52,3 +52,22 @@ end
   end
   @test stats.iter == 8
 end
+
+@testset "Testing Solver Values" begin
+  f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
+  nlp = ADNLPModel(f, [-1.2; 1.0])
+  X = [nlp.meta.x0[1]]
+  Y = [nlp.meta.x0[2]]
+  function cb(nlp, solver, stats)
+    x = solver.x
+    push!(X, x[1])
+    push!(Y, x[2])
+    if stats.iter == 4
+      @test solver.σ > 0.0
+      stats.status = :user
+    end
+  end
+  stats = with_logger(NullLogger()) do
+    R2(nlp, callback = cb)
+  end
+end
