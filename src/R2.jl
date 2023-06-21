@@ -72,7 +72,7 @@ mutable struct R2Solver{T, V} <: AbstractOptimizationSolver
   gx::V
   cx::V
   d::V   # used for momentum term
-  σk::T
+  σ::T
 end
 
 function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
