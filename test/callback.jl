@@ -59,9 +59,6 @@ end
   X = [nlp.meta.x0[1]]
   Y = [nlp.meta.x0[2]]
   function cb(nlp, solver, stats)
-    x = solver.x
-    push!(X, x[1])
-    push!(Y, x[2])
     if stats.iter == 4
       @test solver.σ > 0.0
       stats.status = :user
