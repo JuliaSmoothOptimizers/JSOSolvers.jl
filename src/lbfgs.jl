@@ -163,6 +163,7 @@ function SolverCore.solve!(
     [Int, T, T, T, Int],
     hdr_override = Dict(:f => "f(x)", :dual => "‖∇f‖", :slope => "∇fᵀd"),
   )
+  verbose > 0 && @info log_row(Any[stats.iter, f, ∇fNorm, T, Int])
 
   optimal = ∇fNorm ≤ ϵ
 
@@ -197,10 +198,6 @@ function SolverCore.solve!(
     t, good_grad, ft, nbk, nbW =
       armijo_wolfe(h, f, slope, ∇ft, τ₁ = τ₁, bk_max = bk_max, verbose = Bool(verbose_subsolver))
 
-    verbose > 0 &&
-      mod(stats.iter, verbose) == 0 &&
-      @info log_row(Any[stats.iter, f, ∇fNorm, slope, nbk])
-
     copyaxpy!(n, t, d, x, xt)
     good_grad || grad!(nlp, xt, ∇ft)
 
@@ -216,8 +213,13 @@ function SolverCore.solve!(
 
     ∇fNorm = nrm2(n, ∇f)
 
-    set_objective!(stats, f)
     set_iter!(stats, stats.iter + 1)
+
+    verbose > 0 &&
+      mod(stats.iter, verbose) == 0 &&
+      @info log_row(Any[stats.iter, f, ∇fNorm, slope, nbk])
+
+    set_objective!(stats, f)
     set_time!(stats, time() - start_time)
     set_dual_residual!(stats, ∇fNorm)
     optimal = ∇fNorm ≤ ϵ
