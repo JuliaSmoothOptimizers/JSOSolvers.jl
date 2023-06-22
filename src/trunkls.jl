@@ -243,6 +243,7 @@ function SolverCore.solve!(
     [Int, T, T, T, T, T, Int, Int, String],
     hdr_override = Dict(:f => "f(x)", :dual => "‖∇f‖", :radius => "Δ"),
   )
+  verbose > 0 && @info log_row([stats.iter, f, ∇fNorm2, T, T, T, Int, Int, String])
 
   set_status!(
     stats,
@@ -356,19 +357,6 @@ function SolverCore.solve!(
       end
     end
 
-    verbose > 0 &&
-      mod(stats.iter, verbose) == 0 &&
-      @info log_row([
-        stats.iter,
-        f,
-        ∇fNorm2,
-        tr.radius,
-        sNorm,
-        tr.ratio,
-        length(cg_stats.residuals),
-        bk,
-        cg_stats.status,
-      ])
     set_iter!(stats, stats.iter + 1)
 
     if acceptable(tr)
@@ -415,6 +403,20 @@ function SolverCore.solve!(
     set_objective!(stats, f)
     set_time!(stats, time() - start_time)
     set_dual_residual!(stats, ∇fNorm2)
+
+    verbose > 0 &&
+      mod(stats.iter, verbose) == 0 &&
+      @info log_row([
+        stats.iter,
+        f,
+        ∇fNorm2,
+        tr.radius,
+        sNorm,
+        tr.ratio,
+        length(cg_stats.residuals),
+        bk,
+        cg_stats.status,
+      ])
 
     optimal = ∇fNorm2 ≤ ϵ
     small_residual = 2 * √f ≤ ϵF

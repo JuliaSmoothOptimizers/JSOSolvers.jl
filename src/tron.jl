@@ -263,6 +263,7 @@ function SolverCore.solve!(
     [Int, T, T, T, T, String],
     hdr_override = Dict(:f => "f(x)", :dual => "π", :radius => "Δ"),
   )
+  verbose > 0 && @info log_row([stats.iter, fx, πx, T, T, String])
 
   set_status!(
     stats,
