@@ -375,16 +375,18 @@ function SolverCore.solve!(
         ∇fn .= ∇f
       end
 
-      verbose > 0 && mod(stats.iter, verbose) == 0 && @info log_row([
-        stats.iter,
-        f,
-        ∇fNorm2,
-        tr.radius,
-        tr.ratio,
-        length(cg_stats.residuals),
-        bk,
-        cg_stats.status,
-      ])
+      verbose > 0 &&
+        mod(stats.iter, verbose) == 0 &&
+        @info log_row([
+          stats.iter,
+          f,
+          ∇fNorm2,
+          tr.radius,
+          tr.ratio,
+          length(cg_stats.residuals),
+          bk,
+          cg_stats.status,
+        ])
     end
 
     # Move on.
