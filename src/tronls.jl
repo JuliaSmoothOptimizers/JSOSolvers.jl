@@ -303,6 +303,7 @@ function SolverCore.solve!(
     [Int, T, T, T, T, String],
     hdr_override = Dict(:f => "f(x)", :dual => "π", :radius => "Δ"),
   )
+  verbose > 0 && @info log_row([stats.iter, fx, πx, T, T, String])
 
   set_status!(
     stats,
@@ -353,9 +354,6 @@ function SolverCore.solve!(
       continue
     end
     tr.ratio = ared / pred
-    verbose > 0 &&
-      mod(stats.iter, verbose) == 0 &&
-      @info log_row([stats.iter, fx, πx, Δ, tr.ratio, cginfo])
 
     s_norm = nrm2(n, s)
     if num_success_iters == 0
@@ -394,6 +392,10 @@ function SolverCore.solve!(
     project_step!(gpx, x, x, ℓ, u, zero(T)) # Proj(x) - x
     small_residual = (norm(gpx) <= ϵ) && (2 * √fx <= ϵF)
     unbounded = fx < fmin
+
+    verbose > 0 &&
+      mod(stats.iter, verbose) == 0 &&
+      @info log_row([stats.iter, fx, πx, Δ, tr.ratio, cginfo])
 
     set_status!(
       stats,

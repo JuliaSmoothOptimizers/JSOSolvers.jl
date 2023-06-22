@@ -215,6 +215,7 @@ function SolverCore.solve!(
     [Int, T, T, T, T, Int, Int, String],
     hdr_override = Dict(:f => "f(x)", :dual => "π", :radius => "Δ"),
   )
+  verbose > 0 && @info log_row([stats.iter, f, ∇fNorm2, T, T, Int, Int, String])
 
   set_status!(
     stats,
@@ -325,18 +326,6 @@ function SolverCore.solve!(
       end
     end
 
-    verbose > 0 &&
-      mod(stats.iter, verbose) == 0 &&
-      @info log_row([
-        stats.iter,
-        f,
-        ∇fNorm2,
-        tr.radius,
-        tr.ratio,
-        length(cg_stats.residuals),
-        bk,
-        cg_stats.status,
-      ])
     set_iter!(stats, stats.iter + 1)
 
     if acceptable(tr)
@@ -385,6 +374,17 @@ function SolverCore.solve!(
         push!(nlp, s, ∇fn)
         ∇fn .= ∇f
       end
+
+      verbose > 0 && mod(stats.iter, verbose) == 0 && @info log_row([
+        stats.iter,
+        f,
+        ∇fNorm2,
+        tr.radius,
+        tr.ratio,
+        length(cg_stats.residuals),
+        bk,
+        cg_stats.status,
+      ])
     end
 
     # Move on.
