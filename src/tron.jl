@@ -577,7 +577,7 @@ function projected_newton!(
       cg_op_diag[i] = ifix[i] ? 0 : 1 # implictly changes cg_op and so ZHZ
     end
 
-    Krylov.cg!(cg_solver, ZHZ, cgs_rhs, radius = Δ, rtol = cgtol, atol = zero(T), verbose = subsolver_verbose)
+    Krylov.cg!(cg_solver, ZHZ, cgs_rhs, radius = Δ, rtol = cgtol, atol = zero(T), verbose = verbose_subsolver)
 
     st, stats = cg_solver.x, cg_solver.stats
     status = stats.status
