@@ -33,6 +33,7 @@ The keyword arguments may include
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
+- `verbose_subsolver::Int = 0`: if > 0, display iteration information every `verbose_subsolver` iteration of the subsolver.
 
 The keyword arguments of `TronSolver` are passed to the [`TRONTrustRegion`](https://github.com/JuliaSmoothOptimizers/SolverTools.jl/blob/main/src/trust-region/tron-trust-region.jl) constructor.
 
@@ -207,6 +208,7 @@ function SolverCore.solve!(
   atol::T = √eps(T),
   rtol::T = √eps(T),
   verbose::Int = 0,
+  verbose_subsolver::Int = 0,
 ) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("tron only works for minimization problem")
@@ -298,7 +300,7 @@ function SolverCore.solve!(
       continue
     end
 
-    cginfo = projected_newton!(solver, x, H, gx, Δ, cgtol, ℓ, u, s, Hs, max_cgiter = max_cgiter)
+    cginfo = projected_newton!(solver, x, H, gx, Δ, cgtol, ℓ, u, s, Hs, max_cgiter = max_cgiter, verbose_subsolver = verbose_subsolver)
 
     slope = dot(n, gx, s)
     qs = dot(n, s, Hs) / 2 + slope
@@ -518,7 +520,9 @@ function cauchy!(
   return α, s, status
 end
 
-"""`projected_newton!(solver, x, H, g, Δ, cgtol, ℓ, u, s, Hs; max_cgiter = 50)`
+"""
+
+    projected_newton!(solver, x, H, g, Δ, cgtol, ℓ, u, s, Hs; max_cgiter = 50, verbose_subsolver = 0)
 
 Compute an approximate solution `d` for
 
@@ -539,6 +543,7 @@ function projected_newton!(
   s::AbstractVector{T},
   Hs::AbstractVector{T};
   max_cgiter::Int = 50,
+  verbose_subsolver = 0,
 ) where {T <: Real}
   n = length(x)
   status = ""
@@ -572,7 +577,7 @@ function projected_newton!(
       cg_op_diag[i] = ifix[i] ? 0 : 1 # implictly changes cg_op and so ZHZ
     end
 
-    Krylov.cg!(cg_solver, ZHZ, cgs_rhs, radius = Δ, rtol = cgtol, atol = zero(T))
+    Krylov.cg!(cg_solver, ZHZ, cgs_rhs, radius = Δ, rtol = cgtol, atol = zero(T), verbose = subsolver_verbose)
 
     st, stats = cg_solver.x, cg_solver.stats
     status = stats.status

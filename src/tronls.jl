@@ -51,6 +51,7 @@ The keyword arguments may include
 - `Fatol::T = √eps(T)`: absolute tolerance on the residual.
 - `Frtol::T = eps(T)`: relative tolerance on the residual, the algorithm stops when ‖F(xᵏ)‖ ≤ Fatol + Frtol * ‖F(x⁰)‖.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
+- `verbose_subsolver::Int = 0`: if > 0, display iteration information every `verbose_subsolver` iteration of the subsolver.
 
 The keyword arguments of `TronSolverNLS` are passed to the [`TRONTrustRegion`](https://github.com/JuliaSmoothOptimizers/SolverTools.jl/blob/main/src/trust-region/tron-trust-region.jl) constructor.
 
@@ -243,6 +244,7 @@ function SolverCore.solve!(
   Fatol::T = √eps(T),
   Frtol::T = eps(T),
   verbose::Int = 0,
+  verbose_subsolver::Int = 0,
 ) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("tron only works for minimization problem")
@@ -340,7 +342,7 @@ function SolverCore.solve!(
       continue
     end
     cginfo =
-      projected_gauss_newton!(solver, x, Ax, Fx, Δ, cgtol, s, ℓ, u, As, max_cgiter = max_cgiter)
+      projected_gauss_newton!(solver, x, Ax, Fx, Δ, cgtol, s, ℓ, u, As, max_cgiter = max_cgiter, verbose_subsolver = verbose_subsolver)
 
     slope = dot(m, Fx, As)
     qs = dot(As, As) / 2 + slope
@@ -561,7 +563,9 @@ function cauchy_ls!(
   return α, s, status
 end
 
-"""`projected_gauss_newton!(solver, x, A, Fx, Δ, gctol, s, max_cgiter, ℓ, u)`
+"""
+
+    projected_gauss_newton!(solver, x, A, Fx, Δ, gctol, s, max_cgiter, ℓ, u; max_cgiter = 50, verbose_subsolver = 0)
 
 Compute an approximate solution `d` for
 
@@ -582,6 +586,7 @@ function projected_gauss_newton!(
   u::AbstractVector{T},
   As::AbstractVector{T};
   max_cgiter::Int = 50,
+  verbose_subsolver = 0,
 ) where {T <: Real}
   n = length(x)
   status = ""
@@ -616,7 +621,7 @@ function projected_gauss_newton!(
     end
 
     ls_rhs .= .-As .- Fx
-    Krylov.solve!(ls_subsolver, AZ, ls_rhs, radius = Δ, rtol = cgtol, atol = zero(T))
+    Krylov.solve!(ls_subsolver, AZ, ls_rhs, radius = Δ, rtol = cgtol, atol = zero(T), verbose = verbose_subsolver)
 
     st, stats = ls_subsolver.x, ls_subsolver.stats
     iters += 1
