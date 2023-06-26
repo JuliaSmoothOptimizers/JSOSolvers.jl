@@ -300,7 +300,20 @@ function SolverCore.solve!(
       continue
     end
 
-    cginfo = projected_newton!(solver, x, H, gx, Δ, cgtol, ℓ, u, s, Hs, max_cgiter = max_cgiter, subsolver_verbose = subsolver_verbose)
+    cginfo = projected_newton!(
+      solver,
+      x,
+      H,
+      gx,
+      Δ,
+      cgtol,
+      ℓ,
+      u,
+      s,
+      Hs,
+      max_cgiter = max_cgiter,
+      subsolver_verbose = subsolver_verbose,
+    )
 
     slope = dot(n, gx, s)
     qs = dot(n, s, Hs) / 2 + slope
@@ -577,7 +590,15 @@ function projected_newton!(
       cg_op_diag[i] = ifix[i] ? 0 : 1 # implictly changes cg_op and so ZHZ
     end
 
-    Krylov.cg!(cg_solver, ZHZ, cgs_rhs, radius = Δ, rtol = cgtol, atol = zero(T), verbose = subsolver_verbose)
+    Krylov.cg!(
+      cg_solver,
+      ZHZ,
+      cgs_rhs,
+      radius = Δ,
+      rtol = cgtol,
+      atol = zero(T),
+      verbose = subsolver_verbose,
+    )
 
     st, stats = cg_solver.x, cg_solver.stats
     status = stats.status

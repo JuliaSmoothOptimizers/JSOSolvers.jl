@@ -341,8 +341,20 @@ function SolverCore.solve!(
       done = true
       continue
     end
-    cginfo =
-      projected_gauss_newton!(solver, x, Ax, Fx, Δ, cgtol, s, ℓ, u, As, max_cgiter = max_cgiter, subsolver_verbose = subsolver_verbose)
+    cginfo = projected_gauss_newton!(
+      solver,
+      x,
+      Ax,
+      Fx,
+      Δ,
+      cgtol,
+      s,
+      ℓ,
+      u,
+      As,
+      max_cgiter = max_cgiter,
+      subsolver_verbose = subsolver_verbose,
+    )
 
     slope = dot(m, Fx, As)
     qs = dot(As, As) / 2 + slope
@@ -621,7 +633,15 @@ function projected_gauss_newton!(
     end
 
     ls_rhs .= .-As .- Fx
-    Krylov.solve!(ls_subsolver, AZ, ls_rhs, radius = Δ, rtol = cgtol, atol = zero(T), verbose = subsolver_verbose)
+    Krylov.solve!(
+      ls_subsolver,
+      AZ,
+      ls_rhs,
+      radius = Δ,
+      rtol = cgtol,
+      atol = zero(T),
+      verbose = subsolver_verbose,
+    )
 
     st, stats = ls_subsolver.x, ls_subsolver.stats
     iters += 1
