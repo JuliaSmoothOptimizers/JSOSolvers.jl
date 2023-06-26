@@ -32,7 +32,7 @@ The keyword arguments may include
 - `monotone::Bool = true`: algorithm parameter.
 - `nm_itmax::Int = 25`: algorithm parameter.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `verbose_subsolver::Int = 0`: if > 0, display iteration information every `verbose_subsolver` iteration of the subsolver.
+- `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver.
 
 See `JSOSolvers.trunkls_allowed_subsolvers` for a list of available `KrylovSolver`.
 
@@ -180,7 +180,7 @@ function SolverCore.solve!(
   monotone::Bool = true,
   nm_itmax::Int = 25,
   verbose::Int = 0,
-  verbose_subsolver::Int = 0,
+  subsolver_verbose::Int = 0,
 ) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("trunk only works for minimization problem")
@@ -276,7 +276,7 @@ function SolverCore.solve!(
       rtol = cgtol,
       radius = tr.radius,
       itmax = max(2 * (n + m), 50),
-      verbose = verbose_subsolver,
+      verbose = subsolver_verbose,
     )
     s, cg_stats = subsolver.x, subsolver.stats
 
