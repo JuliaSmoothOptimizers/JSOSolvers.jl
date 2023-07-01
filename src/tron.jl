@@ -294,7 +294,6 @@ function SolverCore.solve!(
     αC, s, cauchy_status = cauchy!(x, H, gx, Δ, αC, ℓ, u, s, Hs, μ₀ = μ₀, μ₁ = μ₁, σ = σ)
 
     if cauchy_status != :success
-      @error "Cauchy step returned: $cauchy_status"
       stats.status = cauchy_status
       done = true
       continue
