@@ -4,7 +4,6 @@ makedocs(
   modules = [JSOSolvers],
   doctest = true,
   linkcheck = true,
-  strict = true,
   format = Documenter.HTML(
     prettyurls = get(ENV, "CI", nothing) == "true",
     assets = ["assets/style.css"],
