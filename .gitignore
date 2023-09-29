@@ -1,5 +1,6 @@
-docs/build
-docs/Manifest.toml
-*/.DS_Store
-.DS_Store
+*.jl.*.cov
+*.jl.cov
+*.jl.mem
 Manifest.toml
+docs/build/
+*.rej

@@ -13,7 +13,7 @@ For advanced usage, first define a `R2Solver` to preallocate the memory used in 
 # Arguments
 - `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
 
-# Keyword arguments 
+# Keyword arguments
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
@@ -80,7 +80,7 @@ function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   gx = similar(nlp.meta.x0)
   cx = similar(nlp.meta.x0)
   d = fill!(similar(nlp.meta.x0), 0)
-  σ = zero(T) # init it to zero for now 
+  σ = zero(T) # init it to zero for now
   return R2Solver{T, V}(x, gx, cx, d, σ)
 end
 
@@ -134,7 +134,7 @@ function SolverCore.solve!(
   set_dual_residual!(stats, norm_∇fk)
 
   σk = 2^round(log2(norm_∇fk + 1))
-  # Stopping criterion: 
+  # Stopping criterion:
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
   if optimal

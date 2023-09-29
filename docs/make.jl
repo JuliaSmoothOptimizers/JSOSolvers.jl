@@ -1,19 +1,28 @@
-using Documenter, JSOSolvers
+using JSOSolvers
+using Documenter
 
-makedocs(
+DocMeta.setdocmeta!(JSOSolvers, :DocTestSetup, :(using JSOSolvers); recursive = true)
+
+makedocs(;
   modules = [JSOSolvers],
   doctest = true,
   linkcheck = true,
-  format = Documenter.HTML(
-    prettyurls = get(ENV, "CI", nothing) == "true",
+  authors = "Abel Soares Siqueira <abel.s.siqueira@gmail.com> and contributors",
+  repo = "https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/blob/{commit}{path}#{line}",
+  sitename = "JSOSolvers.jl",
+  format = Documenter.HTML(;
+    prettyurls = get(ENV, "CI", "false") == "true",
+    canonical = "https://JuliaSmoothOptimizers.github.io/JSOSolvers.jl",
     assets = ["assets/style.css"],
   ),
-  sitename = "JSOSolvers.jl",
-  pages = ["index.md", "solvers.md", "internal.md", "reference.md"],
+  pages = [
+    "index.md",
+    "solvers.md",
+    "internal.md",
+    "contributing.md",
+    "developer.md",
+    "reference.md",
+  ],
 )
 
-deploydocs(
-  repo = "github.com/JuliaSmoothOptimizers/JSOSolvers.jl.git",
-  push_preview = true,
-  devbranch = "main",
-)
+deploydocs(; repo = "github.com/JuliaSmoothOptimizers/JSOSolvers.jl", push_preview = true)
