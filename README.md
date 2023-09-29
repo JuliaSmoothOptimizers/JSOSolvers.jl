@@ -2,8 +2,8 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3991143.svg)](https://doi.org/10.5281/zenodo.3991143)
 [![GitHub release](https://img.shields.io/github/release/JuliaSmoothOptimizers/JSOSolvers.jl.svg)](https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/releases/latest)
-[![](https://img.shields.io/badge/docs-stable-3f51b5.svg)](https://JuliaSmoothOptimizers.github.io/JSOSolvers.jl/stable)
-[![](https://img.shields.io/badge/docs-latest-3f51b5.svg)](https://JuliaSmoothOptimizers.github.io/JSOSolvers.jl/latest)
+[![](https://img.shields.io/badge/docs-stable-3f51b5.svg)](https://jso.dev/JSOSolvers.jl/stable)
+[![](https://img.shields.io/badge/docs-latest-3f51b5.svg)](https://jso.dev/JSOSolvers.jl/latest)
 [![codecov](https://codecov.io/gh/JuliaSmoothOptimizers/JSOSolvers.jl/branch/main/graph/badge.svg?token=eyiGsilbZx)](https://codecov.io/gh/JuliaSmoothOptimizers/JSOSolvers.jl)
 
 ![CI](https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/workflows/CI/badge.svg?branch=main)
@@ -19,6 +19,7 @@ and bound-constrained optimization
     min f(x)     s.t.  ℓ ≤ x ≤ u
 
 This package provides an implementation of four classic algorithms for unconstrained/bound-constrained nonlinear optimization:
+
 - `lbfgs`: an implementation of a limited-memory BFGS line-search method for unconstrained minimization;
 - `R2`: a first-order quadratic regularization method for unconstrained optimization;
 - `tron`: a pure Julia implementation of TRON, a trust-region solver for bound-constrained optimization described in
