@@ -1,25 +1,8 @@
-export TronSolverNLS
+export TronSolverNLS, SolverTools
 
 const tronls_allowed_subsolvers = [CglsSolver, CrlsSolver, LsqrSolver, LsmrSolver]
 
 tron(nls::AbstractNLSModel; variant = :GaussNewton, kwargs...) = tron(Val(variant), nls; kwargs...)
-
-"""
-    slope, qs = compute_As_slope_qs!(As, A, s, Fx)
-
-Compute `slope = dot(As, Fx)` and `qs = dot(As, As) / 2 + slope`. Use `As` to store `A * s`.
-"""
-function compute_As_slope_qs!(
-  As::AbstractVector{T},
-  A::Union{AbstractMatrix, AbstractLinearOperator},
-  s::AbstractVector{T},
-  Fx::AbstractVector{T},
-) where {T <: Real}
-  mul!(As, A, s)
-  slope = dot(As, Fx)
-  qs = dot(As, As) / 2 + slope
-  return slope, qs
-end
 
 """
     tron(nls; kwargs...)
