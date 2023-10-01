@@ -1,4 +1,4 @@
-export TronSolverNLS, SolverTools
+export TronSolverNLS
 
 const tronls_allowed_subsolvers = [CglsSolver, CrlsSolver, LsqrSolver, LsmrSolver]
 
