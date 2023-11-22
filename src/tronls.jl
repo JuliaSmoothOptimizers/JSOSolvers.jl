@@ -236,6 +236,10 @@ function SolverCore.solve!(
     error("tron should only be called for unconstrained or bound-constrained problems")
   end
 
+  if(verbose > 0)
+    @warn "Warning: Initial guess is not within bounds."
+  end
+
   reset!(stats)
   ℓ = nlp.meta.lvar
   u = nlp.meta.uvar
