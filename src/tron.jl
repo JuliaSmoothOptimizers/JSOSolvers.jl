@@ -217,7 +217,7 @@ function SolverCore.solve!(
     error("tron should only be called for unconstrained or bound-constrained problems")
   end
 
-  if(verbose > 0)
+  if (verbose > 0 && (ℓ > x && x > u))
     @warn "Warning: Initial guess is not within bounds."
   end
 
