@@ -41,6 +41,13 @@ include("consistency.jl")
 include("test_solvers.jl")
 if VERSION ≥ v"1.7"
   include("allocs.jl")
+
+  @testset "Test warning for infeasible initial guess" begin
+    nlp = ADNLPModel(x -> (x[1] - 1)^2 + sin(x[2])^2, [-1.2; 1.0], zeros(2), ones(2))
+    @test_warn "Warning: Initial guess is not within bounds." tron(nlp, verbose = 1)
+    nls = ADNLSModel(x -> [x[1] - 1; sin(x[2])], [-1.2; 1.0], 2, zeros(2), ones(2))
+    @test_warn "Warning: Initial guess is not within bounds." tron(nls, verbose = 1)
+  end
 end
 
 include("objgrad-on-tron.jl")

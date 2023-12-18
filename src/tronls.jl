@@ -242,6 +242,10 @@ function SolverCore.solve!(
   n = nlp.meta.nvar
   m = nlp.nls_meta.nequ
 
+  if (verbose > 0 && !(u ≥ x ≥ ℓ))
+    @warn "Warning: Initial guess is not within bounds."
+  end
+
   start_time = time()
   set_time!(stats, 0.0)
 
