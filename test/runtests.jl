@@ -18,7 +18,7 @@ using JSOSolvers
 end
 
 @testset "Test iteration limit" begin
-  @testset "$fun" for fun in (R2, lbfgs, tron, trunk)
+  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk)
     f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
     nlp = ADNLPModel(f, [-1.2; 1.0])
 
