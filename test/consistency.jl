@@ -30,6 +30,7 @@ function consistency()
 
     @testset "Quasi-Newton NLP with $mtd" for mtd in [trunk, lbfgs, tron, R2, fomo]
       with_logger(NullLogger()) do
+        reset!(qnlp)
         stats = mtd(qnlp; args...)
         @test stats isa GenericExecutionStats
         @test stats.status == :first_order
