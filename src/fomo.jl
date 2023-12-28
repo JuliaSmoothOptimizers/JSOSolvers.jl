@@ -151,7 +151,7 @@ function SolverCore.solve!(
   end
   if verbose > 0 && mod(stats.iter, verbose) == 0
     @info @sprintf "%5s  %9s  %7s  %7s  %7s" "iter" "f" "‖∇f‖" "α" "staβ"
-    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk NaN
+    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk 0
   end
 
   set_status!(
@@ -171,14 +171,13 @@ function SolverCore.solve!(
 
   done = stats.status != :unknown
 
+  satβ = T(0)
   while !done
     λk = step_mult(αk,norm_∇fk,backend)
     if β == 0
       c .= x .- λk .* (∇fk)
     else
-      satβ = find_beta(β, κg, m, ∇fk)
       c .= x .- λk .* (∇fk .* (T(1) - satβ) .+ m .* satβ)
-      m .= ∇fk .* (T(1) - β) .+ m .* β
     end
     ΔTk = norm_∇fk^2 * λk
     fck = obj(nlp, c)
@@ -186,9 +185,9 @@ function SolverCore.solve!(
       set_status!(stats, :unbounded)
       break
     end
-
+    
     ρk = (stats.objective - fck) / ΔTk
-
+    
     # Update regularization parameters
     if ρk >= η2
       αk = min(αmax, γ2 * αk)
@@ -199,9 +198,15 @@ function SolverCore.solve!(
     # Acceptance of the new candidate
     if ρk >= η1
       x .= c
+      if β!=0
+        m .= ∇fk .* (T(1) - β) .+ m .* β
+      end
       set_objective!(stats, fck)
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
+      if β!=0
+        satβ = find_beta(β, κg, m, ∇fk)
+      end
     end
 
     set_iter!(stats, stats.iter + 1)
@@ -250,13 +255,13 @@ function find_beta(β::T,κg::T,d::V,∇f::V;tol=0.01) where {T,V}
   b = β 
   while b-a > tol
     β = (b+a) / 2
-    if β * norm( ∇f .- d) - κg * norm((1-β) .* ∇f + b .* d) <= 0     
+    if β * norm( ∇f .- d) - κg * norm((1-β) .* ∇f + β .* d) <= 0     
       a = β
     else
       b = β
     end
   end
-  return β
+  return a
 end
 
 """
