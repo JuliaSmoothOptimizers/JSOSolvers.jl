@@ -176,18 +176,9 @@ function SolverCore.solve!(
   satβ = T(0)
   ρk = T(0)
   while !done
-    # if β!=0
-    #   satβ = find_beta(β, m, ∇fk, norm_∇fk)
-    #   d .= ∇fk .* (T(1) - satβ) .+ m .* satβ
-    #   m .= ∇fk .* (T(1) - β) .+ m .* β
-    #   norm_d = norm(d)
-    # else
-    #   d .= ∇fk
-    #   norm_d = norm_∇fk
-    # end
     λk = step_mult(αk,norm_d,backend)
     c .= x .- λk .* d
-    ΔTk = norm_∇fk^2 *λk
+    ΔTk = dot(∇fk , d) * λk
     fck = obj(nlp, c)
     if fck == -Inf
       set_status!(stats, :unbounded)
