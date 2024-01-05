@@ -23,8 +23,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `η1 = eps(T)^(1/4)`, `η2 = T(0.2)`: step acceptance parameters.
-- `κg = T(0.8)` : maximum contribution of momentum term to the gradient, ||∇f-g||≤κg||g|| with g = (1-β)∇f + β m, with m memory of past gradients. Must satisfy 0 < κg < 1 - η2.
-- `γ1 = T(0.8)`, `γ2 = T(1.2)`: regularization update parameters.
+- `γ1 = T(1/2)`, `γ2 = T(2)`: regularization update parameters.
 - `αmax = 1/eps(T)`: step parameter for fomo algorithm.
 - `max_eval::Int = -1`: maximum number of evaluation of the objective function.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
@@ -79,6 +78,7 @@ mutable struct FomoSolver{T, V} <: AbstractOptimizationSolver
   g::V
   c::V
   m::V
+  d::V
 end
 
 function FomoSolver(nlp::AbstractNLPModel{T, V}) where {T, V}
@@ -86,7 +86,8 @@ function FomoSolver(nlp::AbstractNLPModel{T, V}) where {T, V}
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
   m = fill!(similar(nlp.meta.x0), 0)
-  return FomoSolver{T, V}(x, g, c, m)
+  d = fill!(similar(nlp.meta.x0), 0)
+  return FomoSolver{T, V}(x, g, c, m, d)
 end
 
 @doc (@doc FomoSolver) function fomo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
@@ -109,8 +110,7 @@ function SolverCore.solve!(
   atol::T = √eps(T),
   rtol::T = √eps(T),
   η1 = eps(T)^(1 / 4),
-  η2 = T(0.2),
-  κg = T(0.8),
+  η2 = T(0.95),
   γ1 = T(0.5),
   γ2 = T(2),
   αmax = 1/eps(T),
@@ -131,7 +131,7 @@ function SolverCore.solve!(
   ∇fk = solver.g
   c = solver.c
   m = solver.m
-
+  d = solver.d
   set_iter!(stats, 0)
   set_objective!(stats, obj(nlp, x))
 
@@ -171,15 +171,23 @@ function SolverCore.solve!(
 
   done = stats.status != :unknown
 
+  d .= ∇fk
+  norm_d = norm_∇fk
   satβ = T(0)
+  ρk = T(0)
   while !done
-    λk = step_mult(αk,norm_∇fk,backend)
-    if β == 0
-      c .= x .- λk .* (∇fk)
-    else
-      c .= x .- λk .* (∇fk .* (T(1) - satβ) .+ m .* satβ)
-    end
-    ΔTk = norm_∇fk^2 * λk
+    # if β!=0
+    #   satβ = find_beta(β, m, ∇fk, norm_∇fk)
+    #   d .= ∇fk .* (T(1) - satβ) .+ m .* satβ
+    #   m .= ∇fk .* (T(1) - β) .+ m .* β
+    #   norm_d = norm(d)
+    # else
+    #   d .= ∇fk
+    #   norm_d = norm_∇fk
+    # end
+    λk = step_mult(αk,norm_d,backend)
+    c .= x .- λk .* d
+    ΔTk = norm_∇fk^2 *λk
     fck = obj(nlp, c)
     if fck == -Inf
       set_status!(stats, :unbounded)
@@ -187,6 +195,7 @@ function SolverCore.solve!(
     end
     
     ρk = (stats.objective - fck) / ΔTk
+    # ρk = (1-β) * (stats.objective - fck) / ΔTk +β * ρk
     
     # Update regularization parameters
     if ρk >= η2
@@ -204,9 +213,15 @@ function SolverCore.solve!(
       set_objective!(stats, fck)
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
-      if β!=0
-        satβ = find_beta(β, κg, m, ∇fk)
+      if β!= 0
+        satβ = find_beta(β, m, ∇fk, norm_∇fk)
+        d .= ∇fk .* (T(1) - satβ) .+ m .* satβ
+        norm_d = norm(d)
+      else
+        d .= ∇fk
+        norm_d = norm_∇fk
       end
+      
     end
 
     set_iter!(stats, stats.iter + 1)
@@ -216,7 +231,7 @@ function SolverCore.solve!(
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       @info infoline
-      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk satβ
+      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/αk satβ
     end
 
     set_status!(
@@ -242,26 +257,18 @@ function SolverCore.solve!(
 end
 
 """
-  find_beta(β,κg,d,∇f;tol=0.01)
+  find_beta(β,m,∇f,norm_∇f,θ)
 
 Compute satβ which saturates the contibution of the momentum term to the gradient.
-Use bisection method to solve satβ * ||∇f .- d|| = κg * ||(1-satβ) .* ∇f + satβ .* d|| where d is the momentum term.
+satβ is computed such that m.∇f > θ * norm_∇f^2
 """ 
-function find_beta(β::T,κg::T,d::V,∇f::V;tol=0.01) where {T,V}
-  if β * norm( ∇f .- d) - κg * norm((1-β) .* ∇f + β .* d) <= 0.
+function find_beta(β::T,m::V,∇f::V,norm_∇f::T;θ = T(1e-1)) where {T,V}
+  dotprod = dot(m,∇f)
+  if dotprod > θ * norm_∇f^2
     return β
+  else
+    return min(((1-θ)norm_∇f^2)/(norm_∇f^2 - dotprod),β)
   end
-  a = T(0)
-  b = β 
-  while b-a > tol
-    β = (b+a) / 2
-    if β * norm( ∇f .- d) - κg * norm((1-β) .* ∇f + β .* d) <= 0     
-      a = β
-    else
-      b = β
-    end
-  end
-  return a
 end
 
 """
