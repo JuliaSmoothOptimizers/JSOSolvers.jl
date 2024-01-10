@@ -2,8 +2,8 @@
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3991143.svg)](https://doi.org/10.5281/zenodo.3991143)
 [![GitHub release](https://img.shields.io/github/release/JuliaSmoothOptimizers/JSOSolvers.jl.svg)](https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/releases/latest)
-[![](https://img.shields.io/badge/docs-stable-3f51b5.svg)](https://jso.dev/JSOSolvers.jl/stable)
-[![](https://img.shields.io/badge/docs-latest-3f51b5.svg)](https://jso.dev/JSOSolvers.jl/latest)
+[![Stable documentation](https://img.shields.io/badge/docs-stable-3f51b5.svg)](https://jso.dev/JSOSolvers.jl/stable)
+[![Latest documentation](https://img.shields.io/badge/docs-latest-3f51b5.svg)](https://jso.dev/JSOSolvers.jl/latest)
 [![codecov](https://codecov.io/gh/JuliaSmoothOptimizers/JSOSolvers.jl/branch/main/graph/badge.svg?token=eyiGsilbZx)](https://codecov.io/gh/JuliaSmoothOptimizers/JSOSolvers.jl)
 
 ![CI](https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/workflows/CI/badge.svg?branch=main)
@@ -12,13 +12,15 @@
 This package provides optimization solvers curated by the JuliaSmoothOptimizers
 organization for unconstrained optimization
 
-    min f(x)
+$$\min \ f(x)$$
 
 and bound-constrained optimization
 
-    min f(x)     s.t.  ℓ ≤ x ≤ u
+$$\min \ f(x) \ \text{subject to} \ ℓ ≤ x ≤ u.$$
 
 This package provides an implementation of four classic algorithms for unconstrained/bound-constrained nonlinear optimization:
+
+<!-- markdown-link-check-disable -->
 
 - `lbfgs`: an implementation of a limited-memory BFGS line-search method for unconstrained minimization;
 - `R2`: a first-order quadratic regularization method for unconstrained optimization;
@@ -26,7 +28,7 @@ This package provides an implementation of four classic algorithms for unconstra
 
     >  Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
     >  Optimization Problems*, SIAM J. Optim., 9(4), 1100–1127, 1999.
-    >  DOI: [10.1137/S1052623498345075](https://www.doi.org/10.1137/S1052623498345075)
+    >  DOI: [10.1137/S1052623498345075](https://epubs.siam.org/doi/10.1137/S1052623498345075)
 
     as well as a variant for nonlinear least-squares;
 - `trunk`: a trust-region solver for unconstrained optimization using exact second derivatives. Our implementation follows the description given in
@@ -34,9 +36,11 @@ This package provides an implementation of four classic algorithms for unconstra
     >  A. R. Conn, N. I. M. Gould, and Ph. L. Toint,
     >  Trust-Region Methods, volume 1 of MPS/SIAM Series on Optimization.
     >  SIAM, Philadelphia, USA, 2000.
-    >  DOI: [10.1137/1.9780898719857](https://www.doi.org/10.1137/1.9780898719857)
+    >  DOI: [10.1137/1.9780898719857](https://epubs.siam.org/doi/book/10.1137/1.9780898719857)
 
     The package also contains a variant for nonlinear least-squares.
+
+<!-- markdown-link-check-enable -->
 
 ## Installation
 
@@ -54,9 +58,9 @@ stats = lbfgs(nlp) # or trunk, tron, R2
 
 ## How to cite
 
-If you use JSOSolvers.jl in your work, please cite using the format given in [CITATION.bib](CITATION.bib).
+If you use JSOSolvers.jl in your work, please cite using the format given in (CITATION.cff).
 
-# Bug reports and discussions
+## Bug reports and discussions
 
 If you think you found a bug, feel free to open an [issue](https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/issues).
 Focused suggestions and requests can also be opened as issues. Before opening a pull request, start an issue or a discussion on the topic, please.

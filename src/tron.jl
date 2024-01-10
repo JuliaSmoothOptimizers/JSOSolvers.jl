@@ -9,9 +9,9 @@ tron(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = tron(Val(variant), n
     tron(nlp; kwargs...)
 
 A pure Julia implementation of a trust-region solver for bound-constrained optimization:
-    
+
         min f(x)    s.t.    ℓ ≦ x ≦ u
-    
+
 For advanced usage, first define a `TronSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
 
     solver = TronSolver(nlp; kwargs...)
