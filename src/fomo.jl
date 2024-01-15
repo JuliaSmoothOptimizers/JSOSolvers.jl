@@ -175,6 +175,7 @@ function SolverCore.solve!(
   norm_d = norm_∇fk
   satβ = T(0)
   ρk = T(0)
+  #μ = αk
   while !done
     λk = step_mult(αk,norm_d,backend)
     c .= x .- λk .* d
@@ -184,10 +185,7 @@ function SolverCore.solve!(
       set_status!(stats, :unbounded)
       break
     end
-    
     ρk = (stats.objective - fck) / ΔTk
-    # ρk = (1-β) * (stats.objective - fck) / ΔTk +β * ρk
-    
     # Update regularization parameters
     if ρk >= η2
       αk = min(αmax, γ2 * αk)
@@ -199,8 +197,11 @@ function SolverCore.solve!(
     if ρk >= η1
       x .= c
       if β!=0
+        #μ = αk * (T(1) - β) + αk * β
+        #m .= (αk/μ) .* ∇fk .* (T(1) - β) .+ m .* β
         m .= ∇fk .* (T(1) - β) .+ m .* β
       end
+      #αk = μ
       set_objective!(stats, fck)
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
@@ -222,7 +223,7 @@ function SolverCore.solve!(
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       @info infoline
-      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/αk satβ
+      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk satβ
     end
 
     set_status!(
@@ -255,10 +256,11 @@ satβ is computed such that m.∇f > θ * norm_∇f^2
 """ 
 function find_beta(β::T,m::V,∇f::V,norm_∇f::T;θ = T(1e-1)) where {T,V}
   dotprod = dot(m,∇f)
-  if dotprod > θ * norm_∇f^2
+  if (1-β)*norm_∇f^2 + β*dotprod > θ * norm_∇f^2
     return β
   else
-    return min(((1-θ)norm_∇f^2)/(norm_∇f^2 - dotprod),β)
+    return ((1-θ)norm_∇f^2)/(norm_∇f^2 - dotprod)
+    #return min(((1-θ)norm_∇f^2)/(norm_∇f^2 - dotprod),β)
   end
 end
 
