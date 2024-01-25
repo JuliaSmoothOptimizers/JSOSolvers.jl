@@ -238,7 +238,8 @@ function SolverCore.solve!(
         max_time = max_time,
       ),
     )
-
+    
+    αk == 0 && set_status!(stats,:exception)
     callback(nlp, solver, stats)
 
     done = stats.status != :unknown
