@@ -8,7 +8,8 @@ function tests()
         ("lbfgs", lbfgs),
         ("tron", tron),
         ("R2", R2),
-        ("fomo", fomo),
+        ("fomo_r2", fomo),
+        ("fomo_tr", (nlp; kwargs...) -> fomo(nlp,backend = JSOSolvers.tr(); kwargs...)),
       ]
         unconstrained_nlp(solver)
         multiprecision_nlp(solver, :unc)
