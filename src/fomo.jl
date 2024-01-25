@@ -28,7 +28,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `max_eval::Int = -1`: maximum number of evaluation of the objective function.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
-- `β = T(0) ∈ [0,1)` : constant in the momentum term.
+- `β = T(0) ∈ [0,1)` : decay rate for the momentum.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `backend = qr()`: model-based method employed. Options are `qr()` for quadratic regulation and `tr()` for trust-region
 
