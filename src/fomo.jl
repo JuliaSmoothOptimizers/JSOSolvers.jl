@@ -92,7 +92,9 @@ end
 
 @doc (@doc FomoSolver) function fomo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
   solver = FomoSolver(nlp)
-  return solve!(solver, nlp; kwargs...)
+  solver_specific = Dict(:avgsatβ => T(0.))
+  stats = GenericExecutionStats(nlp;solver_specific=solver_specific)
+  return solve!(solver, nlp, stats; kwargs...)
 end
 
 function SolverCore.reset!(solver::FomoSolver{T}) where {T}
@@ -175,6 +177,8 @@ function SolverCore.solve!(
   norm_d = norm_∇fk
   satβ = T(0)
   ρk = T(0)
+  avgsatβ = T(0.)
+  siter = 0
   #μ = αk
   while !done
     λk = step_mult(αk,norm_d,backend)
@@ -213,7 +217,8 @@ function SolverCore.solve!(
         d .= ∇fk
         norm_d = norm_∇fk
       end
-      
+      avgsatβ += satβ
+      siter += 1
     end
 
     set_iter!(stats, stats.iter + 1)
@@ -245,6 +250,8 @@ function SolverCore.solve!(
     done = stats.status != :unknown
   end
 
+  avgsatβ /= siter
+  stats.solver_specific[:avgsatβ] = avgsatβ
   set_solution!(stats, x)
   return stats
 end
