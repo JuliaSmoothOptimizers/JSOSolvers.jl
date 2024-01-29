@@ -7,7 +7,6 @@
   function MyProblem()
     meta = NLPModelMeta{Float64, Vector{Float64}}(
       2, # nvar
-      x0 = [0.1; 0.1],
       lvar = zeros(2),
       uvar = ones(2),
     )
