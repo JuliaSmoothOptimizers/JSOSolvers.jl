@@ -29,6 +29,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `β = T(0) ∈ [0,1)` : decay rate for the momentum.
+- `θ = T(0.1)` : momentum contribution restriction parameter. [(1-β)∇f(xk) + β mk].[∇f(xk)] ≥ θ||∇f(xk)||², with mk memory of past gradient. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `backend = qr()`: model-based method employed. Options are `qr()` for quadratic regulation and `tr()` for trust-region
 
@@ -120,6 +121,7 @@ function SolverCore.solve!(
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   β::T = T(0.9),
+  θ::T = T(0.1),
   verbose::Int = 0,
   backend = qr()
 ) where {T, V}
@@ -210,7 +212,7 @@ function SolverCore.solve!(
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
       if β!= 0
-        satβ = find_beta(β, m, ∇fk, norm_∇fk)
+        satβ = find_beta(β, m, ∇fk, norm_∇fk, θ)
         d .= ∇fk .* (T(1) - satβ) .+ m .* satβ
         norm_d = norm(d)
       else
@@ -262,13 +264,12 @@ end
 Compute satβ which saturates the contibution of the momentum term to the gradient.
 satβ is computed such that m.∇f > θ * norm_∇f^2
 """ 
-function find_beta(β::T,m::V,∇f::V,norm_∇f::T;θ = T(1e-1)) where {T,V}
+function find_beta(β::T,m::V,∇f::V,norm_∇f::T, θ::T) where {T,V}
   dotprod = dot(m,∇f)
   if (1-β)*norm_∇f^2 + β*dotprod > θ * norm_∇f^2
     return β
   else
     return ((1-θ)norm_∇f^2)/(norm_∇f^2 - dotprod)
-    #return min(((1-θ)norm_∇f^2)/(norm_∇f^2 - dotprod),β)
   end
 end
 
