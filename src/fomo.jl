@@ -274,7 +274,7 @@ satβ is computed such that m.∇f > θ * norm_∇f^2
 function find_beta(m::V,∇f::V,norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
   dotprod = dot(m,∇f)
   β1 = dotprod < norm_∇f^2 ? (1-θ1)*norm_∇f^2/(norm_∇f^2 - dotprod) : β
-  β2 = (1-θ2)*norm_∇f/(θ2*norm(m .- ∇f))
+  β2 = m != ∇f             ? (1-θ2)*norm_∇f/(θ2*norm(m .- ∇f))      : β
   return min(β,min(β1,β2)) 
 end
 
