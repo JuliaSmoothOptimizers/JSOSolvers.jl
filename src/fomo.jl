@@ -24,12 +24,14 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `η1 = eps(T)^(1/4)`, `η2 = T(0.2)`: step acceptance parameters.
 - `γ1 = T(1/2)`, `γ2 = T(2)`: regularization update parameters.
+- `γ3 = T(1/2)` : momentum factor satβ update parameter in case of unsuccessful iteration.
 - `αmax = 1/eps(T)`: step parameter for fomo algorithm.
 - `max_eval::Int = -1`: maximum number of evaluation of the objective function.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
-- `β = T(0) ∈ [0,1)` : decay rate for the momentum.
-- `θ = T(0.1)` : momentum contribution restriction parameter. [(1-β)∇f(xk) + β mk].[∇f(xk)] ≥ θ||∇f(xk)||², with mk memory of past gradient. 
+- `β = T(0) ∈ [0,1)` : target decay rate for the momentum.
+- `θ1 = T(0.1)` : momentum contribution parameter for convergence condition #1. [(1-satβ)∇f(xk) + satβ mk.∇f(xk)] ≥ θ1||∇f(xk)||², with mk memory of past gradient and satβ ∈ [0,β].
+- `θ2 = T(1e-5)` : momentum contribution parameter for convergence condition #2. ||∇f(xk)|| ≥ θ2||(1-satβ)∇f(xk) + satβ mk.∇f(xk)||, with mk memory of past gradient and satβ ∈ [0,β]. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `backend = qr()`: model-based method employed. Options are `qr()` for quadratic regulation and `tr()` for trust-region
 
@@ -116,12 +118,14 @@ function SolverCore.solve!(
   η2 = T(0.95),
   γ1 = T(0.5),
   γ2 = T(2),
+  γ3 = T(1/2),
   αmax = 1/eps(T),
   max_time::Float64 = 30.0,
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   β::T = T(0.9),
-  θ::T = T(0.1),
+  θ1::T = T(1e-5),
+  θ2::T = T(1e-5),
   verbose::Int = 0,
   backend = qr()
 ) where {T, V}
@@ -181,6 +185,7 @@ function SolverCore.solve!(
   ρk = T(0)
   avgsatβ = T(0.)
   siter = 0
+
   #μ = αk
   while !done
     λk = step_mult(αk,norm_d,backend)
@@ -197,6 +202,8 @@ function SolverCore.solve!(
       αk = min(αmax, γ2 * αk)
     elseif ρk < η1
       αk = αk * γ1
+      satβ *= γ3
+      d .= ∇fk .* (T(1) - satβ) .+ m .* satβ
     end
 
     # Acceptance of the new candidate
@@ -212,7 +219,7 @@ function SolverCore.solve!(
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
       if β!= 0
-        satβ = find_beta(β, m, ∇fk, norm_∇fk, θ)
+        satβ = find_beta(m, ∇fk, norm_∇fk, β, θ1, θ2)
         d .= ∇fk .* (T(1) - satβ) .+ m .* satβ
         norm_d = norm(d)
       else
@@ -259,18 +266,16 @@ function SolverCore.solve!(
 end
 
 """
-  find_beta(β,m,∇f,norm_∇f,θ)
+find_beta(m, ∇f, norm_∇f, β, θ1, θ2)
 
 Compute satβ which saturates the contibution of the momentum term to the gradient.
 satβ is computed such that m.∇f > θ * norm_∇f^2
 """ 
-function find_beta(β::T,m::V,∇f::V,norm_∇f::T, θ::T) where {T,V}
+function find_beta(m::V,∇f::V,norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
   dotprod = dot(m,∇f)
-  if (1-β)*norm_∇f^2 + β*dotprod > θ * norm_∇f^2
-    return β
-  else
-    return ((1-θ)norm_∇f^2)/(norm_∇f^2 - dotprod)
-  end
+  β1 = dotprod < norm_∇f^2 ? (1-θ1)*norm_∇f^2/(norm_∇f^2 - dotprod) : β
+  β2 = (1-θ2)*norm_∇f/(θ2*norm(m .- ∇f))
+  return min(β,min(β1,β2)) 
 end
 
 """
