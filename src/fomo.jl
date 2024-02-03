@@ -1,9 +1,9 @@
-export fomo, FomoSolver, tr, qr
+export fomo, FomoSolver, tr, r2
 
 abstract type AbstractFomoMethod end
 
 struct tr <: AbstractFomoMethod end
-struct qr <: AbstractFomoMethod end
+struct r2 <: AbstractFomoMethod end
 
 """
     fomo(nlp; kwargs...)
@@ -22,18 +22,18 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
-- `η1 = eps(T)^(1/4)`, `η2 = T(0.2)`: step acceptance parameters.
+- `η1 = eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
 - `γ1 = T(1/2)`, `γ2 = T(2)`: regularization update parameters.
 - `γ3 = T(1/2)` : momentum factor satβ update parameter in case of unsuccessful iteration.
 - `αmax = 1/eps(T)`: step parameter for fomo algorithm.
 - `max_eval::Int = -1`: maximum number of evaluation of the objective function.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
-- `β = T(0) ∈ [0,1)` : target decay rate for the momentum.
+- `β = T(0.9) ∈ [0,1)` : target decay rate for the momentum.
 - `θ1 = T(0.1)` : momentum contribution parameter for convergence condition #1. [(1-satβ)∇f(xk) + satβ mk.∇f(xk)] ≥ θ1||∇f(xk)||², with mk memory of past gradient and satβ ∈ [0,β].
-- `θ2 = T(1e-5)` : momentum contribution parameter for convergence condition #2. ||∇f(xk)|| ≥ θ2||(1-satβ)∇f(xk) + satβ mk.∇f(xk)||, with mk memory of past gradient and satβ ∈ [0,β]. 
+- `θ2 = sqrt(T)^(1/3)` : momentum contribution parameter for convergence condition #2. ||∇f(xk)|| ≥ θ2||(1-satβ)∇f(xk) + satβ mk.∇f(xk)||, with mk memory of past gradient and satβ ∈ [0,β]. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `backend = qr()`: model-based method employed. Options are `qr()` for quadratic regulation and `tr()` for trust-region
+- `backend = r2()`: model-based method employed. Options are `r2()` for quadratic regulation and `tr()` for trust-region
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -114,20 +114,20 @@ function SolverCore.solve!(
   x::V = nlp.meta.x0,
   atol::T = √eps(T),
   rtol::T = √eps(T),
-  η1 = eps(T)^(1 / 4),
-  η2 = T(0.95),
-  γ1 = T(0.5),
-  γ2 = T(2),
-  γ3 = T(1/2),
-  αmax = 1/eps(T),
+  η1::T = T(eps(T)^(1 / 4)),
+  η2::T = T(0.95),
+  γ1::T = T(1/2),
+  γ2::T = T(2),
+  γ3::T = T(1/2),
+  αmax::T = 1/eps(T),
   max_time::Float64 = 30.0,
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   β::T = T(0.9),
-  θ1::T = T(1e-5),
-  θ2::T = T(1e-5),
+  θ1::T = T(0.1),
+  θ2::T = T(eps(T)^(1/3)),
   verbose::Int = 0,
-  backend = qr()
+  backend = r2()
 ) where {T, V}
   unconstrained(nlp) || error("fomo should only be called on unconstrained problems.")
 
@@ -183,10 +183,9 @@ function SolverCore.solve!(
   norm_d = norm_∇fk
   satβ = T(0)
   ρk = T(0)
-  avgsatβ = T(0.)
+  avgsatβ = T(0)
   siter = 0
-
-  #μ = αk
+  oneT = T(1)
   while !done
     λk = step_mult(αk,norm_d,backend)
     c .= x .- λk .* d
@@ -203,24 +202,21 @@ function SolverCore.solve!(
     elseif ρk < η1
       αk = αk * γ1
       satβ *= γ3
-      d .= ∇fk .* (T(1) - satβ) .+ m .* satβ
+      d .= ∇fk .* (oneT - satβ) .+ m .* satβ
     end
 
     # Acceptance of the new candidate
     if ρk >= η1
       x .= c
       if β!=0
-        #μ = αk * (T(1) - β) + αk * β
-        #m .= (αk/μ) .* ∇fk .* (T(1) - β) .+ m .* β
-        m .= ∇fk .* (T(1) - β) .+ m .* β
+        m .= ∇fk .* (oneT - β) .+ m .* β
       end
-      #αk = μ
       set_objective!(stats, fck)
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
       if β!= 0
         satβ = find_beta(m, ∇fk, norm_∇fk, β, θ1, θ2)
-        d .= ∇fk .* (T(1) - satβ) .+ m .* satβ
+        d .= ∇fk .* (oneT - satβ) .+ m .* satβ
         norm_d = norm(d)
       else
         d .= ∇fk
@@ -269,22 +265,26 @@ end
 find_beta(m, ∇f, norm_∇f, β, θ1, θ2)
 
 Compute satβ which saturates the contibution of the momentum term to the gradient.
-satβ is computed such that m.∇f > θ * norm_∇f^2
+`satβ` is computed such that the two gradient-related conditions are ensured: 
+1. [(1-satβ)∇f(xk) + satβ mk.∇f(xk)] ≥ θ1||∇f(xk)||²
+2. ||∇f(xk)|| ≥ θ2||(1-satβ)∇f(xk) + satβ mk.∇f(xk)||
+with `m` memory of past gradient/
 """ 
 function find_beta(m::V,∇f::V,norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
   dotprod = dot(m,∇f)
+  diffnorm = norm(m .- ∇f)
   β1 = dotprod < norm_∇f^2 ? (1-θ1)*norm_∇f^2/(norm_∇f^2 - dotprod) : β
-  β2 = m != ∇f             ? (1-θ2)*norm_∇f/(θ2*norm(m .- ∇f))      : β
+  β2 = diffnorm != 0       ? (1-θ2)*norm_∇f/(θ2*diffnorm)           : β
   return min(β,min(β1,β2)) 
 end
 
 """
-  init_alpha(norm_∇fk::T, ::qr)
+  init_alpha(norm_∇fk::T, ::r2)
   init_alpha(norm_∇fk::T, ::tr)
 
 Initialize α step size parameter. Ensure first step is the same for quadratic regularization and trust region methods.
 """
-function init_alpha(norm_∇fk::T, ::qr) where{T}
+function init_alpha(norm_∇fk::T, ::r2) where{T}
   1/2^round(log2(norm_∇fk + 1))
 end
 
@@ -293,12 +293,12 @@ function init_alpha(norm_∇fk::T, ::tr) where{T}
 end
 
 """
-  step_mult(αk::T, norm_∇fk::T, ::qr)
+  step_mult(αk::T, norm_∇fk::T, ::r2)
   step_mult(αk::T, norm_∇fk::T, ::tr)
 
-Compute step size multiplier: `αk` for quadratic regularization(`::qr`) and `αk/norm_∇fk` for trust region (`::tr`).
+Compute step size multiplier: `αk` for quadratic regularization(`::r2`) and `αk/norm_∇fk` for trust region (`::tr`).
 """
-function step_mult(αk::T, norm_∇fk::T, ::qr) where{T}
+function step_mult(αk::T, norm_∇fk::T, ::r2) where{T}
   αk
 end
 
