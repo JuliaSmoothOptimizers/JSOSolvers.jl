@@ -272,9 +272,10 @@ with `m` memory of past gradient/
 """ 
 function find_beta(m::V,∇f::V,norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
   dotprod = dot(m,∇f)
-  diffnorm = norm(m .- ∇f)
-  β1 = dotprod < norm_∇f^2 ? (1-θ1)*norm_∇f^2/(norm_∇f^2 - dotprod) : β
-  β2 = diffnorm != 0       ? (1-θ2)*norm_∇f/(θ2*diffnorm)           : β
+  n1 = norm_∇f^2 - dotprod
+  n2 = norm(m .- ∇f)
+  β1 = n1 > 0  ? (1-θ1)*norm_∇f^2/(n1)  : β
+  β2 = n2 != 0 ? (1-θ2)*norm_∇f/(θ2*n2) : β
   return min(β,min(β1,β2)) 
 end
 
