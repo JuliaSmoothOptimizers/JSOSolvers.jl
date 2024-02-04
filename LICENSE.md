@@ -1,4 +1,4 @@
-Copyright (c) 2019: Abel Soares Siqueira and Dominique Orban
+Copyright (c) 2019-present: Abel Soares Siqueira and Dominique Orban
 
 JSOSolvers.jl is licensed under the [MPL version 2.0](https://www.mozilla.org/MPL/2.0/).
 

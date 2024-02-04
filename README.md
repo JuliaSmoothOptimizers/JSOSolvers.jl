@@ -54,7 +54,7 @@ stats = lbfgs(nlp) # or trunk, tron, R2
 
 ## How to cite
 
-If you use JSOSolvers.jl in your work, please cite using the format given in [CITATION.bib](CITATION.bib).
+If you use JSOSolvers.jl in your work, please cite using the format given in [CITATION.cff](CITATION.cff).
 
 # Bug reports and discussions
 
