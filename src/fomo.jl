@@ -1,9 +1,10 @@
-export fomo, FomoSolver, tr, r2
+export fomo, FomoSolver, tr, r2, R2
 
 abstract type AbstractFomoMethod end
 
-struct tr <: AbstractFomoMethod end
-struct r2 <: AbstractFomoMethod end
+struct tr   <: AbstractFomoMethod end
+struct r2   <: AbstractFomoMethod end
+struct R2og <: AbstractFomoMethod end
 
 """
     fomo(nlp; kwargs...)
@@ -100,10 +101,97 @@ end
   return solve!(solver, nlp, stats; kwargs...)
 end
 
+"""
+    R2(nlp; kwargs...)
+
+A first-order quadratic regularization method for unconstrained optimization.
+
+For advanced usage, first define a `R2Solver` to preallocate the memory used in the algorithm, and then call `solve!`:
+
+    solver = R2Solver(nlp)
+    solve!(solver, nlp; kwargs...)
+Important: `R2` and `R2Solver` are only interfaces to `FomoSolver`, a first order solver that includes momentum strategy. The momentum strategy is ignore with `R2`.
+
+# Arguments
+- `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
+
+# Keyword arguments 
+- `x::V = nlp.meta.x0`: the initial guess.
+- `atol::T = √eps(T)`: absolute tolerance.
+- `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
+- `η1 = eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
+- `γ1 = T(1/2)`, `γ2 = 1/γ1`: regularization update parameters.
+- `σmin = eps(T)`: step parameter for R2 algorithm.
+- `max_eval::Int = -1`: maximum number of evaluation of the objective function.
+- `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `max_iter::Int = typemax(Int)`: maximum number of iterations.
+- `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
+
+# Output
+The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
+
+# Callback
+The callback is called at each iteration.
+The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
+Changing any of the input arguments will affect the subsequent iterations.
+In particular, setting `stats.status = :user` will stop the algorithm.
+All relevant information should be available in `nlp` and `solver`.
+Notably, you can access, and modify, the following:
+- `solver.x`: current iterate;
+- `solver.gx`: current gradient;
+- `stats`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
+  - `stats.dual_feas`: norm of current gradient;
+  - `stats.iter`: current iteration counter;
+  - `stats.objective`: current objective function value;
+  - `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm has attained a stopping criterion. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
+  - `stats.elapsed_time`: elapsed time in seconds.
+
+# Examples
+```jldoctest
+using JSOSolvers, ADNLPModels
+nlp = ADNLPModel(x -> sum(x.^2), ones(3))
+stats = R2(nlp)
+
+# output
+
+"Execution stats: first-order stationary"
+```
+
+```jldoctest
+using JSOSolvers, ADNLPModels
+nlp = ADNLPModel(x -> sum(x.^2), ones(3))
+solver = R2Solver(nlp);
+stats = solve!(solver, nlp)
+
+# output
+
+"Execution stats: first-order stationary"
+```
+"""
+function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
+  x = similar(nlp.meta.x0)
+  g = similar(nlp.meta.x0)
+  c = similar(nlp.meta.x0)
+  m = Vector{T}()
+  d = g # similar without momentum
+  return FomoSolver{T, V}(x, g, c, m, d)
+end
+
+@doc (@doc R2Solver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
+  solver = R2Solver(nlp)
+  stats = GenericExecutionStats(nlp)
+  if haskey(kwargs,:σmax)
+    return solve!(solver, nlp, stats; β = T(0), backend = R2og(), αmax = 1/kwargs[:σmin], kwargs...)
+  else
+    return solve!(solver, nlp, stats; β = T(0), backend = R2og(), kwargs...)
+  end
+end
+
 function SolverCore.reset!(solver::FomoSolver{T}) where {T}
   fill!(solver.m,0)
   solver
 end
+
 SolverCore.reset!(solver::FomoSolver, ::AbstractNLPModel) = reset!(solver)
 
 function SolverCore.solve!(
@@ -127,10 +215,13 @@ function SolverCore.solve!(
   θ1::T = T(0.1),
   θ2::T = T(eps(T)^(1/3)),
   verbose::Int = 0,
-  backend = r2()
+  backend = r2(),
+  σmin = nothing # keep consistency with R2 interface. kwargs immutable, can't delete it in `R2`
 ) where {T, V}
-  unconstrained(nlp) || error("fomo should only be called on unconstrained problems.")
-
+  r2mode = (backend == R2og())
+  mthname = r2mode ? "R2" : "fomo"
+  unconstrained(nlp) || error("$mthname should only be called on unconstrained problems.")
+  
   reset!(stats)
   start_time = time()
   set_time!(stats, 0.0)
@@ -154,12 +245,24 @@ function SolverCore.solve!(
   optimal = norm_∇fk ≤ ϵ
   if optimal
     @info("Optimal point found at initial point")
-    @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "α"
-    @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk
+    if r2mode
+      @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
+      @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/αk
+    else
+      @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "α"
+      @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk
+    end
+    
   end
   if verbose > 0 && mod(stats.iter, verbose) == 0
-    @info @sprintf "%5s  %9s  %7s  %7s  %7s" "iter" "f" "‖∇f‖" "α" "staβ"
+    if r2mode
+      @info @sprintf "%5s  %9s  %7s  %7s" "iter" "f" "‖∇f‖" "σ"
+    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/αk
+    else
+      @info @sprintf "%5s  %9s  %7s  %7s  %7s" "iter" "f" "‖∇f‖" "α" "staβ"
     infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk 0
+    end
+    
   end
 
   set_status!(
@@ -201,8 +304,10 @@ function SolverCore.solve!(
       αk = min(αmax, γ2 * αk)
     elseif ρk < η1
       αk = αk * γ1
-      satβ *= γ3
-      d .= ∇fk .* (oneT - satβ) .+ m .* satβ
+      if !r2mode
+        satβ *= γ3
+        (d .= ∇fk .* (oneT - satβ) .+ m .* satβ)
+      end
     end
 
     # Acceptance of the new candidate
@@ -222,8 +327,10 @@ function SolverCore.solve!(
         d .= ∇fk
         norm_d = norm_∇fk
       end
-      avgsatβ += satβ
-      siter += 1
+      if !r2mode
+        (avgsatβ += satβ)
+        (siter += 1)
+      end
     end
 
     set_iter!(stats, stats.iter + 1)
@@ -233,7 +340,11 @@ function SolverCore.solve!(
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       @info infoline
-      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk satβ
+      if r2mode
+        infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/αk
+      else
+        infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk satβ
+      end
     end
 
     set_status!(
@@ -254,9 +365,10 @@ function SolverCore.solve!(
 
     done = stats.status != :unknown
   end
-
-  avgsatβ /= siter
-  stats.solver_specific[:avgsatβ] = avgsatβ
+  if !r2mode
+    avgsatβ /= siter
+    stats.solver_specific[:avgsatβ] = avgsatβ
+  end
   set_solution!(stats, x)
   return stats
 end
@@ -285,7 +397,7 @@ end
 
 Initialize α step size parameter. Ensure first step is the same for quadratic regularization and trust region methods.
 """
-function init_alpha(norm_∇fk::T, ::r2) where{T}
+function init_alpha(norm_∇fk::T, ::Union{r2,R2og}) where{T}
   1/2^round(log2(norm_∇fk + 1))
 end
 
@@ -299,7 +411,7 @@ end
 
 Compute step size multiplier: `αk` for quadratic regularization(`::r2`) and `αk/norm_∇fk` for trust region (`::tr`).
 """
-function step_mult(αk::T, norm_∇fk::T, ::r2) where{T}
+function step_mult(αk::T, norm_∇fk::T, ::Union{r2,R2og}) where{T}
   αk
 end
 

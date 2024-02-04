@@ -13,7 +13,6 @@ export solve!
 # Unconstrained solvers
 include("lbfgs.jl")
 include("trunk.jl")
-include("R2.jl")
 include("fomo.jl")
 
 # Unconstrained solvers for NLS
