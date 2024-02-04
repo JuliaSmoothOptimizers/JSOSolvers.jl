@@ -1,4 +1,4 @@
-export fomo, FomoSolver, tr, r2, R2
+export fomo, FomoSolver, R2, R2Solver, tr, r2, R2og
 
 abstract type AbstractFomoMethod end
 
@@ -34,7 +34,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `θ1 = T(0.1)` : momentum contribution parameter for convergence condition #1. [(1-satβ)∇f(xk) + satβ mk.∇f(xk)] ≥ θ1||∇f(xk)||², with mk memory of past gradient and satβ ∈ [0,β].
 - `θ2 = sqrt(T)^(1/3)` : momentum contribution parameter for convergence condition #2. ||∇f(xk)|| ≥ θ2||(1-satβ)∇f(xk) + satβ mk.∇f(xk)||, with mk memory of past gradient and satβ ∈ [0,β]. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `backend = r2()`: model-based method employed. Options are `r2()` for quadratic regulation and `tr()` for trust-region
+- `backend = r2()`: model-based method employed. Options are `r2()` for quadratic regulation and `tr()` for trust-region, `R2og()` for classical quadratic regularization ( no momentum, optimized for β = 0).
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -161,7 +161,7 @@ stats = R2(nlp)
 using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> sum(x.^2), ones(3))
 solver = R2Solver(nlp);
-stats = solve!(solver, nlp)
+stats = solve!(solver, nlp, backend = R2og())
 
 # output
 
@@ -181,9 +181,9 @@ end
   solver = R2Solver(nlp)
   stats = GenericExecutionStats(nlp)
   if haskey(kwargs,:σmax)
-    return solve!(solver, nlp, stats; β = T(0), backend = R2og(), αmax = 1/kwargs[:σmin], kwargs...)
+    return solve!(solver, nlp, stats; backend = R2og(), αmax = 1/kwargs[:σmin], kwargs...)
   else
-    return solve!(solver, nlp, stats; β = T(0), backend = R2og(), kwargs...)
+    return solve!(solver, nlp, stats; backend = R2og(), kwargs...)
   end
 end
 
@@ -292,7 +292,11 @@ function SolverCore.solve!(
   while !done
     λk = step_mult(αk,norm_d,backend)
     c .= x .- λk .* d
-    ΔTk = dot(∇fk , d) * λk
+    if r2mode
+      ΔTk = norm_∇fk^2 * λk
+    else  
+      ΔTk = dot(∇fk , d) * λk
+    end
     fck = obj(nlp, c)
     if fck == -Inf
       set_status!(stats, :unbounded)
@@ -306,20 +310,20 @@ function SolverCore.solve!(
       αk = αk * γ1
       if !r2mode
         satβ *= γ3
-        (d .= ∇fk .* (oneT - satβ) .+ m .* satβ)
+        d .= ∇fk .* (oneT - satβ) .+ m .* satβ
       end
     end
 
     # Acceptance of the new candidate
     if ρk >= η1
       x .= c
-      if β!=0
+      if !r2mode
         m .= ∇fk .* (oneT - β) .+ m .* β
       end
       set_objective!(stats, fck)
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
-      if β!= 0
+      if !r2mode
         satβ = find_beta(m, ∇fk, norm_∇fk, β, θ1, θ2)
         d .= ∇fk .* (oneT - satβ) .+ m .* satβ
         norm_d = norm(d)
@@ -328,8 +332,8 @@ function SolverCore.solve!(
         norm_d = norm_∇fk
       end
       if !r2mode
-        (avgsatβ += satβ)
-        (siter += 1)
+        avgsatβ += satβ
+        siter += 1
       end
     end
 
