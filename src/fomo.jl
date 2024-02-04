@@ -292,7 +292,8 @@ function SolverCore.solve!(
   while !done
     λk = step_mult(αk,norm_d,backend)
     c .= x .- λk .* d
-    x == c && set_status!(stats,:smallstep) # step addition underfow on every dimensions, should happen before αk == 0
+    uf = x == c # step addition underfow on every dimensions, should happen before αk == 0
+    @show stats.status
     if r2mode
       ΔTk = norm_∇fk^2 * λk
     else  
@@ -365,11 +366,13 @@ function SolverCore.solve!(
       ),
     )
     
-    αk == 0 && set_status!(stats,:exception) # :smallstep exception should happen before
-
     callback(nlp, solver, stats)
 
+    uf      && set_status!(stats,:small_step)
+    αk == 0 && set_status!(stats,:exception) # :small_nlstep exception should happen before
+
     done = stats.status != :unknown
+    @show stats.status αk
   end
   if !r2mode
     avgsatβ /= siter
