@@ -34,7 +34,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `θ1 = T(0.1)` : momentum contribution parameter for convergence condition #1. [(1-satβ)∇f(xk) + satβ mk.∇f(xk)] ≥ θ1||∇f(xk)||², with mk memory of past gradient and satβ ∈ [0,β].
 - `θ2 = sqrt(T)^(1/3)` : momentum contribution parameter for convergence condition #2. ||∇f(xk)|| ≥ θ2||(1-satβ)∇f(xk) + satβ mk.∇f(xk)||, with mk memory of past gradient and satβ ∈ [0,β]. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `backend = r2()`: model-based method employed. Options are `r2()` for quadratic regulation and `tr()` for trust-region, `R2og()` for classical quadratic regularization ( no momentum, optimized for β = 0).
+- `backend = r2()`: model-based method employed. Options are `r2()` for quadratic regulation and `tr()` for trust-region, `R2og()` for classical quadratic regularization (no momentum, optimized for β = 0).
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
