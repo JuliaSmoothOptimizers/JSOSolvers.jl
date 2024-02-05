@@ -8,12 +8,19 @@ struct R2og <: AbstractFomoMethod end
 
 """
     fomo(nlp; kwargs...)
+    R2(nlp; kwargs...)
 
 A First-Order with MOmentum (FOMO) model-based method for unconstrained optimization. Supports quadratic regularization and trust region methods.
 
 For advanced usage, first define a `FomoSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
 
     solver = FomoSolver(nlp)
+    solve!(solver, nlp; kwargs...)
+
+*Quadratic Regularization (R2)*: if the user do not want to use momentum (β = 0), it is recommended to use the memory-optimized `R2` method.
+For advanced usage:
+
+    solver = R2Solver(nlp)
     solve!(solver, nlp; kwargs...)
 
 # Arguments
@@ -25,16 +32,16 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `η1 = eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
 - `γ1 = T(1/2)`, `γ2 = T(2)`: regularization update parameters.
-- `γ3 = T(1/2)` : momentum factor satβ update parameter in case of unsuccessful iteration.
+- `γ3 = T(1/2)` : momentum factor βmax update parameter in case of unsuccessful iteration.
 - `αmax = 1/eps(T)`: step parameter for fomo algorithm.
 - `max_eval::Int = -1`: maximum number of evaluation of the objective function.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `β = T(0.9) ∈ [0,1)` : target decay rate for the momentum.
-- `θ1 = T(0.1)` : momentum contribution parameter for convergence condition #1. [(1-satβ)∇f(xk) + satβ mk.∇f(xk)] ≥ θ1||∇f(xk)||², with mk memory of past gradient and satβ ∈ [0,β].
-- `θ2 = sqrt(T)^(1/3)` : momentum contribution parameter for convergence condition #2. ||∇f(xk)|| ≥ θ2||(1-satβ)∇f(xk) + satβ mk.∇f(xk)||, with mk memory of past gradient and satβ ∈ [0,β]. 
+- `θ1 = T(0.1)` : momentum contribution parameter for convergence condition #1. (1-βmax) * ∇f(xk) + βmax * dot(m,∇f(xk)) ≥ θ1 * ||∇f(xk)||², with m memory of past gradient and βmax ∈ [0,β].
+- `θ2::T = T(eps(T)^(1/3))` : momentum contribution parameter for convergence condition #2. ||∇f(xk)|| ≥ θ2 * ||(1-βmax) * ∇f(xk) + βmax * dot(m,∇f(xk))||, with m memory of past gradient and βmax ∈ [0,β]. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `backend = r2()`: model-based method employed. Options are `r2()` for quadratic regulation and `tr()` for trust-region, `R2og()` for classical quadratic regularization ( no momentum, optimized for β = 0).
+- `backend = r2()`: model-based method employed. Options are `r2()` for quadratic regulation and `tr()` for trust-region, `R2og()` for classical quadratic regularization (no momentum, optimized for β = 0).
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -96,78 +103,11 @@ end
 
 @doc (@doc FomoSolver) function fomo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
   solver = FomoSolver(nlp)
-  solver_specific = Dict(:avgsatβ => T(0.))
+  solver_specific = Dict(:avgβmax => T(0.))
   stats = GenericExecutionStats(nlp;solver_specific=solver_specific)
   return solve!(solver, nlp, stats; kwargs...)
 end
 
-"""
-    R2(nlp; kwargs...)
-
-A first-order quadratic regularization method for unconstrained optimization.
-
-For advanced usage, first define a `R2Solver` to preallocate the memory used in the algorithm, and then call `solve!`:
-
-    solver = R2Solver(nlp)
-    solve!(solver, nlp; kwargs...)
-Important: `R2` and `R2Solver` are only interfaces to `FomoSolver`, a first order solver that includes momentum strategy. The momentum strategy is ignore with `R2`.
-
-# Arguments
-- `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
-
-# Keyword arguments 
-- `x::V = nlp.meta.x0`: the initial guess.
-- `atol::T = √eps(T)`: absolute tolerance.
-- `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
-- `η1 = eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
-- `γ1 = T(1/2)`, `γ2 = 1/γ1`: regularization update parameters.
-- `σmin = eps(T)`: step parameter for R2 algorithm.
-- `max_eval::Int = -1`: maximum number of evaluation of the objective function.
-- `max_time::Float64 = 30.0`: maximum time limit in seconds.
-- `max_iter::Int = typemax(Int)`: maximum number of iterations.
-- `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-
-# Output
-The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
-
-# Callback
-The callback is called at each iteration.
-The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
-Changing any of the input arguments will affect the subsequent iterations.
-In particular, setting `stats.status = :user` will stop the algorithm.
-All relevant information should be available in `nlp` and `solver`.
-Notably, you can access, and modify, the following:
-- `solver.x`: current iterate;
-- `solver.gx`: current gradient;
-- `stats`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
-  - `stats.dual_feas`: norm of current gradient;
-  - `stats.iter`: current iteration counter;
-  - `stats.objective`: current objective function value;
-  - `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm has attained a stopping criterion. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
-  - `stats.elapsed_time`: elapsed time in seconds.
-
-# Examples
-```jldoctest
-using JSOSolvers, ADNLPModels
-nlp = ADNLPModel(x -> sum(x.^2), ones(3))
-stats = R2(nlp)
-
-# output
-
-"Execution stats: first-order stationary"
-```
-
-```jldoctest
-using JSOSolvers, ADNLPModels
-nlp = ADNLPModel(x -> sum(x.^2), ones(3))
-solver = R2Solver(nlp);
-stats = solve!(solver, nlp, backend = R2og())
-
-# output
-
-"Execution stats: first-order stationary"
-```
-"""
 function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   x = similar(nlp.meta.x0)
   g = similar(nlp.meta.x0)
@@ -177,7 +117,7 @@ function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   return FomoSolver{T, V}(x, g, c, m, d)
 end
 
-@doc (@doc R2Solver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
+@doc (@doc FomoSolver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
   solver = R2Solver(nlp)
   stats = GenericExecutionStats(nlp)
   if haskey(kwargs,:σmax)
@@ -256,11 +196,11 @@ function SolverCore.solve!(
   end
   if verbose > 0 && mod(stats.iter, verbose) == 0
     if r2mode
-      @info @sprintf "%5s  %9s  %7s  %7s" "iter" "f" "‖∇f‖" "σ"
-    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/αk
+      @info @sprintf "%5s  %9s  %7s  %7s  %7s " "iter" "f" "‖∇f‖" "σ" "ρk"
+    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/αk NaN
     else
-      @info @sprintf "%5s  %9s  %7s  %7s  %7s" "iter" "f" "‖∇f‖" "α" "staβ"
-    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk 0
+      @info @sprintf "%5s  %9s  %7s  %7s  %7s  %7s " "iter" "f" "‖∇f‖" "α" "ρk" "βmax"
+    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk NaN 0
     end
     
   end
@@ -284,15 +224,15 @@ function SolverCore.solve!(
 
   d .= ∇fk
   norm_d = norm_∇fk
-  satβ = T(0)
+  βmax = T(0)
   ρk = T(0)
-  avgsatβ = T(0)
+  avgβmax = T(0)
   siter = 0
   oneT = T(1)
   while !done
     λk = step_mult(αk,norm_d,backend)
     c .= x .- λk .* d
-    uf = x == c # step addition underfow on every dimensions, should happen before αk == 0
+    step_underflow = x == c # step addition underfow on every dimensions, should happen before αk == 0
     if r2mode
       ΔTk = norm_∇fk^2 * λk
     else  
@@ -310,8 +250,8 @@ function SolverCore.solve!(
     elseif ρk < η1
       αk = αk * γ1
       if !r2mode
-        satβ *= γ3
-        d .= ∇fk .* (oneT - satβ) .+ m .* satβ
+        βmax *= γ3
+        d .= ∇fk .* (oneT - βmax) .+ m .* βmax
       end
     end
 
@@ -325,15 +265,15 @@ function SolverCore.solve!(
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
       if !r2mode
-        satβ = find_beta(m, ∇fk, norm_∇fk, β, θ1, θ2)
-        d .= ∇fk .* (oneT - satβ) .+ m .* satβ
+        βmax = find_beta(m, ∇fk, norm_∇fk, β, θ1, θ2)
+        d .= ∇fk .* (oneT - βmax) .+ m .* βmax
         norm_d = norm(d)
       else
         d .= ∇fk
         norm_d = norm_∇fk
       end
       if !r2mode
-        avgsatβ += satβ
+        avgβmax += βmax
         siter += 1
       end
     end
@@ -346,9 +286,9 @@ function SolverCore.solve!(
     if verbose > 0 && mod(stats.iter, verbose) == 0
       @info infoline
       if r2mode
-        infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/αk
+        infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/αk ρk
       else
-        infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk satβ
+        infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk ρk βmax
       end
     end
 
@@ -367,14 +307,14 @@ function SolverCore.solve!(
     
     callback(nlp, solver, stats)
 
-    uf      && set_status!(stats,:small_step)
-    αk == 0 && set_status!(stats,:exception) # :small_nlstep exception should happen before
+    step_underflow  && set_status!(stats,:small_step)
+    αk == 0         && set_status!(stats,:exception) # :small_nlstep exception should happen before
 
     done = stats.status != :unknown
   end
   if !r2mode
-    avgsatβ /= siter
-    stats.solver_specific[:avgsatβ] = avgsatβ
+    avgβmax /= siter
+    stats.solver_specific[:avgβmax] = avgβmax
   end
   set_solution!(stats, x)
   return stats
@@ -383,11 +323,11 @@ end
 """
 find_beta(m, ∇f, norm_∇f, β, θ1, θ2)
 
-Compute satβ which saturates the contibution of the momentum term to the gradient.
-`satβ` is computed such that the two gradient-related conditions are ensured: 
-1. [(1-satβ)∇f(xk) + satβ mk.∇f(xk)] ≥ θ1||∇f(xk)||²
-2. ||∇f(xk)|| ≥ θ2||(1-satβ)∇f(xk) + satβ mk.∇f(xk)||
-with `m` memory of past gradient/
+Compute βmax which saturates the contibution of the momentum term to the gradient.
+`βmax` is computed such that the two gradient-related conditions are ensured: 
+1. [(1-βmax) * ∇f(xk) + βmax * dot(m,∇f(xk))] ≥ θ1 * ||∇f(xk)||²
+2. ||∇f(xk)|| ≥ θ2 * ||(1-βmax) * ∇f(xk) + βmax * dot(m.∇f(xk))||
+with `m` memory of past gradient
 """ 
 function find_beta(m::V,∇f::V,norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
   dotprod = dot(m,∇f)
@@ -395,7 +335,7 @@ function find_beta(m::V,∇f::V,norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
   n2 = norm(m .- ∇f)
   β1 = n1 > 0  ? (1-θ1)*norm_∇f^2/(n1)  : β
   β2 = n2 != 0 ? (1-θ2)*norm_∇f/(θ2*n2) : β
-  return min(β,min(β1,β2)) 
+  return min(β,min(β1,β2))
 end
 
 """
