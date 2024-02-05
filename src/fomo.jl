@@ -329,7 +329,7 @@ Compute βmax which saturates the contibution of the momentum term to the gradie
 2. ||∇f(xk)|| ≥ θ2 * ||(1-βmax) * ∇f(xk) + βmax * dot(m.∇f(xk))||
 with `m` memory of past gradient
 """ 
-function find_beta(m::V,∇f::V,norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
+function find_beta(m::V, ∇f::V, norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
   dotprod = dot(m,∇f)
   n1 = norm_∇f^2 - dotprod
   n2 = norm(m .- ∇f)
