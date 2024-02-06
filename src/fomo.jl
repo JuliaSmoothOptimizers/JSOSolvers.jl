@@ -38,8 +38,8 @@ For advanced usage:
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `β = T(0.9) ∈ [0,1)` : target decay rate for the momentum.
-- `θ1 = T(0.1)` : momentum contribution parameter for convergence condition #1. (1-βmax) * ∇f(xk) + βmax * dot(m,∇f(xk)) ≥ θ1 * ||∇f(xk)||², with m memory of past gradient and βmax ∈ [0,β].
-- `θ2::T = T(eps(T)^(1/3))` : momentum contribution parameter for convergence condition #2. ||∇f(xk)|| ≥ θ2 * ||(1-βmax) * ∇f(xk) + βmax * m||, with m memory of past gradient and βmax ∈ [0,β]. 
+- `θ1 = T(0.1)` : momentum contribution parameter for convergence condition #1. (1-βmax) * ∇f(xk) + βmax * dot(m,∇f(xk)) ≥ θ1 * ‖∇f(xk)‖², with m memory of past gradient and βmax ∈ [0,β].
+- `θ2::T = T(eps(T)^(1/3))` : momentum contribution parameter for convergence condition #2. ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) * ∇f(xk) + βmax * m‖, with m memory of past gradient and βmax ∈ [0,β]. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `backend = r2()`: model-based method employed. Options are `r2()` for quadratic regulation and `tr()` for trust-region, `R2og()` for classical quadratic regularization (no momentum, optimized for β = 0).
 
@@ -259,13 +259,13 @@ function SolverCore.solve!(
       x .= c
       if !r2mode
         momentum .= ∇fk .* (oneT - β) .+ momentum .* β
-        mdot∇f = dot(m,∇fk)
+        mdot∇f = dot(momentum,∇fk)
       end
       set_objective!(stats, fck)
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
       if !r2mode
-        βmax = find_beta(m, ∇fk, mdot∇f, norm_∇fk, β, θ1, θ2)
+        βmax = find_beta(momentum, ∇fk, mdot∇f, norm_∇fk, β, θ1, θ2)
         d .= ∇fk .* (oneT - βmax) .+ momentum .* βmax
         norm_d = norm(d)
       end
@@ -322,8 +322,8 @@ find_beta(m, md∇f, norm_∇f, β, θ1, θ2)
 
 Compute βmax which saturates the contibution of the momentum term to the gradient.
 `βmax` is computed such that the two gradient-related conditions are ensured: 
-1. [(1-βmax) * ∇f(xk) + βmax * dot(m,∇f(xk))] ≥ θ1 * ||∇f(xk)||²
-2. ||∇f(xk)|| ≥ θ2 * ||(1-βmax) * ∇f(xk) + βmax * m||
+1. [(1-βmax) * ∇f(xk) + βmax * dot(m,∇f(xk))] ≥ θ1 * ‖∇f(xk)‖²
+2. ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) * ∇f(xk) + βmax * m‖
 with `m` the momentum term and `mdot∇f = dot(m,∇f(xk))` 
 """ 
 function find_beta(m::V, ∇f::V, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
@@ -336,6 +336,7 @@ end
 
 """
   init_alpha(norm_∇fk::T, ::r2)
+  init_alpha(norm_∇fk::T, ::R2og)
   init_alpha(norm_∇fk::T, ::tr)
 
 Initialize α step size parameter. Ensure first step is the same for quadratic regularization and trust region methods.
