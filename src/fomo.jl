@@ -21,7 +21,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 For advanced usage:
 
     solver = R2Solver(nlp)
-    solve!(solver, nlp; kwargs...)
+    solve!(solver, nlp; backend = R2og(), kwargs...)
 
 # Arguments
 - `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
@@ -39,9 +39,11 @@ For advanced usage:
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `β = T(0.9) ∈ [0,1)` : target decay rate for the momentum.
 - `θ1 = T(0.1)` : momentum contribution parameter for convergence condition #1. (1-βmax) * ∇f(xk) + βmax * dot(m,∇f(xk)) ≥ θ1 * ||∇f(xk)||², with m memory of past gradient and βmax ∈ [0,β].
-- `θ2::T = T(eps(T)^(1/3))` : momentum contribution parameter for convergence condition #2. ||∇f(xk)|| ≥ θ2 * ||(1-βmax) * ∇f(xk) + βmax * dot(m,∇f(xk))||, with m memory of past gradient and βmax ∈ [0,β]. 
+- `θ2::T = T(eps(T)^(1/3))` : momentum contribution parameter for convergence condition #2. ||∇f(xk)|| ≥ θ2 * ||(1-βmax) * ∇f(xk) + βmax * m||, with m memory of past gradient and βmax ∈ [0,β]. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `backend = r2()`: model-based method employed. Options are `r2()` for quadratic regulation and `tr()` for trust-region, `R2og()` for classical quadratic regularization (no momentum, optimized for β = 0).
+
+*Warning:* `R2og()` backend should be used only for advanced usage as described above.
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -174,6 +176,7 @@ function SolverCore.solve!(
   set_iter!(stats, 0)
   set_objective!(stats, obj(nlp, x))
 
+  
   grad!(nlp, x, ∇fk)
   norm_∇fk = norm(∇fk)
   set_dual_residual!(stats, norm_∇fk)
@@ -229,15 +232,12 @@ function SolverCore.solve!(
   avgβmax = T(0)
   siter = 0
   oneT = T(1)
+  mdot∇f = T(0) # dot(m,∇fk)
   while !done
     λk = step_mult(αk,norm_d,backend)
     c .= x .- λk .* d
     step_underflow = x == c # step addition underfow on every dimensions, should happen before αk == 0
-    if r2mode
-      ΔTk = norm_∇fk^2 * λk
-    else  
-      ΔTk = dot(∇fk , d) * λk
-    end
+    ΔTk = ((oneT - βmax) * norm_∇fk^2 + βmax * mdot∇f) * λk # = dot(d,∇fk) * λk
     fck = obj(nlp, c)
     if fck == -Inf
       set_status!(stats, :unbounded)
@@ -260,17 +260,15 @@ function SolverCore.solve!(
       x .= c
       if !r2mode
         m .= ∇fk .* (oneT - β) .+ m .* β
+        mdot∇f = dot(m,∇fk)
       end
       set_objective!(stats, fck)
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
       if !r2mode
-        βmax = find_beta(m, ∇fk, norm_∇fk, β, θ1, θ2)
+        βmax = find_beta(m, ∇fk, mdot∇f, norm_∇fk, β, θ1, θ2)
         d .= ∇fk .* (oneT - βmax) .+ m .* βmax
         norm_d = norm(d)
-      else
-        d .= ∇fk
-        norm_d = norm_∇fk
       end
       if !r2mode
         avgβmax += βmax
@@ -321,17 +319,16 @@ function SolverCore.solve!(
 end
 
 """
-find_beta(m, ∇f, norm_∇f, β, θ1, θ2)
+find_beta(m, md∇f, norm_∇f, β, θ1, θ2)
 
 Compute βmax which saturates the contibution of the momentum term to the gradient.
 `βmax` is computed such that the two gradient-related conditions are ensured: 
 1. [(1-βmax) * ∇f(xk) + βmax * dot(m,∇f(xk))] ≥ θ1 * ||∇f(xk)||²
-2. ||∇f(xk)|| ≥ θ2 * ||(1-βmax) * ∇f(xk) + βmax * dot(m.∇f(xk))||
-with `m` memory of past gradient
+2. ||∇f(xk)|| ≥ θ2 * ||(1-βmax) * ∇f(xk) + βmax * m||
+with `m` memory of past gradient and `mdot∇f = dot(m,∇f(xk))` 
 """ 
-function find_beta(m::V, ∇f::V, norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
-  dotprod = dot(m,∇f)
-  n1 = norm_∇f^2 - dotprod
+function find_beta(m::V, ∇f::V, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
+  n1 = norm_∇f^2 - mdot∇f
   n2 = norm(m .- ∇f)
   β1 = n1 > 0  ? (1-θ1)*norm_∇f^2/(n1)  : β
   β2 = n2 != 0 ? (1-θ2)*norm_∇f/(θ2*n2) : β
@@ -354,9 +351,10 @@ end
 
 """
   step_mult(αk::T, norm_∇fk::T, ::r2)
+  step_mult(αk::T, norm_∇fk::T, ::R2og)
   step_mult(αk::T, norm_∇fk::T, ::tr)
 
-Compute step size multiplier: `αk` for quadratic regularization(`::r2`) and `αk/norm_∇fk` for trust region (`::tr`).
+Compute step size multiplier: `αk` for quadratic regularization(`::r2` and `::R2og`) and `αk/norm_∇fk` for trust region (`::tr`).
 """
 function step_mult(αk::T, norm_∇fk::T, ::Union{r2,R2og}) where{T}
   αk
