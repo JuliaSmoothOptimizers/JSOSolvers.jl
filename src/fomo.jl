@@ -171,7 +171,7 @@ function SolverCore.solve!(
   x = solver.x .= x
   ∇fk = solver.g
   c = solver.c
-  m = solver.m
+  momentum = solver.m
   d = solver.d
   set_iter!(stats, 0)
   set_objective!(stats, obj(nlp, x))
@@ -232,7 +232,7 @@ function SolverCore.solve!(
   avgβmax = T(0)
   siter = 0
   oneT = T(1)
-  mdot∇f = T(0) # dot(m,∇fk)
+  mdot∇f = T(0) # dot(momentum,∇fk)
   while !done
     λk = step_mult(αk,norm_d,backend)
     c .= x .- λk .* d
@@ -251,7 +251,7 @@ function SolverCore.solve!(
       αk = αk * γ1
       if !r2mode
         βmax *= γ3
-        d .= ∇fk .* (oneT - βmax) .+ m .* βmax
+        d .= ∇fk .* (oneT - βmax) .+ momentum .* βmax
       end
     end
 
@@ -259,7 +259,7 @@ function SolverCore.solve!(
     if ρk >= η1
       x .= c
       if !r2mode
-        m .= ∇fk .* (oneT - β) .+ m .* β
+        momentum .= ∇fk .* (oneT - β) .+ momentum .* β
         mdot∇f = dot(m,∇fk)
       end
       set_objective!(stats, fck)
@@ -267,7 +267,7 @@ function SolverCore.solve!(
       norm_∇fk = norm(∇fk)
       if !r2mode
         βmax = find_beta(m, ∇fk, mdot∇f, norm_∇fk, β, θ1, θ2)
-        d .= ∇fk .* (oneT - βmax) .+ m .* βmax
+        d .= ∇fk .* (oneT - βmax) .+ momentum .* βmax
         norm_d = norm(d)
       end
       if !r2mode
@@ -325,7 +325,7 @@ Compute βmax which saturates the contibution of the momentum term to the gradie
 `βmax` is computed such that the two gradient-related conditions are ensured: 
 1. [(1-βmax) * ∇f(xk) + βmax * dot(m,∇f(xk))] ≥ θ1 * ||∇f(xk)||²
 2. ||∇f(xk)|| ≥ θ2 * ||(1-βmax) * ∇f(xk) + βmax * m||
-with `m` memory of past gradient and `mdot∇f = dot(m,∇f(xk))` 
+with `m` the momentum term and `mdot∇f = dot(m,∇f(xk))` 
 """ 
 function find_beta(m::V, ∇f::V, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
   n1 = norm_∇f^2 - mdot∇f
