@@ -1,6 +1,38 @@
 export lbfgs, LBFGSSolver
 
 """
+    LbfgsParameterSet{T} <: AbstractParameterSet
+
+This structure designed for `lbfgs` regroups the following parameters:
+  - mem::Parameter{Int, IntegerRange{Int}}: memory parameter of the `lbfgs` algorithm
+  - τ₁::Parameter{T, RealInterval{T}}: slope factor in the Wolfe condition when performing the line search
+  - bk_max::Parameter{Int, IntegerRange{Int}}: maximum number of backtracks when performing the line search.
+
+  Default values are:
+  - `mem::Int = 5`
+  - `τ₁::T = T(0.9999)`
+  - `bk_max:: Int = 25`
+"""
+struct LbfgsParameterSet{T} <: AbstractParameterSet
+  mem::Parameter{Int, IntegerRange{Int}}
+  τ₁::Parameter{T, RealInterval{T}}
+  bk_max::Parameter{Int, IntegerRange{Int}}
+end
+
+# add a default constructor
+function LbfgsParameterSet{T}(; mem::Int = 5, τ₁::T = T(0.9999), bk_max::Int = 25) where {T}
+  LbfgsParameterSet(
+    Parameter(mem, IntegerRange(Int(5), Int(20))),
+    Parameter(
+      τ₁,
+      RealInterval(T(0), T(1), lower_open = true),
+    ),
+    Parameter(bk_max, IntegerRange(Int(1), Int(100))),
+  )
+end
+LbfgsParameterSet(mem::Int, τ₁::T, bk_max::Int) where {T} = LbfgsParameterSet{T}(mem = mem, τ₁ = τ₁, bk_max = bk_max)
+
+"""
     lbfgs(nlp; kwargs...)
 
 An implementation of a limited memory BFGS line-search method for unconstrained minimization.
@@ -62,10 +94,15 @@ mutable struct LBFGSSolver{T, V, Op <: AbstractLinearOperator{T}, M <: AbstractN
   d::V
   H::Op
   h::LineModel{T, V, M}
+  params::LbfgsParameterSet{T}
 end
 
-function LBFGSSolver(nlp::M; mem::Int = 5) where {T, V, M <: AbstractNLPModel{T, V}}
+function LBFGSSolver(nlp::M; kwargs...) where {T, V, M <: AbstractNLPModel{T, V}}
   nvar = nlp.meta.nvar
+
+  params = LbfgsParameterSet{T}(; kwargs...)
+  mem = value(params.mem)
+
   x = V(undef, nvar)
   d = V(undef, nvar)
   xt = V(undef, nvar)
@@ -74,7 +111,7 @@ function LBFGSSolver(nlp::M; mem::Int = 5) where {T, V, M <: AbstractNLPModel{T,
   H = InverseLBFGSOperator(T, nvar, mem = mem, scaling = true)
   h = LineModel(nlp, x, d)
   Op = typeof(H)
-  return LBFGSSolver{T, V, Op, M}(x, xt, gx, gt, d, H, h)
+  return LBFGSSolver{T, V, Op, M}(x, xt, gx, gt, d, H, h, params)
 end
 
 function SolverCore.reset!(solver::LBFGSSolver)
@@ -88,12 +125,14 @@ function SolverCore.reset!(solver::LBFGSSolver, nlp::AbstractNLPModel)
 end
 
 @doc (@doc LBFGSSolver) function lbfgs(
-  nlp::AbstractNLPModel;
+  nlp::AbstractNLPModel{T, V};
   x::V = nlp.meta.x0,
   mem::Int = 5,
+  τ₁::T = T(0.9999),
+  bk_max::Int = 25,
   kwargs...,
-) where {V}
-  solver = LBFGSSolver(nlp; mem = mem)
+) where {T, V}
+  solver = LBFGSSolver(nlp; mem = mem, τ₁ = τ₁, bk_max = bk_max)
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
@@ -108,8 +147,6 @@ function SolverCore.solve!(
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   max_time::Float64 = 30.0,
-  τ₁::T = T(0.9999),
-  bk_max::Int = 25,
   verbose::Int = 0,
   verbose_subsolver::Int = 0,
 ) where {T, V}
@@ -123,6 +160,10 @@ function SolverCore.solve!(
   reset!(stats)
   start_time = time()
   set_time!(stats, 0.0)
+
+  # parameters
+  τ₁ = value(solver.params.τ₁)
+  bk_max = value(solver.params.bk_max)
 
   n = nlp.meta.nvar
 
