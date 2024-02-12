@@ -41,5 +41,7 @@ keywords:
   - Julia
   - Nonlinear Programming
 license: MPL-2.0
+version: 0.11.0
+date-released: '2023-07-05'
 repository-code: >-
   https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl
