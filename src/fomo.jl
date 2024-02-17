@@ -92,6 +92,7 @@ mutable struct FomoSolver{T, V} <: AbstractOptimizationSolver
   c::V
   m::V
   d::V
+  p::V
   α::T
 end
 
@@ -101,7 +102,8 @@ function FomoSolver(nlp::AbstractNLPModel{T, V}) where {T, V}
   c = similar(nlp.meta.x0)
   m = fill!(similar(nlp.meta.x0), 0)
   d = fill!(similar(nlp.meta.x0), 0)
-  return FomoSolver{T, V}(x, g, c, m, d, T(0))
+  p = similar(nlp.meta.x0)
+  return FomoSolver{T, V}(x, g, c, m, d, p, T(0))
 end
 
 @doc (@doc FomoSolver) function fomo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
@@ -117,7 +119,8 @@ function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   c = similar(nlp.meta.x0)
   m = Vector{T}()
   d = g # similar without momentum
-  return FomoSolver{T, V}(x, g, c, m, d, T(0))
+  p = Vector{T}()
+  return FomoSolver{T, V}(x, g, c, m, d, p, T(0))
 end
 
 @doc (@doc FomoSolver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
@@ -174,6 +177,7 @@ function SolverCore.solve!(
   c = solver.c
   momentum = solver.m
   d = solver.d
+  p = solver.p
   set_iter!(stats, 0)
   set_objective!(stats, obj(nlp, x))
 
@@ -266,7 +270,8 @@ function SolverCore.solve!(
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
       if !r2mode
-        βmax = find_beta(momentum, ∇fk, mdot∇f, norm_∇fk, β, θ1, θ2)
+        p .= momentum .- ∇fk
+        βmax = find_beta(p , mdot∇f, norm_∇fk, β, θ1, θ2)
         d .= ∇fk .* (oneT - βmax) .+ momentum .* βmax
         norm_d = norm(d)
       end
@@ -327,9 +332,9 @@ Compute βmax which saturates the contibution of the momentum term to the gradie
 2. ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) * ∇f(xk) + βmax * m‖
 with `m` the momentum term and `mdot∇f = dot(m,∇f(xk))` 
 """ 
-function find_beta(m::V, ∇f::V, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
+function find_beta(p::V, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
   n1 = norm_∇f^2 - mdot∇f
-  n2 = norm(m .- ∇f)
+  n2 = norm(p)
   β1 = n1 > 0  ? (1-θ1)*norm_∇f^2/(n1)  : β
   β2 = n2 != 0 ? (1-θ2)*norm_∇f/(θ2*n2) : β
   return min(β,min(β1,β2))
