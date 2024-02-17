@@ -1,6 +1,6 @@
 export fomo, FomoSolver, R2, R2Solver, tr, r2, R2og
 
-abstract type AbstractFirstOrderSolver <: AbstractOptimizationSolver end
+abstract type AbstractFomoMethod end
 
 struct tr   <: AbstractFomoMethod end
 struct r2   <: AbstractFomoMethod end
@@ -92,6 +92,7 @@ mutable struct FomoSolver{T, V} <: AbstractOptimizationSolver
   c::V
   m::V
   d::V
+  α::T
 end
 
 function FomoSolver(nlp::AbstractNLPModel{T, V}) where {T, V}
@@ -100,7 +101,7 @@ function FomoSolver(nlp::AbstractNLPModel{T, V}) where {T, V}
   c = similar(nlp.meta.x0)
   m = fill!(similar(nlp.meta.x0), 0)
   d = fill!(similar(nlp.meta.x0), 0)
-  return FomoSolver{T, V}(x, g, c, m, d)
+  return FomoSolver{T, V}(x, g, c, m, d, T(0))
 end
 
 @doc (@doc FomoSolver) function fomo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
@@ -116,7 +117,7 @@ function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   c = similar(nlp.meta.x0)
   m = Vector{T}()
   d = g # similar without momentum
-  return FomoSolver{T, V}(x, g, c, m, d)
+  return FomoSolver{T, V}(x, g, c, m, d, T(0))
 end
 
 @doc (@doc FomoSolver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
@@ -181,7 +182,7 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇fk)
   set_dual_residual!(stats, norm_∇fk)
 
-  αk = init_alpha(norm_∇fk,backend)
+  solver.α = init_alpha(norm_∇fk,backend)
   
   # Stopping criterion: 
   ϵ = atol + rtol * norm_∇fk
@@ -190,20 +191,20 @@ function SolverCore.solve!(
     @info("Optimal point found at initial point")
     if r2mode
       @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
-      @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/αk
+      @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/solver.α
     else
       @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "α"
-      @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk
+      @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.α
     end
     
   end
   if verbose > 0 && mod(stats.iter, verbose) == 0
     if r2mode
       @info @sprintf "%5s  %9s  %7s  %7s  %7s " "iter" "f" "‖∇f‖" "σ" "ρk"
-      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/αk NaN
+      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/solver.α NaN
     else
       @info @sprintf "%5s  %9s  %7s  %7s  %7s  %7s " "iter" "f" "‖∇f‖" "α" "ρk" "βmax"
-      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk NaN 0
+      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.α NaN 0
     end
   end
 
@@ -233,9 +234,9 @@ function SolverCore.solve!(
   oneT = T(1)
   mdot∇f = T(0) # dot(momentum,∇fk)
   while !done
-    λk = step_mult(αk,norm_d,backend)
+    λk = step_mult(solver.α,norm_d,backend)
     c .= x .- λk .* d
-    step_underflow = x == c # step addition underfow on every dimensions, should happen before αk == 0
+    step_underflow = x == c # step addition underfow on every dimensions, should happen before solver.α == 0
     ΔTk = ((oneT - βmax) * norm_∇fk^2 + βmax * mdot∇f) * λk # = dot(d,∇fk) * λk
     fck = obj(nlp, c)
     if fck == -Inf
@@ -245,9 +246,9 @@ function SolverCore.solve!(
     ρk = (stats.objective - fck) / ΔTk
     # Update regularization parameters
     if ρk >= η2
-      αk = min(αmax, γ2 * αk)
+      solver.α = min(αmax, γ2 * solver.α)
     elseif ρk < η1
-      αk = αk * γ1
+      solver.α = solver.α * γ1
       if !r2mode
         βmax *= γ3
         d .= ∇fk .* (oneT - βmax) .+ momentum .* βmax
@@ -283,9 +284,9 @@ function SolverCore.solve!(
     if verbose > 0 && mod(stats.iter, verbose) == 0
       @info infoline
       if r2mode
-        infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/αk ρk
+        infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/solver.α ρk
       else
-        infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk ρk βmax
+        infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.α ρk βmax
       end
     end
 
@@ -305,7 +306,7 @@ function SolverCore.solve!(
     callback(nlp, solver, stats)
 
     step_underflow  && set_status!(stats,:small_step)
-    αk == 0         && set_status!(stats,:exception) # :small_nlstep exception should happen before
+    solver.α == 0         && set_status!(stats,:exception) # :small_nlstep exception should happen before
 
     done = stats.status != :unknown
   end
@@ -350,16 +351,16 @@ function init_alpha(norm_∇fk::T, ::tr) where{T}
 end
 
 """
-  step_mult(αk::T, norm_∇fk::T, ::r2)
-  step_mult(αk::T, norm_∇fk::T, ::R2og)
-  step_mult(αk::T, norm_∇fk::T, ::tr)
+  step_mult(α::T, norm_∇fk::T, ::r2)
+  step_mult(α::T, norm_∇fk::T, ::R2og)
+  step_mult(α::T, norm_∇fk::T, ::tr)
 
-Compute step size multiplier: `αk` for quadratic regularization(`::r2` and `::R2og`) and `αk/norm_∇fk` for trust region (`::tr`).
+Compute step size multiplier: `α` for quadratic regularization(`::r2` and `::R2og`) and `α/norm_∇fk` for trust region (`::tr`).
 """
-function step_mult(αk::T, norm_∇fk::T, ::Union{r2,R2og}) where{T}
-  αk
+function step_mult(α::T, norm_∇fk::T, ::Union{r2,R2og}) where{T}
+  α
 end
 
-function step_mult(αk::T, norm_∇fk::T, ::tr) where{T}
-  αk/norm_∇fk
+function step_mult(α::T, norm_∇fk::T, ::tr) where{T}
+  α/norm_∇fk
 end
