@@ -1,6 +1,6 @@
 export fomo, FomoSolver, R2, R2Solver, tr, r2, R2og
 
-abstract type AbstractFomoMethod end
+abstract type AbstractFirstOrderSolver <: AbstractOptimizationSolver end
 
 struct tr   <: AbstractFomoMethod end
 struct r2   <: AbstractFomoMethod end
