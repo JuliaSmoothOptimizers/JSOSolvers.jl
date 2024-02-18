@@ -19,7 +19,7 @@ For advanced usage, first define a `R2Solver` to preallocate the memory used in 
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `η1 = eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
 - `γ1 = T(1/2)`, `γ2 = 1/γ1`: regularization update parameters.
-- `σmin = eps(T)`: step parameter for R2 algorithm.
+- `αmax = 1/eps(T)`: maximum value for step size parameter for R2 algorithm.
 - `max_eval::Int = -1`: maximum number of evaluation of the objective function.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
@@ -72,7 +72,7 @@ mutable struct R2Solver{T, V} <: AbstractOptimizationSolver
   gx::V
   cx::V
   d::V   # used for momentum term
-  σ::T
+  α::T
 end
 
 function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
@@ -80,8 +80,8 @@ function R2Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
   gx = similar(nlp.meta.x0)
   cx = similar(nlp.meta.x0)
   d = fill!(similar(nlp.meta.x0), 0)
-  σ = zero(T) # init it to zero for now 
-  return R2Solver{T, V}(x, gx, cx, d, σ)
+  α = zero(T) # init it to zero for now 
+  return R2Solver{T, V}(x, gx, cx, d, α)
 end
 
 @doc (@doc R2Solver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
@@ -107,7 +107,7 @@ function SolverCore.solve!(
   η2 = T(0.95),
   γ1 = T(1 / 2),
   γ2 = 1 / γ1,
-  σmin = zero(T),
+  αmax = T(Inf),
   max_time::Float64 = 30.0,
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
@@ -124,7 +124,7 @@ function SolverCore.solve!(
   ∇fk = solver.gx
   ck = solver.cx
   d = solver.d
-  σk = solver.σ
+  αk = solver.α
 
   set_iter!(stats, 0)
   set_objective!(stats, obj(nlp, x))
@@ -133,18 +133,18 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇fk)
   set_dual_residual!(stats, norm_∇fk)
 
-  σk = 2^round(log2(norm_∇fk + 1))
+  αk = 1/2^round(log2(norm_∇fk + 1))
   # Stopping criterion: 
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
   if optimal
     @info("Optimal point found at initial point")
-    @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
-    @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk σk
+    @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "α"
+    @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk
   end
   if verbose > 0 && mod(stats.iter, verbose) == 0
-    @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
-    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk σk
+    @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "α"
+    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk
   end
 
   set_status!(
@@ -160,20 +160,20 @@ function SolverCore.solve!(
     ),
   )
 
-  solver.σ = σk
+  solver.α = αk
   callback(nlp, solver, stats)
-  σk = solver.σ
+  αk = solver.α
 
   done = stats.status != :unknown
 
   while !done
     if β == 0
-      ck .= x .- (∇fk ./ σk)
+      ck .= x .- (∇fk .* αk)
     else
       d .= ∇fk .* (T(1) - β) .+ d .* β
-      ck .= x .- (d ./ σk)
+      ck .= x .- (d .* αk)
     end
-    ΔTk = norm_∇fk^2 / σk
+    ΔTk = norm_∇fk^2 * αk
     fck = obj(nlp, ck)
     if fck == -Inf
       set_status!(stats, :unbounded)
@@ -184,9 +184,9 @@ function SolverCore.solve!(
 
     # Update regularization parameters
     if ρk >= η2
-      σk = max(σmin, γ1 * σk)
+      αk = min(αmax, γ2 * αk)
     elseif ρk < η1
-      σk = σk * γ2
+      αk = αk * γ1
     end
 
     # Acceptance of the new candidate
@@ -204,7 +204,7 @@ function SolverCore.solve!(
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       @info infoline
-      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk σk
+      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk αk
     end
 
     set_status!(
@@ -219,9 +219,9 @@ function SolverCore.solve!(
         max_time = max_time,
       ),
     )
-    solver.σ = σk
+    solver.α = αk
     callback(nlp, solver, stats)
-    σk = solver.σ
+    αk = solver.α
 
     done = stats.status != :unknown
   end
