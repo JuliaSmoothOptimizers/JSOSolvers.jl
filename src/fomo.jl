@@ -1,4 +1,4 @@
-export fomo, FomoSolver, FoSolver, R2, R2Solver, tr_step, r2_step
+export fomo, FomoSolver, FoSolver, R2, tr_step, r2_step
 
 abstract type AbstractFirstOrderSolver <: AbstractOptimizationSolver end
 
@@ -134,6 +134,12 @@ end
   return solve!(solver, nlp, stats; kwargs...)
 end
 
+function SolverCore.reset!(solver::FomoSolver{T}) where {T}
+  fill!(solver.m,0)
+  solver
+end
+
+SolverCore.reset!(solver::FomoSolver, ::AbstractNLPModel) = reset!(solver)
 
 mutable struct FoSolver{T, V} <: AbstractFirstOrderSolver
   x::V
@@ -158,14 +164,6 @@ end
     return solve!(solver, nlp, stats; step_backend = r2_step(), kwargs...)
   end
 end
-
-function SolverCore.reset!(solver::FomoSolver{T}) where {T}
-  fill!(solver.m,0)
-  solver
-end
-
-SolverCore.reset!(solver::FomoSolver, ::AbstractNLPModel) = reset!(solver)
-
 
 function SolverCore.reset!(solver::FoSolver{T}) where {T}
   solver
