@@ -166,6 +166,13 @@ end
 
 SolverCore.reset!(solver::FomoSolver, ::AbstractNLPModel) = reset!(solver)
 
+
+function SolverCore.reset!(solver::FoSolver{T}) where {T}
+  solver
+end
+
+SolverCore.reset!(solver::FoSolver, ::AbstractNLPModel) = reset!(solver)
+
 function SolverCore.solve!(
   solver::AbstractFirstOrderSolver,
   nlp::AbstractNLPModel{T, V},
