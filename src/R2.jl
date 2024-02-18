@@ -133,7 +133,7 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇fk)
   set_dual_residual!(stats, norm_∇fk)
 
-  αk = 1/2^round(log2(norm_∇fk + 1))
+  αk = 1 / 2^round(log2(norm_∇fk + 1))
   # Stopping criterion: 
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
