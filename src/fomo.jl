@@ -70,6 +70,7 @@ Notably, you can access, and modify, the following:
 # Examples
 
 ## `fomo`
+
 ```jldoctest
 using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> sum(x.^2), ones(3))
