@@ -34,7 +34,7 @@ Extra keyword arguments `σmin` is accepted (`αmax` will be set to `1/σmin`).
 - `η1 = eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
 - `γ1 = T(1/2)`, `γ2 = T(2)`: regularization/trust region update parameters.
 - `γ3 = T(1/2)` : momentum factor βmax update parameter in case of unsuccessful iteration.
-- `αmax = 1/eps(T)`: maximum step parameter for fomo algorithm.
+- `αmax = 1/eps(T)`: maximum step parameter for fomo solver.
 - `max_eval::Int = -1`: maximum number of evaluation of the objective function.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
