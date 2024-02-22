@@ -51,6 +51,7 @@ Extra keyword arguments `σmin` is accepted (`αmax` will be set to `1/σmin`).
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 
 # Callback
+
 The callback is called at each iteration.
 The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
 Changing any of the input arguments will affect the subsequent iterations.
