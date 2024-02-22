@@ -165,7 +165,7 @@ end
 @doc (@doc FomoSolver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
   solver = FoSolver(nlp)
   stats = GenericExecutionStats(nlp)
-  if haskey(kwargs,:σmin)
+  if haskey(kwargs, :σmin)
     return solve!(solver, nlp, stats; step_backend = r2_step(), αmax = 1/kwargs[:σmin], kwargs...)
   else
     return solve!(solver, nlp, stats; step_backend = r2_step(), kwargs...)
