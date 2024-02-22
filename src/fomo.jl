@@ -68,6 +68,7 @@ Notably, you can access, and modify, the following:
   - `stats.elapsed_time`: elapsed time in seconds.
 
 # Examples
+
 ## `fomo`
 ```jldoctest
 using JSOSolvers, ADNLPModels
