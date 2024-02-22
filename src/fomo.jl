@@ -25,6 +25,7 @@ For advanced usage:
 Extra keyword arguments `σmin` is accepted (`αmax` will be set to `1/σmin`).
 
 # Arguments
+
 - `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
 
 # Keyword arguments 
