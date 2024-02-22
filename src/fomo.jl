@@ -10,7 +10,7 @@ struct r2_step   <: AbstractFomoMethod end
     fomo(nlp; kwargs...)
     R2(nlp; kwargs...)
 
-A First-Order with MOmentum (FOMO) model-based method for unconstrained optimization. Supports quadratic regularization and trust region methods.
+A First-Order with MOmentum (FOMO) model-based method for unconstrained optimization. Supports quadratic regularization and trust region steps.
 
 For advanced usage, first define a `FomoSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
 
