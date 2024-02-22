@@ -47,6 +47,7 @@ Extra keyword arguments `σmin` is accepted (`αmax` will be set to `1/σmin`).
 - `step_backend = r2_step()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 
 # Output
+
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 
 # Callback
