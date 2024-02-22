@@ -218,7 +218,6 @@ function SolverCore.solve!(
   set_iter!(stats, 0)
   set_objective!(stats, obj(nlp, x))
 
-  
   grad!(nlp, x, ∇fk)
   norm_∇fk = norm(∇fk)
   set_dual_residual!(stats, norm_∇fk)
