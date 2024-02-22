@@ -311,8 +311,6 @@ function SolverCore.solve!(
         βmax = find_beta(p , mdot∇f, norm_∇fk, β, θ1, θ2)
         d .= ∇fk .* (oneT - βmax) .+ momentum .* βmax
         norm_d = norm(d)
-      end
-      if use_momentum
         avgβmax += βmax
         siter += 1
       end
