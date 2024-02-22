@@ -236,7 +236,6 @@ function SolverCore.solve!(
       @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "α"
       @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.α
     end
-    
   end
   if verbose > 0 && mod(stats.iter, verbose) == 0
     if !use_momentum
