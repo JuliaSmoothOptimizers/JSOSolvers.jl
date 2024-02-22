@@ -222,7 +222,7 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇fk)
   set_dual_residual!(stats, norm_∇fk)
 
-  solver.α = init_alpha(norm_∇fk,step_backend)
+  solver.α = init_alpha(norm_∇fk, step_backend)
   
   # Stopping criterion: 
   ϵ = atol + rtol * norm_∇fk
