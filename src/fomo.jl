@@ -136,7 +136,7 @@ end
 @doc (@doc FomoSolver) function fomo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
   solver = FomoSolver(nlp)
   solver_specific = Dict(:avgβmax => T(0.))
-  stats = GenericExecutionStats(nlp;solver_specific=solver_specific)
+  stats = GenericExecutionStats(nlp; solver_specific = solver_specific)
   return solve!(solver, nlp, stats; kwargs...)
 end
 
