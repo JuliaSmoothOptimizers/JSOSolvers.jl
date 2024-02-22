@@ -142,7 +142,7 @@ end
 end
 
 function SolverCore.reset!(solver::FomoSolver{T}) where {T}
-  fill!(solver.m,0)
+  fill!(solver.m, 0)
   solver
 end
 
