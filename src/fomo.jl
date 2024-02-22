@@ -32,7 +32,7 @@ Extra keyword arguments `σmin` is accepted (`αmax` will be set to `1/σmin`).
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `η1 = eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
-- `γ1 = T(1/2)`, `γ2 = T(2)`: regularization update parameters.
+- `γ1 = T(1/2)`, `γ2 = T(2)`: regularization/trust region update parameters.
 - `γ3 = T(1/2)` : momentum factor βmax update parameter in case of unsuccessful iteration.
 - `αmax = 1/eps(T)`: maximum step parameter for fomo algorithm.
 - `max_eval::Int = -1`: maximum number of evaluation of the objective function.
