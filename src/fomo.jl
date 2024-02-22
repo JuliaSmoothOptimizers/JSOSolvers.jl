@@ -92,6 +92,7 @@ stats = solve!(solver, nlp)
 "Execution stats: first-order stationary"
 ```
 ## `R2`
+
 ```jldoctest
 using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> sum(x.^2), ones(3))
