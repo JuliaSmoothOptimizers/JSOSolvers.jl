@@ -3,8 +3,8 @@ export fomo, FomoSolver, FoSolver, R2, tr_step, r2_step
 abstract type AbstractFirstOrderSolver <: AbstractOptimizationSolver end
 
 abstract type AbstractFOMethod end
-struct tr_step   <: AbstractFOMethod end
-struct r2_step   <: AbstractFOMethod end
+struct tr_step <: AbstractFOMethod end
+struct r2_step <: AbstractFOMethod end
 
 """
     fomo(nlp; kwargs...)
@@ -130,19 +130,19 @@ end
 
 @doc (@doc FomoSolver) function fomo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
   solver = FomoSolver(nlp)
-  solver_specific = Dict(:avgβmax => T(0.))
-  stats = GenericExecutionStats(nlp;solver_specific=solver_specific)
+  solver_specific = Dict(:avgβmax => T(0.0))
+  stats = GenericExecutionStats(nlp; solver_specific = solver_specific)
   return solve!(solver, nlp, stats; kwargs...)
 end
 
 function SolverCore.reset!(solver::FomoSolver{T}) where {T}
-  fill!(solver.m,0)
+  fill!(solver.m, 0)
   solver
 end
 
 SolverCore.reset!(solver::FomoSolver, ::AbstractNLPModel) = reset!(solver)
 
-mutable struct FoSolver{T, V} <: AbstractFirstOrderSolver
+@doc (@doc FomoSolver) mutable struct FoSolver{T, V} <: AbstractFirstOrderSolver
   x::V
   g::V
   c::V
@@ -186,22 +186,23 @@ function SolverCore.solve!(
   rtol::T = √eps(T),
   η1::T = T(eps(T)^(1 / 4)),
   η2::T = T(0.95),
-  γ1::T = T(1/2),
+  γ1::T = T(1 / 2),
   γ2::T = T(2),
-  γ3::T = T(1/2),
-  αmax::T = 1/eps(T),
+  γ3::T = T(1 / 2),
+  αmax::T = 1 / eps(T),
   max_time::Float64 = 30.0,
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   β::T = T(0.9),
   θ1::T = T(0.1),
-  θ2::T = T(eps(T)^(1/3)),
+  θ2::T = T(eps(T)^(1 / 3)),
   verbose::Int = 0,
   step_backend = r2_step(),
 ) where {T, V}
   use_momentum = typeof(solver) <: FomoSolver
+  is_r2 = typeof(step_backend) <: r2_step
   unconstrained(nlp) || error("fomo should only be called on unconstrained problems.")
-  
+
   reset!(stats)
   start_time = time()
   set_time!(stats, 0.0)
@@ -215,34 +216,38 @@ function SolverCore.solve!(
   set_iter!(stats, 0)
   set_objective!(stats, obj(nlp, x))
 
-  
   grad!(nlp, x, ∇fk)
   norm_∇fk = norm(∇fk)
   set_dual_residual!(stats, norm_∇fk)
 
   solver.α = init_alpha(norm_∇fk, step_backend)
-  
+
   # Stopping criterion: 
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
+  header = ["iter", "f", "‖∇f‖", "α"]
   if optimal
     @info("Optimal point found at initial point")
-    if !use_momentum
-      @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "σ"
-      @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/solver.α
+    if is_r2
+      @info @sprintf "%5s  %9s  %7s  %7s " header...
+      @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1 / solver.α
     else
-      @info @sprintf "%5s  %9s  %7s  %7s " "iter" "f" "‖∇f‖" "α"
+      @info @sprintf "%5s  %9s  %7s  %7s " header...
       @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.α
     end
-    
   end
   if verbose > 0 && mod(stats.iter, verbose) == 0
+    push!(header, "ρk")
+    step_param = is_r2 ? 1 / solver.α : solver.α
     if !use_momentum
-      @info @sprintf "%5s  %9s  %7s  %7s  %7s " "iter" "f" "‖∇f‖" "σ" "ρk"
-      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/solver.α 0
+      @info @sprintf "%5s  %9s  %7s  %7s  %7s " header...
+      infoline =
+        @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param
     else
-      @info @sprintf "%5s  %9s  %7s  %7s  %7s  %7s " "iter" "f" "‖∇f‖" "α" "ρk" "βmax"
-      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.α 0 0
+      push!(header, "βmax")
+      @info @sprintf "%5s  %9s  %7s  %7s  %7s  %7s " header...
+      infoline =
+        @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ' ' 0
     end
   end
 
@@ -305,7 +310,7 @@ function SolverCore.solve!(
       norm_∇fk = norm(∇fk)
       if use_momentum
         p .= momentum .- ∇fk
-        βmax = find_beta(p , mdot∇f, norm_∇fk, β, θ1, θ2)
+        βmax = find_beta(p, mdot∇f, norm_∇fk, β, θ1, θ2)
         d .= ∇fk .* (oneT - βmax) .+ momentum .* βmax
         norm_d = norm(d)
       end
@@ -322,10 +327,13 @@ function SolverCore.solve!(
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       @info infoline
+      step_param = is_r2 ? 1 / solver.α : solver.α
       if !use_momentum
-        infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1/solver.α ρk
+        infoline =
+          @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ρk
       else
-        infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.α ρk βmax
+        infoline =
+          @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ρk βmax
       end
     end
 
@@ -341,11 +349,11 @@ function SolverCore.solve!(
         max_time = max_time,
       ),
     )
-    
+
     callback(nlp, solver, stats)
 
-    step_underflow  && set_status!(stats, :small_step)
-    solver.α == 0         && set_status!(stats, :exception) # :small_nlstep exception should happen before
+    step_underflow && set_status!(stats, :small_step)
+    solver.α == 0 && set_status!(stats, :exception) # :small_nlstep exception should happen before
 
     done = stats.status != :unknown
   end
@@ -362,16 +370,16 @@ find_beta(m, mdot∇f, norm_∇f, β, θ1, θ2)
 
 Compute βmax which saturates the contibution of the momentum term to the gradient.
 `βmax` is computed such that the two gradient-related conditions are ensured: 
-1. [(1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀm ≥ θ1 * ‖∇f(xk)‖²
+1. (1-βmax) * ‖∇f(xk)‖² + βmax * ∇f(xk)ᵀm ≥ θ1 * ‖∇f(xk)‖²
 2. ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) * ∇f(xk) .+ βmax .* m‖
 with `m` the momentum term and `mdot∇f = ∇f(xk)ᵀm` 
-""" 
-function find_beta(p::V, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T,V}
+"""
+function find_beta(p::V, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T, V}
   n1 = norm_∇f^2 - mdot∇f
   n2 = norm(p)
-  β1 = n1 > 0  ? (1-θ1)*norm_∇f^2/(n1)  : β
-  β2 = n2 != 0 ? (1-θ2)*norm_∇f/(θ2*n2) : β
-  return min(β,min(β1,β2))
+  β1 = n1 > 0 ? (1 - θ1) * norm_∇f^2 / (n1) : β
+  β2 = n2 != 0 ? (1 - θ2) * norm_∇f / (n2) : β
+  return min(β, min(β1, β2))
 end
 
 """
@@ -380,12 +388,12 @@ end
 
 Initialize α step size parameter. Ensure first step is the same for quadratic regularization and trust region methods.
 """
-function init_alpha(norm_∇fk::T, ::r2_step) where{T}
-  1/2^round(log2(norm_∇fk + 1))
+function init_alpha(norm_∇fk::T, ::r2_step) where {T}
+  1 / 2^round(log2(norm_∇fk + 1))
 end
 
-function init_alpha(norm_∇fk::T, ::tr_step) where{T}
-  norm_∇fk/2^round(log2(norm_∇fk + 1))
+function init_alpha(norm_∇fk::T, ::tr_step) where {T}
+  norm_∇fk / 2^round(log2(norm_∇fk + 1))
 end
 
 """
@@ -394,10 +402,10 @@ end
 
 Compute step size multiplier: `α` for quadratic regularization(`::r2` and `::R2og`) and `α/norm_∇fk` for trust region (`::tr`).
 """
-function step_mult(α::T, norm_∇fk::T, ::r2_step) where{T}
+function step_mult(α::T, norm_∇fk::T, ::r2_step) where {T}
   α
 end
 
-function step_mult(α::T, norm_∇fk::T, ::tr_step) where{T}
-  α/norm_∇fk
+function step_mult(α::T, norm_∇fk::T, ::tr_step) where {T}
+  α / norm_∇fk
 end
