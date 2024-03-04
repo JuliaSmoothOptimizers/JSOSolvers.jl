@@ -18,6 +18,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
     solve!(solver, nlp; kwargs...)
 
 **No momentum**: if the user do not want to use momentum (`β` = 0), it is recommended to use the memory-optimized `R2` or `TR` methods.
+
 For advanced usage:
 
     solver = FoSolver(nlp)
