@@ -24,7 +24,7 @@ This package provides an implementation of four classic algorithms for unconstra
   > Yunhai Xiao, Zengxin Wei, Zhiguo Wang, A limited memory BFGS-type method
   > for large-scale unconstrained optimization Computers & Mathematics with
   > Applications,Volume 56, Issue 4,2008,Pages 1001-1009,ISSN 0898-1221,
-  > DOI: [j.camwa.2008.01.028.](https://doi.org/10.1016/j.camwa.2008.01.028.)
+  > DOI: [10.1016/j.camwa.2008.01.028.](https://doi.org/10.1016/j.camwa.2008.01.028.)
   
 - `R2`: a first-order quadratic regularization method for unconstrained optimization;
   > Monnet, Dominique & Orban, Dominique. (2023). A Multi-Precision Quadratic
