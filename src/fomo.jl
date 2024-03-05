@@ -13,8 +13,8 @@ struct r2_step <: AbstractFOMethod end
 A First-Order with MOmentum (FOMO) model-based method for unconstrained optimization. Supports quadratic regularization and trust region method with linear model.
 The step is perform along d with
 d = - (1-βmax) .* ∇f(xk) - βmax .* mk (1)
-with mk the memory of past gradients updated at each successful iteration as
-mk .= ∇f(xk) .* (1 - βmax) .+ momentum .* βmax (2)
+with mk the memory of past gradients (initiated with 0) updated at each successful iteration as
+mk .= ∇f(xk) .* (1 - βmax) .+ mk .* βmax (2)
 and βmax ∈ [0,β] chosen as to ensure d is gradient-related, i.e., the following 2 conditions are satisfied:
 (1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk ≥ θ1 * ‖∇f(xk)‖² (3)
 ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) *. ∇f(xk) + βmax .* mk‖       (4)
