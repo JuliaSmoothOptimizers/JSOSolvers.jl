@@ -24,7 +24,7 @@ This package provides an implementation of four classic algorithms for unconstra
     > Boggs, P. T., & Byrd, R. H. (2019). Adaptive, Limited-Memory BFGS
     > Algorithms for Unconstrained Optimization. SIAM Journal on
     > Optimization, 29(2), 1282-1299.
-    > DOI: 10.1137/16M1065100
+    > DOI: [10.1137/16M1065100](https://doi.org/10.1137/16M1065100)
     
 - `R2`: a first-order quadratic regularization method for unconstrained optimization;
   > Monnet, Dominique & Orban, Dominique. (2023). A Multi-Precision Quadratic
