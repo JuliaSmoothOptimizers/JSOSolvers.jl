@@ -1,4 +1,4 @@
-export fomo, FomoSolver, FoSolver, R2, tr_step, r2_step
+export fomo, FomoSolver, FoSolver, R2, TR, tr_step, r2_step
 
 abstract type AbstractFirstOrderSolver <: AbstractOptimizationSolver end
 
@@ -10,14 +10,21 @@ struct r2_step <: AbstractFOMethod end
     fomo(nlp; kwargs...)
     R2(nlp; kwargs...)
 
-A First-Order with MOmentum (FOMO) model-based method for unconstrained optimization. Supports quadratic regularization and trust region methods.
+A First-Order with MOmentum (FOMO) model-based method for unconstrained optimization. Supports quadratic regularization and trust region method with linear model.
+The step is perform along d with
+d = - (1-βmax) .* ∇f(xk) - βmax .* mk (1)
+with mk the memory of past gradients updated at each successful iteration as
+mk .= ∇f(xk) .* (1 - βmax) .+ momentum .* βmax (2)
+and βmax ∈ [0,β] chosen as to ensure d is gradient-related, i.e., the following 2 conditions are satisfied:
+(1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk ≥ θ1 * ‖∇f(xk)‖² (3)
+‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) *. ∇f(xk) + βmax .* mk‖       (4)
 
 For advanced usage, first define a `FomoSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
 
     solver = FomoSolver(nlp)
     solve!(solver, nlp; kwargs...)
 
-**No momentum**: if the user do not want to use momentum (`β` = 0), it is recommended to use the memory-optimized `R2` or `TR` methods.
+**No momentum**: if the user does not whish to use momentum (`β` = 0), it is recommended to use the memory-optimized `R2` or `TR` methods.
 
 For advanced usage:
 
@@ -40,8 +47,8 @@ For advanced usage:
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `β = T(0.9) ∈ [0,1)` : target decay rate for the momentum.
-- `θ1 = T(0.1)` : momentum contribution parameter for convergence condition #1. (1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀm ≥ θ1 * ‖∇f(xk)‖², with m memory of past gradient and βmax ∈ [0,β].
-- `θ2::T = T(eps(T)^(1/3))` : momentum contribution parameter for convergence condition #2. ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) *. ∇f(xk) + βmax .* m‖, with m memory of past gradient and βmax ∈ [0,β]. 
+- `θ1 = T(0.1)` : momentum contribution parameter for convergence condition (3).
+- `θ2::T = T(eps(T)^(1/3))` : momentum contribution parameter for convergence condition (4). 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `step_backend = r2_step()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 
@@ -177,7 +184,7 @@ end
 SolverCore.reset!(solver::FoSolver, ::AbstractNLPModel) = reset!(solver)
 
 function SolverCore.solve!(
-  solver::AbstractFirstOrderSolver,
+  solver::Union{FoSolver,FomoSolver},
   nlp::AbstractNLPModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
@@ -225,7 +232,8 @@ function SolverCore.solve!(
   # Stopping criterion: 
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
-  header = ["iter", "f", "‖∇f‖", "α"]
+  header = ["iter", "f", "‖∇f‖"]
+  is_r2 ? push!(header,"σ") : push!(header,"Δ")
   if optimal
     @info("Optimal point found at initial point")
     if is_r2
