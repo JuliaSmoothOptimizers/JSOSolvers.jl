@@ -22,7 +22,7 @@ This package provides an implementation of four classic algorithms for unconstra
 
 - `lbfgs`: an implementation of a limited-memory BFGS line-search method for unconstrained minimization;
   > Yunhai Xiao, Zengxin Wei, Zhiguo Wang, A limited memory BFGS-type method
-  > for large-scale unconstrained optimizationComputers & Mathematics with
+  > for large-scale unconstrained optimization Computers & Mathematics with
   > Applications,Volume 56, Issue 4,2008,Pages 1001-1009,ISSN 0898-1221,
   > DOI: [j.camwa.2008.01.028.](https://doi.org/10.1016/j.camwa.2008.01.028.)
   
