@@ -21,9 +21,10 @@ and bound-constrained optimization
 This package provides an implementation of four classic algorithms for unconstrained/bound-constrained nonlinear optimization:
 
 - `lbfgs`: an implementation of a limited-memory BFGS line-search method for unconstrained minimization;
-    > A Paul T. Boggs, A Richard H. Byrd. (2019). Adaptive, Limited-Memory BFGS
-    > Algorithms for Unconstrained Optimization.
-    > DOI: [10.1137/16M1065100](https://epubs.siam.org/doi/abs/10.1137/16M1065100)
+    > Boggs, P. T., & Byrd, R. H. (2019). Adaptive, Limited-Memory BFGS
+    > Algorithms for Unconstrained Optimization. SIAM Journal on
+    > Optimization, 29(2), 1282-1299.
+    > DOI: 10.1137/16M1065100
     
 - `R2`: a first-order quadratic regularization method for unconstrained optimization;
   > Monnet, Dominique & Orban, Dominique. (2023). A Multi-Precision Quadratic
