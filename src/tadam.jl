@@ -226,9 +226,7 @@ function SolverCore.solve!(
       set_status!(stats, :unbounded)
       break
     end
-    @show dot(s,∇fk)/(norm_∇fk*norm(s))
     ρk = (stats.objective - fck) / ΔTk
-    @show stats.objective  fck  ΔTk ρk
     if ρk >= η2
       solver.Δ = min(Δmax, γ2 * solver.Δ)
     elseif ρk < η1
