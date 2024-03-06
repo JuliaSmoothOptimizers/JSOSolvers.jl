@@ -311,12 +311,12 @@ function SolverCore.solve!(
       x .= c
       if use_momentum
         momentum .= ∇fk .* (oneT - β) .+ momentum .* β
-        mdot∇f = dot(momentum, ∇fk)
       end
       set_objective!(stats, fck)
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
       if use_momentum
+        mdot∇f = dot(momentum, ∇fk)
         p .= momentum .- ∇fk
         βmax = find_beta(p, mdot∇f, norm_∇fk, β, θ1, θ2)
         d .= ∇fk .* (oneT - βmax) .+ momentum .* βmax
