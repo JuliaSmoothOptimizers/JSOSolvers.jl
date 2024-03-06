@@ -48,7 +48,7 @@ For advanced usage:
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `β = T(0.9) ∈ [0,1)` : target decay rate for the momentum.
 - `θ1 = T(0.1)` : momentum contribution parameter for convergence condition (3).
-- `θ2::T = T(eps(T)^(1/3))` : momentum contribution parameter for convergence condition (4). 
+- `θ2 = T(eps(T)^(1/3))` : momentum contribution parameter for convergence condition (4). 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `step_backend = r2_step()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 
@@ -385,8 +385,8 @@ with `m` the momentum term and `mdot∇f = ∇f(xk)ᵀm`
 function find_beta(p::V, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T, V}
   n1 = norm_∇f^2 - mdot∇f
   n2 = norm(p)
-  β1 = n1 > 0 ? (1 - θ1) * norm_∇f^2 / (n1) : β
-  β2 = n2 != 0 ? (1 - θ2) * norm_∇f / (n2) : β
+  β1 = n1 > 0 ? (1 - θ1) * norm_∇f^2 / n1 : β
+  β2 = n2 != 0 ? (1 - θ2) * norm_∇f / n2 : β
   return min(β, min(β1, β2))
 end
 
