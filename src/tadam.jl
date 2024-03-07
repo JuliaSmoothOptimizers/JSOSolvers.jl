@@ -122,8 +122,8 @@ end
 end
 
 function SolverCore.reset!(solver::TadamSolver{T}) where {T}
-  fill!(solver.m,0)
-  fill!(solver.v,0)
+  fill!(solver.m, 0)
+  fill!(solver.v, 0)
   solver
 end
 SolverCore.reset!(solver::TadamSolver, ::AbstractNLPModel) = reset!(solver)
@@ -138,10 +138,10 @@ function SolverCore.solve!(
   rtol::T = √eps(T),
   η1 = eps(T)^(1 / 4),
   η2 = T(0.95),
-  γ1 = T(1/2),
+  γ1 = T(1 / 2),
   γ2 = T(2),
-  γ3 = T(1/2),
-  Δmax = 1/eps(T),
+  γ3 = T(1 / 2),
+  Δmax = 1 / eps(T),
   max_time::Float64 = 30.0,
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
@@ -173,8 +173,8 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇fk)
   set_dual_residual!(stats, norm_∇fk)
 
-  solver.Δ = norm_∇fk/2^round(log2(norm_∇fk + 1))
-  
+  solver.Δ = norm_∇fk / 2^round(log2(norm_∇fk + 1))
+
   # Stopping criterion: 
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
@@ -185,8 +185,10 @@ function SolverCore.solve!(
   end
   if verbose > 0 && mod(stats.iter, verbose) == 0
     @info @sprintf "%5s  %9s  %7s  %7s  %7s" "iter" "f" "‖∇f‖" "Δ" "β1max"
-    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.Δ ' '
-    infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.Δ ' '
+    infoline =
+      @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.Δ ' '
+    infoline =
+      @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.Δ ' '
   end
 
   set_status!(
@@ -205,10 +207,9 @@ function SolverCore.solve!(
   callback(nlp, solver, stats)
 
   done = stats.status != :unknown
-  
-  
-  d̂  .= - ∇fk # biased corrected
-  bc_second_momentum .= ∇fk.^2 # biased corrected
+
+  d̂ .= -∇fk # biased corrected
+  bc_second_momentum .= ∇fk .^ 2 # biased corrected
   β1max = T(0)
   ρk = T(0)
   avgβ1max = T(0)
@@ -217,10 +218,10 @@ function SolverCore.solve!(
   mdot∇f = T(0) # dot(momentum,∇fk)
   siter = 1 # nb of successful iterations
   while !done
-    solve_tadam_subproblem!(s, d̂ ,bc_second_momentum , solver.Δ, e)
+    solve_tadam_subproblem!(s, d̂, bc_second_momentum, solver.Δ, e)
     c .= x .+ s
     step_underflow = x == c # step addition underfow on every dimensions, should happen before solver.α == 0
-    ΔTk = dot(d̂, s) - T(0.5)*dot(s.^2, sqrt.(bc_second_momentum) .+ e)
+    ΔTk = dot(d̂, s) - T(0.5) * dot(s .^ 2, sqrt.(bc_second_momentum) .+ e)
     fck = obj(nlp, c)
     if fck == -Inf
       set_status!(stats, :unbounded)
@@ -232,7 +233,7 @@ function SolverCore.solve!(
     elseif ρk < η1
       solver.Δ = solver.Δ * γ1
       β1max *= γ3
-      d̂ .= - (∇fk .* (oneT - β1max) .+ momentum .* β1max) ./ (oneT - β1^siter)
+      d̂ .= -(∇fk .* (oneT - β1max) .+ momentum .* β1max) ./ (oneT - β1^siter)
     end
     # Acceptance of the new candidate
     if ρk >= η1
@@ -240,14 +241,16 @@ function SolverCore.solve!(
       x .= c
       set_objective!(stats, fck)
       momentum .= ∇fk .* (oneT - β1) .+ momentum .* β1
-      bc_second_momentum .= (∇fk.^2 .* (oneT - β2) .+ bc_second_momentum .*β2 .*(oneT - β2^(siter-1)) ) ./ (oneT - β2^siter) # possibly unstable but avoid allocating two vectors for bias corrected and biased raw second order momentum
+      bc_second_momentum .=
+        (∇fk .^ 2 .* (oneT - β2) .+ bc_second_momentum .* β2 .* (oneT - β2^(siter - 1))) ./
+        (oneT - β2^siter) # possibly unstable but avoid allocating two vectors for bias corrected and biased raw second order momentum
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
       mdot∇f = dot(momentum, ∇fk)
       p .= momentum .- ∇fk
       β1max = find_beta(p, mdot∇f, norm_∇fk, β1, θ1, θ2, siter)
       avgβ1max += β1max
-      d̂ .= - (∇fk .* (oneT - β1max) .+ momentum .* β1max) ./ (oneT - β1^siter)
+      d̂ .= -(∇fk .* (oneT - β1max) .+ momentum .* β1max) ./ (oneT - β1^siter)
     end
 
     set_iter!(stats, stats.iter + 1)
@@ -257,7 +260,8 @@ function SolverCore.solve!(
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       @info infoline
-      infoline = @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.Δ β1max
+      infoline =
+        @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.Δ β1max
     end
 
     set_status!(
@@ -295,7 +299,7 @@ s.t.   ||s||∞ <= Δk
 Stores the argmin in `s`.
 """
 function solve_tadam_subproblem!(s::V, d̂::V, v̂::V, Δk::T, e::T) where {V, T}
-  s .= min.(Δk , max.(-Δk , d̂ ./ (sqrt.(v̂) .+ e) ) )
+  s .= min.(Δk, max.(-Δk, d̂ ./ (sqrt.(v̂) .+ e)))
 end
 
 """
@@ -310,8 +314,8 @@ with `m` the momentum term and `mdot∇f = ∇f(xk)ᵀm`
 function find_beta(p::V, mdot∇f::T, norm_∇f::T, β1::T, θ1::T, θ2::T, siter::Int) where {T, V}
   n1 = norm_∇f^2 - mdot∇f
   n2 = norm(p)
-  b = (1-β1^(siter))
-  β11 = n1 > 0 ? (1 - θ1*b) * norm_∇f^2 / n1 : β1
-  β12 = n2 != 0 ? (1 - θ2*b) * norm_∇f / n2 : β1
+  b = (1 - β1^(siter))
+  β11 = n1 > 0 ? (1 - θ1 * b) * norm_∇f^2 / n1 : β1
+  β12 = n2 != 0 ? (1 - θ2 * b) * norm_∇f / n2 : β1
   return min(β1, min(β11, β12))
 end
