@@ -8,29 +8,26 @@ struct r2_step <: AbstractFOMethod end
 
 """
     fomo(nlp; kwargs...)
-    R2(nlp; kwargs...)
 
 A First-Order with MOmentum (FOMO) model-based method for unconstrained optimization. Supports quadratic regularization and trust region method with linear model.
-The step is perform along d with
-d = - (1-βmax) .* ∇f(xk) - βmax .* mk (1)
-with mk the memory of past gradients (initiated with 0) updated at each successful iteration as
-mk .= ∇f(xk) .* (1 - βmax) .+ mk .* βmax (2)
-and βmax ∈ [0,β] chosen as to ensure d is gradient-related, i.e., the following 2 conditions are satisfied:
-(1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk ≥ θ1 * ‖∇f(xk)‖² (3)
-‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) *. ∇f(xk) + βmax .* mk‖       (4)
 
+# Algorithm description
+
+The step is perform along d with
+d = - (1-βmax) .* ∇f(xk) - βmax .* mk
+with mk the memory of past gradients (initiated with 0) updated at each successful iteration as
+mk .= ∇f(xk) .* (1 - βmax) .+ mk .* βmax
+and βmax ∈ [0,β] chosen as to ensure d is gradient-related, i.e., the following 2 conditions are satisfied:
+(1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk ≥ θ1 * ‖∇f(xk)‖² (1)
+‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) *. ∇f(xk) + βmax .* mk‖       (2)
+
+# Advanced usage
 For advanced usage, first define a `FomoSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
 
     solver = FomoSolver(nlp)
     solve!(solver, nlp; kwargs...)
 
-**No momentum**: if the user does not whish to use momentum (`β` = 0), it is recommended to use the memory-optimized `R2` or `TR` methods.
-
-For advanced usage:
-
-    solver = FoSolver(nlp)
-    solve!(solver, nlp; step_bakckend = r2_step(),kwargs...) # for Quadratic Regularization (R2) step: s = - α .* ∇f(x)
-    solve!(solver, nlp; step_bakckend = tr_step(),kwargs...) # for linear model Trust Region (TR) step: s = - α .* ∇f(x) ./ ‖∇f(x)‖ 
+**No momentum**: if the user does not whish to use momentum (`β` = 0), it is recommended to use the memory-optimized `fo` method.
     
 # Arguments
 - `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
@@ -47,8 +44,8 @@ For advanced usage:
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `β = T(0.9) ∈ [0,1)` : target decay rate for the momentum.
-- `θ1 = T(0.1)` : momentum contribution parameter for convergence condition (3).
-- `θ2 = T(eps(T)^(1/3))` : momentum contribution parameter for convergence condition (4). 
+- `θ1 = T(0.1)` : momentum contribution parameter for convergence condition (1).
+- `θ2 = T(eps(T)^(1/3))` : momentum contribution parameter for convergence condition (2). 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `step_backend = r2_step()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 
@@ -93,27 +90,6 @@ stats = solve!(solver, nlp)
 
 "Execution stats: first-order stationary"
 ```
-## `R2`
-```jldoctest
-using JSOSolvers, ADNLPModels
-nlp = ADNLPModel(x -> sum(x.^2), ones(3))
-stats = R2(nlp)
-
-# output
-
-"Execution stats: first-order stationary"
-```
-
-```jldoctest
-using JSOSolvers, ADNLPModels
-nlp = ADNLPModel(x -> sum(x.^2), ones(3))
-solver = FoSolver(nlp);
-stats = solve!(solver, nlp)
-
-# output
-
-"Execution stats: first-order stationary"
-```
 """
 mutable struct FomoSolver{T, V} <: AbstractFirstOrderSolver
   x::V
@@ -149,7 +125,79 @@ end
 
 SolverCore.reset!(solver::FomoSolver, ::AbstractNLPModel) = reset!(solver)
 
-@doc (@doc FomoSolver) mutable struct FoSolver{T, V} <: AbstractFirstOrderSolver
+"""
+    fo(nlp; kwargs...)
+    R2(nlp; kwargs...)
+    TR(nlp; kwargs...)
+
+A First-Order (FO) model-based method for unconstrained optimization. Supports quadratic regularization and trust region method with linear model.
+
+For advanced usage, first define a `FomoSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
+
+    solver = FoSolver(nlp)
+    solve!(solver, nlp; kwargs...)
+
+`R2` and `TR` runs `fo` with the dedicated `step_backend` keyword argument.
+
+# Arguments
+- `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
+
+# Keyword arguments 
+- `x::V = nlp.meta.x0`: the initial guess.
+- `atol::T = √eps(T)`: absolute tolerance.
+- `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
+- `η1 = eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
+- `γ1 = T(1/2)`, `γ2 = T(2)`: regularization update parameters.
+- `αmax = 1/eps(T)`: maximum step parameter for fomo algorithm.
+- `max_eval::Int = -1`: maximum number of evaluation of the objective function.
+- `max_time::Float64 = 30.0`: maximum time limit in seconds.
+- `max_iter::Int = typemax(Int)`: maximum number of iterations.
+- `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
+- `step_backend = r2_step()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
+
+# Output
+The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
+
+# Callback
+The callback is called at each iteration.
+The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
+Changing any of the input arguments will affect the subsequent iterations.
+In particular, setting `stats.status = :user || stats.stats = :unknown` will stop the algorithm.
+All relevant information should be available in `nlp` and `solver`.
+Notably, you can access, and modify, the following:
+- `solver.x`: current iterate;
+- `solver.gx`: current gradient;
+- `stats`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
+    - `stats.dual_feas`: norm of current gradient;
+    - `stats.iter`: current iteration counter;
+    - `stats.objective`: current objective function value;
+    - `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm has attained a stopping criterion. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
+    - `stats.elapsed_time`: elapsed time in seconds.
+
+# Examples
+
+```jldoctest
+using JSOSolvers, ADNLPModels
+nlp = ADNLPModel(x -> sum(x.^2), ones(3))
+stats = fo(nlp) # run with step_backend = r2_step(), equivalent to R2(nlp)
+
+# output
+
+"Execution stats: first-order stationary"
+```
+
+```jldoctest
+using JSOSolvers, ADNLPModels
+nlp = ADNLPModel(x -> sum(x.^2), ones(3))
+solver = FoSolver(nlp);
+stats = solve!(solver, nlp)
+
+# output
+
+"Execution stats: first-order stationary"
+```
+"""
+mutable struct FoSolver{T, V} <: AbstractFirstOrderSolver
   x::V
   g::V
   c::V
@@ -163,17 +211,17 @@ function FoSolver(nlp::AbstractNLPModel{T, V}) where {T, V}
   return FoSolver{T, V}(x, g, c, T(0))
 end
 
-@doc (@doc FomoSolver) function fo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
+@doc (@doc FoSolver) function fo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
   solver = FoSolver(nlp)
   stats = GenericExecutionStats(nlp)
   return solve!(solver, nlp, stats; step_backend = r2_step(), kwargs...)
 end
 
-@doc (@doc FomoSolver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
+@doc (@doc FoSolver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
   fo(nlp; step_backend = r2_step(), kwargs...)
 end
 
-@doc (@doc FomoSolver) function TR(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
+@doc (@doc FoSolver) function TR(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
   fo(nlp; step_backend = tr_step(), kwargs...)
 end
 
@@ -184,7 +232,7 @@ end
 SolverCore.reset!(solver::FoSolver, ::AbstractNLPModel) = reset!(solver)
 
 function SolverCore.solve!(
-  solver::Union{FoSolver,FomoSolver},
+  solver::Union{FoSolver, FomoSolver},
   nlp::AbstractNLPModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
@@ -233,7 +281,7 @@ function SolverCore.solve!(
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
   header = ["iter", "f", "‖∇f‖"]
-  is_r2 ? push!(header,"σ") : push!(header,"Δ")
+  is_r2 ? push!(header, "σ") : push!(header, "Δ")
   if optimal
     @info("Optimal point found at initial point")
     if is_r2
