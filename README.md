@@ -21,6 +21,7 @@ and bound-constrained optimization
 This package provides an implementation of four classic algorithms for unconstrained/bound-constrained nonlinear optimization:
 
 - `lbfgs`: an implementation of a limited-memory BFGS line-search method for unconstrained minimization;
+
     > D. C. Liu, J. Nocedal. (1989). On the limited memory BFGS method for
     > large scale optimization. *Mathematical Programming*, 45(1), 503-528.
     > DOI: [10.1007/BF01589116](https://doi.org/10.1007/BF01589116)
