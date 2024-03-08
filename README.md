@@ -27,6 +27,7 @@ This package provides an implementation of four classic algorithms for unconstra
 
     
 - `R2`: a first-order quadratic regularization method for unconstrained optimization;
+
     > E. G. Birgin, J. L. Gardenghi, J. M. Martínez, S. A. Santos, Ph. L. Toint. (2017).
     > Worst-case evaluation complexity for unconstrained nonlinear optimization using
     > high-order regularized models. *Mathematical Programming*, 163(1), 359-368.
