@@ -211,6 +211,8 @@ function FoSolver(nlp::AbstractNLPModel{T, V}) where {T, V}
   return FoSolver{T, V}(x, g, c, T(0))
 end
 
+Base.@deprecate R2Solver(nlp::AbstractNLPModel; kwargs...) FoSolver(nlp::AbstractNLPModel; kwargs...)
+
 @doc (@doc FoSolver) function fo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
   solver = FoSolver(nlp)
   stats = GenericExecutionStats(nlp)
