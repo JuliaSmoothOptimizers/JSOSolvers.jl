@@ -21,7 +21,20 @@ and bound-constrained optimization
 This package provides an implementation of four classic algorithms for unconstrained/bound-constrained nonlinear optimization:
 
 - `lbfgs`: an implementation of a limited-memory BFGS line-search method for unconstrained minimization;
+
+    > D. C. Liu, J. Nocedal. (1989). On the limited memory BFGS method for
+    > large scale optimization. *Mathematical Programming*, 45(1), 503-528.
+    > DOI: [10.1007/BF01589116](https://doi.org/10.1007/BF01589116)
+
+    
 - `R2`: a first-order quadratic regularization method for unconstrained optimization;
+
+    > E. G. Birgin, J. L. Gardenghi, J. M. Martínez, S. A. Santos, Ph. L. Toint. (2017).
+    > Worst-case evaluation complexity for unconstrained nonlinear optimization using
+    > high-order regularized models. *Mathematical Programming*, 163(1), 359-368.
+    > DOI: [10.1007/s10107-016-1065-8](https://doi.org/10.1007/s10107-016-1065-8)
+
+  
 - `tron`: a pure Julia implementation of TRON, a trust-region solver for bound-constrained optimization described in
 
     >  Chih-Jen Lin and Jorge J. Moré, *Newton's Method for Large Bound-Constrained
