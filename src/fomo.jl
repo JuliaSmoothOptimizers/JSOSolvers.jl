@@ -464,8 +464,8 @@ function init_alpha(norm_∇fk::T, ::tr_step) where {T}
 end
 
 """
-  step_mult(α::T, norm_∇fk::T, ::r2_step)
-  step_mult(α::T, norm_∇fk::T, ::tr_step)
+    step_mult(α::T, norm_∇fk::T, ::r2_step)
+    step_mult(α::T, norm_∇fk::T, ::tr_step)
 
 Compute step size multiplier: `α` for quadratic regularization(`::r2` and `::R2og`) and `α/norm_∇fk` for trust region (`::tr`).
 """
