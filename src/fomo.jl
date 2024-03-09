@@ -46,16 +46,18 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `max_eval::Int = -1`: maximum number of objective evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
-- `β = T(0.9) ∈ [0,1)` : target decay rate for the momentum.
-- `θ1 = T(0.1)` : momentum contribution parameter for convergence condition (1).
-- `θ2 = T(eps(T)^(1/3))` : momentum contribution parameter for convergence condition (2). 
+- `β = T(0.9) ∈ [0,1)`: target decay rate for the momentum.
+- `θ1 = T(0.1)`: momentum contribution parameter for convergence condition (1).
+- `θ2 = T(eps(T)^(1/3))`: momentum contribution parameter for convergence condition (2). 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `step_backend = r2_step()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 
 # Output
+
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 
 # Callback
+
 The callback is called at each iteration.
 The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
 Changing any of the input arguments will affect the subsequent iterations.
@@ -72,7 +74,9 @@ Notably, you can access, and modify, the following:
     - `stats.elapsed_time`: elapsed time in seconds.
 
 # Examples
+
 ## `fomo`
+
 ```jldoctest
 using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> sum(x.^2), ones(3))
@@ -143,9 +147,11 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 `R2` and `TR` runs `fo` with the dedicated `step_backend` keyword argument.
 
 # Arguments
+
 - `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
 
 # Keyword arguments 
+
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
@@ -159,9 +165,11 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `step_backend = r2_step()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 
 # Output
+
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 
 # Callback
+
 The callback is called at each iteration.
 The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
 Changing any of the input arguments will affect the subsequent iterations.
