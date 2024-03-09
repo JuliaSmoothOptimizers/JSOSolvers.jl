@@ -449,8 +449,8 @@ function find_beta(p::V, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where
 end
 
 """
-  init_alpha(norm_∇fk::T, ::r2_step)
-  init_alpha(norm_∇fk::T, ::tr_step)
+    init_alpha(norm_∇fk::T, ::r2_step)
+    init_alpha(norm_∇fk::T, ::tr_step)
 
 Initialize α step size parameter. Ensure first step is the same for quadratic regularization and trust region methods.
 """
