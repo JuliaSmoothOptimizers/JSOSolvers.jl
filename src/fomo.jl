@@ -382,7 +382,8 @@ function SolverCore.solve!(
       if use_momentum
         mdot∇f = dot(momentum, ∇fk)
         p .= momentum .- ∇fk
-        βmax = find_beta(p, mdot∇f, norm_∇fk, β, θ1, θ2)
+        diff_norm = norm(p)
+        βmax = find_beta(diff_norm, mdot∇f, norm_∇fk, β, θ1, θ2)
         d .= ∇fk .* (oneT - βmax) .+ momentum .* βmax
         norm_d = norm(d)
       end
@@ -446,11 +447,10 @@ Compute value `βmax` that saturates the contribution of the momentum term to th
 2. ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) * ∇f(xk) .+ βmax .* m‖
 with `m` the momentum term and `mdot∇f = ∇f(xk)ᵀm` 
 """
-function find_beta(p::V, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T, V}
+function find_beta(diff_norm::T, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T, V}
   n1 = norm_∇f^2 - mdot∇f
-  n2 = norm(p)
   β1 = n1 > 0 ? (1 - θ1) * norm_∇f^2 / n1 : β
-  β2 = n2 != 0 ? (1 - θ2) * norm_∇f / n2 : β
+  β2 = n2 != 0 ? (1 - θ2) * norm_∇f / diff_norm : β
   return min(β, min(β1, β2))
 end
 
