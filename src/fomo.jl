@@ -15,7 +15,7 @@ A First-Order with MOmentum (FOMO) model-based method for unconstrained optimiza
 
 The step is computed along
 d = - (1-βmax) .* ∇f(xk) - βmax .* mk
-with mk the memory of past gradients (initiated with 0) updated at each successful iteration as
+with mk the memory of past gradients (initialized at 0), and updated at each successful iteration as
 mk .= ∇f(xk) .* (1 - βmax) .+ mk .* βmax
 and βmax ∈ [0,β] chosen as to ensure d is gradient-related, i.e., the following 2 conditions are satisfied:
 (1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk ≥ θ1 * ‖∇f(xk)‖² (1)
