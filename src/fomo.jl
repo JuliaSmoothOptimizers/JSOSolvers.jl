@@ -211,6 +211,11 @@ function FoSolver(nlp::AbstractNLPModel{T, V}) where {T, V}
   return FoSolver{T, V}(x, g, c, T(0))
 end
 
+"""
+    `R2Solver` is deprecated, please check the documentation of `R2`.
+"""
+mutable struct R2Solver{T, V} <: AbstractOptimizationSolver end
+
 Base.@deprecate R2Solver(nlp::AbstractNLPModel; kwargs...) FoSolver(nlp::AbstractNLPModel; kwargs...)
 
 @doc (@doc FoSolver) function fo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
