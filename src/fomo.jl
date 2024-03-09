@@ -450,7 +450,7 @@ with `m` the momentum term and `mdot∇f = ∇f(xk)ᵀm`
 function find_beta(diff_norm::T, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T, V}
   n1 = norm_∇f^2 - mdot∇f
   β1 = n1 > 0 ? (1 - θ1) * norm_∇f^2 / n1 : β
-  β2 = n2 != 0 ? (1 - θ2) * norm_∇f / diff_norm : β
+  β2 = diff_norm != 0 ? (1 - θ2) * norm_∇f / diff_norm : β
   return min(β, min(β1, β2))
 end
 
