@@ -43,7 +43,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `γ1 = T(1/2)`, `γ2 = T(2)`: regularization update parameters.
 - `γ3 = T(1/2)` : momentum factor βmax update parameter in case of unsuccessful iteration.
 - `αmax = 1/eps(T)`: maximum step parameter for fomo algorithm.
-- `max_eval::Int = -1`: maximum number of evaluation of the objective function.
+- `max_eval::Int = -1`: maximum number of objective evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `β = T(0.9) ∈ [0,1)` : target decay rate for the momentum.
