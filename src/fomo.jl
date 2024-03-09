@@ -1,4 +1,4 @@
-export fomo, FomoSolver, FoSolver, R2, TR, tr_step, r2_step
+export fomo, FomoSolver, FoSolver, fo, R2, TR, tr_step, r2_step
 
 abstract type AbstractFirstOrderSolver <: AbstractOptimizationSolver end
 
