@@ -5,32 +5,36 @@ export tadam, TadamSolver
 
 Trust-region embeded ADAM (TADAM) algorithm for unconstrained optimization. This is an adaptation of ADAM which enforces convergence in the non-convexe case.
 
-# Minimal algorithm description 
+# Minimal algorithm description
+
 The step sk at iteration k is computed as:
-sk = argmin -̂dkᵀs + 0.5 sᵀ diag(sqrt.(̂vk) + e) s      (1)
-      s
-s.t.   ||s||∞ <= Δk
+sk = argmin -̂dkᵀs + 0.5 sᵀ diag(sqrt.(̂vk) + `e`) s (1)
+       s
+s.t.   ‖s‖∞ <= Δk
 where:
 1. Δk is the trust-region radius
 2. ̂vk is the biased-corrected second raw moment estimate
-3. ̂dk = dk/(1-β1ᵏ) the biased-corrected restricted momentum direction
+3. ̂dk = dk/(1-`β1`ᵏ) the biased-corrected restricted momentum direction
 4. -dk = (1-β1max) .* ∇fk + β1max .* mk,  is restricted momentum direction, with mk the memory of past gradient and β1max computed such that d is gradient-related (necessary to ensure convergence).
 5. β1max is computed so that dk is gradient related, i.e., the following 2 conditions are satisfied:
 -̂dᵀ∇f(xk) ≥ θ1 * ‖∇f(xk)‖²  (2)
 ‖∇f(xk)‖ ≥ θ2 * ‖̂d‖         (3)
 
-Note that the solution to (1) without the trust region constraint is the ADAM step if β1max = β1 (no momentum contribution restriction).
+Note that the solution to (1) without the trust region constraint is the ADAM step if β1max = `β1` (no momentum contribution restriction).
 
 # Advanced usage
+
 For advanced usage, first define a `TadamSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
 
     solver = TadamSolver(nlp)
     solve!(solver, nlp; kwargs...)
 
 # Arguments
+
 - `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
 
 # Keyword arguments 
+
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
@@ -50,9 +54,11 @@ For advanced usage, first define a `TadamSolver` to preallocate the memory used 
 - `backend = qr()`: model-based method employed. Options are `qr()` for quadratic regulation and `tr()` for trust-region
 
 # Output
+
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 
 # Callback
+
 The callback is called at each iteration.
 The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
 Changing any of the input arguments will affect the subsequent iterations.
@@ -69,6 +75,7 @@ Notably, you can access, and modify, the following:
   - `stats.elapsed_time`: elapsed time in seconds.
 
 # Examples
+
 ```jldoctest
 using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> sum(x.^2), ones(3))
@@ -292,6 +299,7 @@ end
 
 """
   solve_tadam_subproblem!(s, ∇fk, ̂d, ̂v, Δk, β1max, e)
+  
 Compute 
 argmin -̂dᵀs + 0.5 sᵀ diag(sqrt.(̂v)+e) s
   s
@@ -303,9 +311,9 @@ function solve_tadam_subproblem!(s::V, d̂::V, v̂::V, Δk::T, e::T) where {V, T
 end
 
 """
-find_beta(m, mdot∇f, norm_∇f, β1, θ1, θ2)
+  find_beta(p, m, mdot∇f, norm_∇f, β1, θ1, θ2, siter)
 
-Compute β1max which saturates the contibution of the momentum term to the gradient.
+Compute `β1max` that saturates the contibution of the momentum term to the gradient.
 `β1max` is computed such that the two gradient-related conditions are ensured: 
 1. ( (1-β1max) * ‖∇f(xk)‖² + β1max * ∇f(xk)ᵀm ) / (1-β1^(siter)) ≥ θ1 * ‖∇f(xk)‖²
 2. ‖∇f(xk)‖ ≥ θ2 * ‖(1-β1max) * ∇f(xk) .+ β1max .* m‖ / (1-β1^(siter))
