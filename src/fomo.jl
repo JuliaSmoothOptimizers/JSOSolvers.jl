@@ -434,7 +434,7 @@ end
 """
     find_beta(m, mdot∇f, norm_∇f, β, θ1, θ2)
 
-Compute βmax which saturates the contibution of the momentum term to the gradient.
+Compute value `βmax` that saturates the contribution of the momentum term to the gradient.
 `βmax` is computed such that the two gradient-related conditions are ensured: 
 1. (1-βmax) * ‖∇f(xk)‖² + βmax * ∇f(xk)ᵀm ≥ θ1 * ‖∇f(xk)‖²
 2. ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) * ∇f(xk) .+ βmax .* m‖
