@@ -432,7 +432,7 @@ function SolverCore.solve!(
 end
 
 """
-find_beta(m, mdot∇f, norm_∇f, β, θ1, θ2)
+    find_beta(m, mdot∇f, norm_∇f, β, θ1, θ2)
 
 Compute βmax which saturates the contibution of the momentum term to the gradient.
 `βmax` is computed such that the two gradient-related conditions are ensured: 
