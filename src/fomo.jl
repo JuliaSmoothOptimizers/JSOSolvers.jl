@@ -1,4 +1,4 @@
-export fomo, FomoSolver, FoSolver, R2, TR, tr_step, r2_step
+export fomo, FomoSolver, FoSolver, R2, R2Solver, TR, tr_step, r2_step
 
 abstract type AbstractFirstOrderSolver <: AbstractOptimizationSolver end
 
@@ -210,6 +210,11 @@ function FoSolver(nlp::AbstractNLPModel{T, V}) where {T, V}
   c = similar(nlp.meta.x0)
   return FoSolver{T, V}(x, g, c, T(0))
 end
+
+"""
+    `R2Solver` is deprecated, please check the documentation of `R2`.
+"""
+mutable struct R2Solver{T, V} <: AbstractOptimizationSolver end
 
 Base.@deprecate R2Solver(nlp::AbstractNLPModel; kwargs...) FoSolver(nlp::AbstractNLPModel; kwargs...)
 
