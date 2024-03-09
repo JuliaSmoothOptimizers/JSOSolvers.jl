@@ -298,15 +298,15 @@ function SolverCore.solve!(
   # Stopping criterion: 
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
-  header = ["iter", "f", "‖∇f‖"]
-  is_r2 ? push!(header, "σ") : push!(header, "Δ")
+  #header = ["iter", "f", "‖∇f‖"]
+  #is_r2 ? push!(header, "σ") : push!(header, "Δ")
   if optimal
     @info("Optimal point found at initial point")
     if is_r2
-      @info @sprintf "%5s  %9s  %7s  %7s " header...
+      @info @sprintf "%5s  %9s  %7s  %7s " #header...
       @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk 1 / solver.α
     else
-      @info @sprintf "%5s  %9s  %7s  %7s " header...
+      @info @sprintf "%5s  %9s  %7s  %7s " #header...
       @info @sprintf "%5d  %9.2e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk solver.α
     end
   end
@@ -314,12 +314,12 @@ function SolverCore.solve!(
     push!(header, "ρk")
     step_param = is_r2 ? 1 / solver.α : solver.α
     if !use_momentum
-      @info @sprintf "%5s  %9s  %7s  %7s  %7s " header...
+      @info @sprintf "%5s  %9s  %7s  %7s  %7s " #header...
       infoline =
         @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param
     else
       push!(header, "βmax")
-      @info @sprintf "%5s  %9s  %7s  %7s  %7s  %7s " header...
+      @info @sprintf "%5s  %9s  %7s  %7s  %7s  %7s " #header...
       infoline =
         @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ' ' 0
     end
