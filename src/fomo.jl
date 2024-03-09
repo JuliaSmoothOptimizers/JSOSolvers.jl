@@ -31,6 +31,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 **No momentum**: if the user does not whish to use momentum (`β` = 0), it is recommended to use the memory-optimized `fo` method.
     
 # Arguments
+
 - `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
 
 # Keyword arguments 
