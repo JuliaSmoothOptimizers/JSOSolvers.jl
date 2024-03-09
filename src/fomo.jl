@@ -13,7 +13,7 @@ A First-Order with MOmentum (FOMO) model-based method for unconstrained optimiza
 
 # Algorithm description
 
-The step is perform along d with
+The step is computed along
 d = - (1-βmax) .* ∇f(xk) - βmax .* mk
 with mk the memory of past gradients (initiated with 0) updated at each successful iteration as
 mk .= ∇f(xk) .* (1 - βmax) .+ mk .* βmax
