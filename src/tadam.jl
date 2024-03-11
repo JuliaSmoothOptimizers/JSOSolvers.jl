@@ -133,6 +133,7 @@ function SolverCore.reset!(solver::TadamSolver{T}) where {T}
   fill!(solver.v, 0)
   solver
 end
+
 SolverCore.reset!(solver::TadamSolver, ::AbstractNLPModel) = reset!(solver)
 
 function SolverCore.solve!(
