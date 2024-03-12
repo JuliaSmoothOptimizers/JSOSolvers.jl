@@ -345,7 +345,7 @@ function SolverCore.solve!(
   βmax = T(0)
   ρk = T(0)
   avgβmax = T(0)
-  siter = 0
+  siter::Int = 0
   oneT = T(1)
   mdot∇f = T(0) # dot(momentum,∇fk)
   while !done
@@ -386,8 +386,6 @@ function SolverCore.solve!(
         βmax = find_beta(diff_norm, mdot∇f, norm_∇fk, β, θ1, θ2)
         d .= ∇fk .* (oneT - βmax) .+ momentum .* βmax
         norm_d = norm(d)
-      end
-      if use_momentum
         avgβmax += βmax
         siter += 1
       end
@@ -432,7 +430,7 @@ function SolverCore.solve!(
   end
   if use_momentum
     avgβmax /= siter
-    stats.solver_specific[:avgβmax] = avgβmax
+    # stats.solver_specific[:avgβmax] = avgβmax
   end
   set_solution!(stats, x)
   return stats
