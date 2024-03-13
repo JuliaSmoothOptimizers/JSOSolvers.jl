@@ -430,7 +430,7 @@ function SolverCore.solve!(
   end
   if use_momentum
     avgβmax /= siter
-    # stats.solver_specific[:avgβmax] = avgβmax
+    set_solver_specific!(stats, :avgβmax, avgβmax)
   end
   set_solution!(stats, x)
   return stats
