@@ -35,7 +35,12 @@ if Sys.isunix()
         nlp = eval(Meta.parse(model))()
         if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolver))
           solver = eval(symsolver)(nlp)
-          stats = GenericExecutionStats(nlp)
+          if symsolver == :FomoSolver
+            T = eltype(nlp.meta.x0)
+            stats = GenericExecutionStats(nlp, solver_specific = Dict(:avgβmax => T(0)))
+          else
+            stats = GenericExecutionStats(nlp)
+          end
           with_logger(NullLogger()) do
             SolverCore.solve!(solver, nlp, stats)
             reset!(solver)
