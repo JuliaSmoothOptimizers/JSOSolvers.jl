@@ -1,5 +1,6 @@
 @testset "Test restart with a different initial guess: $fun" for (fun, s) in (
-  (:R2, :R2Solver),
+  (:R2, :FoSolver),
+  (:fomo, :FomoSolver),
   (:lbfgs, :LBFGSSolver),
   (:tron, :TronSolver),
   (:trunk, :TrunkSolver),
@@ -43,7 +44,8 @@ end
 end
 
 @testset "Test restart with a different problem: $fun" for (fun, s) in (
-  (:R2, :R2Solver),
+  (:R2, :FoSolver),
+  (:fomo, :FomoSolver),
   (:lbfgs, :LBFGSSolver),
   (:tron, :TronSolver),
   (:trunk, :TrunkSolver),
