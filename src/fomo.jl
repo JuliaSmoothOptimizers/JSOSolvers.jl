@@ -227,7 +227,10 @@ end
 """
 mutable struct R2Solver{T, V} <: AbstractOptimizationSolver end
 
-Base.@deprecate R2Solver(nlp::AbstractNLPModel; kwargs...) FoSolver(nlp::AbstractNLPModel; kwargs...)
+Base.@deprecate R2Solver(nlp::AbstractNLPModel; kwargs...) FoSolver(
+  nlp::AbstractNLPModel;
+  kwargs...,
+)
 
 @doc (@doc FoSolver) function fo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
   solver = FoSolver(nlp)
