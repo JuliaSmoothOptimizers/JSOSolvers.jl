@@ -30,7 +30,7 @@ The keyword arguments may include
 - `max_cgiter::Int = 50`: subproblem iteration limit.
 - `cgtol::T = T(0.1)`: subproblem tolerance.
 - `atol::T = √eps(T)`: absolute tolerance.
-- `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
+- `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖x - Proj(x - ∇f(xᵏ))‖ ≤ atol + rtol * ‖∇f(x⁰)‖. Proj denotes here the projection over the bounds.
 - `Fatol::T = √eps(T)`: absolute tolerance on the residual.
 - `Frtol::T = eps(T)`: relative tolerance on the residual, the algorithm stops when ‖F(xᵏ)‖ ≤ Fatol + Frtol * ‖F(x⁰)‖.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
@@ -42,20 +42,7 @@ The keyword arguments of `TronSolverNLS` are passed to the [`TRONTrustRegion`](h
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 
 # Callback
-The callback is called at each iteration.
-The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
-Changing any of the input arguments will affect the subsequent iterations.
-In particular, setting `stats.status = :user` will stop the algorithm.
-All relevant information should be available in `nlp` and `solver`.
-Notably, you can access, and modify, the following:
-- `solver.x`: current iterate;
-- `solver.gx`: current gradient;
-- `stats`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
-  - `stats.dual_feas`: norm of current gradient;
-  - `stats.iter`: current iteration counter;
-  - `stats.objective`: current objective function value;
-  - `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm attained a stopping criterion. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
-  - `stats.elapsed_time`: elapsed time in seconds.
+$(Callback_docstring)
 
 # References
 This is an adaptation for bound-constrained nonlinear least-squares problems of the TRON method described in
