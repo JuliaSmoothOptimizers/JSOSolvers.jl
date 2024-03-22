@@ -448,7 +448,7 @@ Compute value `βmax` that saturates the contribution of the momentum term to th
 2. ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) * ∇f(xk) .+ βmax .* m‖
 with `m` the momentum term and `mdot∇f = ∇f(xk)ᵀm` 
 """
-function find_beta(diff_norm::T, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T, V}
+function find_beta(diff_norm::T, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T}
   n1 = norm_∇f^2 - mdot∇f
   β1 = n1 > 0 ? (1 - θ1) * norm_∇f^2 / n1 : β
   β2 = diff_norm != 0 ? (1 - θ2) * norm_∇f / diff_norm : β
