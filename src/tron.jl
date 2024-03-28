@@ -302,6 +302,7 @@ function SolverCore.solve!(
       s,
       Hs,
       max_cgiter = max_cgiter,
+      max_time = max_time - stats.elapsed_time,
       subsolver_verbose = subsolver_verbose,
     )
 
@@ -525,7 +526,7 @@ end
 
 """
 
-    projected_newton!(solver, x, H, g, Δ, cgtol, ℓ, u, s, Hs; max_cgiter = 50, subsolver_verbose = 0)
+    projected_newton!(solver, x, H, g, Δ, cgtol, ℓ, u, s, Hs; max_time = Inf, max_cgiter = 50, subsolver_verbose = 0)
 
 Compute an approximate solution `d` for
 
@@ -546,8 +547,10 @@ function projected_newton!(
   s::AbstractVector{T},
   Hs::AbstractVector{T};
   max_cgiter::Int = 50,
+  max_time::Float64 = Inf,
   subsolver_verbose = 0,
 ) where {T <: Real}
+  start_time, elapsed_time = time(), 0.0
   n = length(x)
   status = ""
 
@@ -559,13 +562,11 @@ function projected_newton!(
   mul!(Hs, H, s)
 
   # Projected Newton Step
-  exit_optimal = false
-  exit_pcg = false
-  exit_itmax = false
+  exit_optimal, exit_pcg, exit_itmax, exit_time = false, false, false, false
   iters = 0
   x .= x .+ s
   project!(x, x, ℓ, u)
-  while !(exit_optimal || exit_pcg || exit_itmax)
+  while !(exit_optimal || exit_pcg || exit_itmax || exit_time)
     active!(ifix, x, ℓ, u)
     if sum(ifix) == n
       exit_optimal = true
@@ -587,6 +588,7 @@ function projected_newton!(
       radius = Δ,
       rtol = cgtol,
       atol = zero(T),
+      timemax = max_time - elapsed_time,
       verbose = subsolver_verbose,
     )
 
@@ -614,13 +616,21 @@ function projected_newton!(
     elseif iters >= max_cgiter
       exit_itmax = true
     end
+
+    elapsed_time = time() - start_time
+    exit_time = elapsed_time >= max_time
   end
+
   status = if exit_optimal
     "stationary point found"
+  elseif exit_pcg
+    "on trust-region boundary"
   elseif exit_itmax
     "maximum number of iterations"
+  elseif exit_time
+    "time limit exceeded"
   else
-    status # on trust-region
+    status # unknown
   end
 
   return status
