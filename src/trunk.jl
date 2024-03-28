@@ -248,6 +248,7 @@ function SolverCore.solve!(
       rtol = cgtol,
       radius = tr.radius,
       itmax = max(2 * n, 50),
+      timemax = max_time - stats.elapsed_time,
       verbose = subsolver_verbose,
     )
     s, cg_stats = subsolver.x, subsolver.stats
