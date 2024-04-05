@@ -20,6 +20,9 @@ mk .= ∇f(xk) .* (1 - βmax) .+ mk .* βmax
 and βmax ∈ [0,β] chosen as to ensure d is gradient-related, i.e., the following 2 conditions are satisfied:
 (1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk ≥ θ1 * ‖∇f(xk)‖² (1)
 ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) *. ∇f(xk) + βmax .* mk‖       (2)
+In the nonmonotone case, (1) rewrites
+(1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk + (fm - fk)/μk≥ θ1 * ‖∇f(xk)‖²,
+with fm the greatest objective value over the last M successful iterations, and fk = f(xk).
 
 # Advanced usage
 
@@ -49,6 +52,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `β = T(0.9) ∈ [0,1)`: target decay rate for the momentum.
 - `θ1 = T(0.1)`: momentum contribution parameter for convergence condition (1).
 - `θ2 = T(eps(T)^(1/3))`: momentum contribution parameter for convergence condition (2). 
+- `M = 1` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `step_backend = r2_step()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 
@@ -107,21 +111,23 @@ mutable struct FomoSolver{T, V} <: AbstractFirstOrderSolver
   m::V
   d::V
   p::V
+  o::V
   α::T
 end
 
-function FomoSolver(nlp::AbstractNLPModel{T, V}) where {T, V}
+function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int=1) where {T, V}
   x = similar(nlp.meta.x0)
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
   m = fill!(similar(nlp.meta.x0), 0)
   d = fill!(similar(nlp.meta.x0), 0)
   p = similar(nlp.meta.x0)
-  return FomoSolver{T, V}(x, g, c, m, d, p, T(0))
+  o = fill!(Vector{T}(undef,M),-Inf)
+  return FomoSolver{T, V}(x, g, c, m, d, p, o, T(0))
 end
 
-@doc (@doc FomoSolver) function fomo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
-  solver = FomoSolver(nlp)
+@doc (@doc FomoSolver) function fomo(nlp::AbstractNLPModel{T, V}; M::Int = 1, kwargs...) where {T, V}
+  solver = FomoSolver(nlp; M)
   solver_specific = Dict(:avgβmax => T(0.0))
   stats = GenericExecutionStats(nlp; solver_specific = solver_specific)
   return solve!(solver, nlp, stats; kwargs...)
@@ -129,6 +135,7 @@ end
 
 function SolverCore.reset!(solver::FomoSolver{T}) where {T}
   fill!(solver.m, 0)
+  fill!(solver.o,-Inf)
   solver
 end
 
@@ -163,6 +170,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `max_eval::Int = -1`: maximum number of evaluation of the objective function.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
+- `M = 1` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `step_backend = r2_step()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 
@@ -201,14 +209,16 @@ mutable struct FoSolver{T, V} <: AbstractFirstOrderSolver
   x::V
   g::V
   c::V
+  o::V
   α::T
 end
 
-function FoSolver(nlp::AbstractNLPModel{T, V}) where {T, V}
+function FoSolver(nlp::AbstractNLPModel{T, V}; M::Int = 1) where {T, V}
   x = similar(nlp.meta.x0)
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
-  return FoSolver{T, V}(x, g, c, T(0))
+  o = fill!(Vector{T}(undef,M),-Inf)
+  return FoSolver{T, V}(x, g, c, o, T(0))
 end
 
 """
@@ -218,11 +228,12 @@ mutable struct R2Solver{T, V} <: AbstractOptimizationSolver end
 
 Base.@deprecate R2Solver(nlp::AbstractNLPModel; kwargs...) FoSolver(
   nlp::AbstractNLPModel;
+  M = 1,
   kwargs...,
 )
 
-@doc (@doc FoSolver) function fo(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
-  solver = FoSolver(nlp)
+@doc (@doc FoSolver) function fo(nlp::AbstractNLPModel{T, V}; M::Int = 1, kwargs...) where {T, V}
+  solver = FoSolver(nlp; M)
   stats = GenericExecutionStats(nlp)
   return solve!(solver, nlp, stats; step_backend = r2_step(), kwargs...)
 end
@@ -236,6 +247,7 @@ end
 end
 
 function SolverCore.reset!(solver::FoSolver{T}) where {T}
+  fill!(solver.o,-Inf)
   solver
 end
 
@@ -281,6 +293,9 @@ function SolverCore.solve!(
   set_iter!(stats, 0)
   f0 = obj(nlp, x)
   set_objective!(stats, f0)
+  obj_mem = solver.o
+  obj_mem[1] = stats.objective
+  max_obj_mem = stats.objective
 
   grad!(nlp, x, ∇fk)
   norm_∇fk = norm(∇fk)
@@ -352,7 +367,7 @@ function SolverCore.solve!(
     ΔTk = ((oneT - βmax) * norm_∇fk^2 + βmax * mdot∇f) * μk # = dot(d,∇fk) * μk with momentum, ‖∇fk‖²μk without momentum
     fck = obj(nlp, c)
     unbounded = fck < fmin
-    ρk = (stats.objective - fck) / ΔTk
+    ρk = (max_obj_mem - fck) /(max_obj_mem - stats.objective + ΔTk) 
     # Update regularization parameters
     if ρk >= η2
       solver.α = min(αmax, γ2 * solver.α)
@@ -371,13 +386,16 @@ function SolverCore.solve!(
         momentum .= ∇fk .* (oneT - β) .+ momentum .* β
       end
       set_objective!(stats, fck)
+      circshift!(obj_mem,1)
+      obj_mem[1] = stats.objective
+      max_obj_mem = maximum(obj_mem)
+
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
       if use_momentum
         mdot∇f = dot(momentum, ∇fk)
         p .= momentum .- ∇fk
-        diff_norm = norm(p)
-        βmax = find_beta(diff_norm, mdot∇f, norm_∇fk, β, θ1, θ2)
+        βmax = find_beta(p, mdot∇f, norm_∇fk, μk, stats.objective, max_obj_mem, β, θ1, θ2)
         d .= ∇fk .* (oneT - βmax) .+ momentum .* βmax
         norm_d = norm(d)
         avgβmax += βmax
