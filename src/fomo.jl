@@ -346,10 +346,7 @@ function SolverCore.solve!(
     step_underflow = x == c # step addition underfow on every dimensions, should happen before solver.α == 0
     ΔTk = ((oneT - βmax) * norm_∇fk^2 + βmax * mdot∇f) * λk # = dot(d,∇fk) * λk with momentum, ‖∇fk‖²λk without momentum
     fck = obj(nlp, c)
-    if fck == -Inf
-      set_status!(stats, :unbounded)
-      break
-    end
+    unbounded = isinf(fck)
     ρk = (stats.objective - fck) / ΔTk
     # Update regularization parameters
     if ρk >= η2
@@ -406,6 +403,7 @@ function SolverCore.solve!(
         nlp,
         elapsed_time = stats.elapsed_time,
         optimal = optimal,
+        unbounded = unbounded,
         max_eval = max_eval,
         iter = stats.iter,
         max_iter = max_iter,

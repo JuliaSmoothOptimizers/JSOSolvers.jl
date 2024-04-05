@@ -35,6 +35,16 @@ end
   end
 end
 
+@testset "Test unbounded below" begin
+  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk)
+    f(x) = -exp(x[1])
+    nlp = ADNLPModel(f, [2.])
+
+    stats = eval(fun)(nlp)
+    @test stats.status == :unbounded
+  end
+end
+
 include("restart.jl")
 include("callback.jl")
 include("consistency.jl")
