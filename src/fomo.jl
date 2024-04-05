@@ -346,10 +346,10 @@ function SolverCore.solve!(
   oneT = T(1)
   mdot∇f = T(0) # dot(momentum,∇fk)
   while !done
-    λk = step_mult(solver.α, norm_d, step_backend)
-    c .= x .- λk .* d
+    μk = step_mult(solver.α, norm_d, step_backend)
+    c .= x .- μk .* d
     step_underflow = x == c # step addition underfow on every dimensions, should happen before solver.α == 0
-    ΔTk = ((oneT - βmax) * norm_∇fk^2 + βmax * mdot∇f) * λk # = dot(d,∇fk) * λk with momentum, ‖∇fk‖²λk without momentum
+    ΔTk = ((oneT - βmax) * norm_∇fk^2 + βmax * mdot∇f) * μk # = dot(d,∇fk) * μk with momentum, ‖∇fk‖²μk without momentum
     fck = obj(nlp, c)
     unbounded = fck < fmin
     ρk = (stats.objective - fck) / ΔTk
@@ -432,18 +432,19 @@ function SolverCore.solve!(
 end
 
 """
-    find_beta(m, mdot∇f, norm_∇f, β, θ1, θ2)
+find_beta(m, mdot∇f, norm_∇f, μk, fk, max_obj_mem, β, θ1, θ2)
 
-Compute value `βmax` that saturates the contribution of the momentum term to the gradient.
-`βmax` is computed such that the two gradient-related conditions are ensured: 
-1. (1-βmax) * ‖∇f(xk)‖² + βmax * ∇f(xk)ᵀm ≥ θ1 * ‖∇f(xk)‖²
+Compute βmax which saturates the contibution of the momentum term to the gradient.
+`βmax` is computed such that the two gradient-related conditions (first one is relaxed in the nonmonotone case) are ensured: 
+1. (1-βmax) * ‖∇f(xk)‖² + βmax * ∇f(xk)ᵀm + (max_obj_mem - fk)/μk ≥ θ1 * ‖∇f(xk)‖²
 2. ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) * ∇f(xk) .+ βmax .* m‖
-with `m` the momentum term and `mdot∇f = ∇f(xk)ᵀm` 
+with `m` the momentum term and `mdot∇f = ∇f(xk)ᵀm`, `fk` the model at s=0, `max_obj_mem` the greatest value of objective over the last M successful iterations.
 """
-function find_beta(diff_norm::T, mdot∇f::T, norm_∇f::T, β::T, θ1::T, θ2::T) where {T}
+function find_beta(p::V, mdot∇f::T, norm_∇f::T, μk::T, fk::T, max_obj_mem::T, β::T, θ1::T, θ2::T) where {T, V}
   n1 = norm_∇f^2 - mdot∇f
-  β1 = n1 > 0 ? (1 - θ1) * norm_∇f^2 / n1 : β
-  β2 = diff_norm != 0 ? (1 - θ2) * norm_∇f / diff_norm : β
+  n2 = norm(p)
+  β1 = n1 > 0 ? ((1 - θ1) * norm_∇f^2 - (fk - max_obj_mem)/μk ) / n1 : β
+  β2 = n2 != 0 ? (1 - θ2) * norm_∇f / n2 : β
   return min(β, min(β1, β2))
 end
 
