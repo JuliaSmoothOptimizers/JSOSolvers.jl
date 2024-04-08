@@ -153,6 +153,8 @@ function SolverCore.solve!(
   verbose > 0 && @info log_row(Any[stats.iter, f, ∇fNorm, T, Int])
 
   optimal = ∇fNorm ≤ ϵ
+  fmin = min(-one(T), f) / eps(T)
+  unbounded = f < fmin
 
   set_status!(
     stats,
@@ -160,6 +162,7 @@ function SolverCore.solve!(
       nlp,
       elapsed_time = stats.elapsed_time,
       optimal = optimal,
+      unbounded = unbounded,
       max_eval = max_eval,
       iter = stats.iter,
       max_iter = max_iter,
@@ -210,6 +213,7 @@ function SolverCore.solve!(
     set_time!(stats, time() - start_time)
     set_dual_residual!(stats, ∇fNorm)
     optimal = ∇fNorm ≤ ϵ
+    unbounded = f < fmin
 
     set_status!(
       stats,
@@ -217,6 +221,7 @@ function SolverCore.solve!(
         nlp,
         elapsed_time = stats.elapsed_time,
         optimal = optimal,
+        unbounded = unbounded,
         max_eval = max_eval,
         iter = stats.iter,
         max_iter = max_iter,
