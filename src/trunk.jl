@@ -196,6 +196,8 @@ function SolverCore.solve!(
   set_objective!(stats, f)
   set_dual_residual!(stats, ∇fNorm2)
   optimal = ∇fNorm2 ≤ ϵ
+  fmin = min(-one(T), f) / eps(T)
+  unbounded = f < fmin
 
   verbose > 0 && @info log_header(
     [:iter, :f, :dual, :radius, :ratio, :inner, :bk, :cgstatus],
@@ -210,6 +212,7 @@ function SolverCore.solve!(
       nlp,
       elapsed_time = stats.elapsed_time,
       optimal = optimal,
+      unbounded = unbounded,
       max_eval = max_eval,
       iter = stats.iter,
       max_iter = max_iter,
@@ -381,6 +384,7 @@ function SolverCore.solve!(
     update!(tr, sNorm)
 
     optimal = ∇fNorm2 ≤ ϵ
+    unbounded = f < fmin
 
     set_status!(
       stats,
@@ -388,6 +392,7 @@ function SolverCore.solve!(
         nlp,
         elapsed_time = stats.elapsed_time,
         optimal = optimal,
+        unbounded = unbounded,
         max_eval = max_eval,
         iter = stats.iter,
         max_iter = max_iter,
