@@ -44,7 +44,7 @@ end
 
     stats = eval(fun)(nlp)
     @test stats.status == :unbounded
-    @test stats.objective < -one(T)/eps(T)
+    @test stats.objective < -one(T) / eps(T)
   end
 end
 
