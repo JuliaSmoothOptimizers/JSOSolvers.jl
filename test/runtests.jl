@@ -37,11 +37,14 @@ end
 
 @testset "Test unbounded below" begin
   @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk)
+    T = Float64
+    x0 = [T(0)]
     f(x) = -exp(x[1])
-    nlp = ADNLPModel(f, [2.])
+    nlp = ADNLPModel(f, x0)
 
     stats = eval(fun)(nlp)
     @test stats.status == :unbounded
+    @test stats.objective < -one(T)/eps(T)
   end
 end
 
