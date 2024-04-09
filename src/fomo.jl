@@ -279,8 +279,8 @@ function SolverCore.solve!(
   d = use_momentum ? solver.d : solver.g # g = d if no momentum
   p = use_momentum ? solver.p : nothing # not used if no momentum
   set_iter!(stats, 0)
-  fk = obj(nlp, x)
-  set_objective!(stats, fk)
+  f0 = obj(nlp, x)
+  set_objective!(stats, f0)
 
   grad!(nlp, x, ∇fk)
   norm_∇fk = norm(∇fk)
@@ -289,8 +289,8 @@ function SolverCore.solve!(
   solver.α = init_alpha(norm_∇fk, step_backend)
 
   # Stopping criterion: 
-  fmin = min(-one(T), fk) / eps(T)
-  unbounded = fk < fmin
+  fmin = min(-one(T), f0) / eps(T)
+  unbounded = f0 < fmin
 
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
