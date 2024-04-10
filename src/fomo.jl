@@ -21,7 +21,7 @@ and βmax ∈ [0,β] chosen as to ensure d is gradient-related, i.e., the follow
 (1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk ≥ θ1 * ‖∇f(xk)‖² (1)
 ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) *. ∇f(xk) + βmax .* mk‖       (2)
 In the nonmonotone case, (1) rewrites
-(1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk + (fm - fk)/μk≥ θ1 * ‖∇f(xk)‖²,
+(1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk + (fm - fk)/μk ≥ θ1 * ‖∇f(xk)‖²,
 with fm the greatest objective value over the last M successful iterations, and fk = f(xk).
 
 # Advanced usage
@@ -122,7 +122,7 @@ function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int=1) where {T, V}
   m = fill!(similar(nlp.meta.x0), 0)
   d = fill!(similar(nlp.meta.x0), 0)
   p = similar(nlp.meta.x0)
-  o = fill!(Vector{T}(undef,M),-Inf)
+  o = fill!(Vector{T}(undef, M), -Inf)
   return FomoSolver{T, V}(x, g, c, m, d, p, o, T(0))
 end
 
@@ -135,7 +135,7 @@ end
 
 function SolverCore.reset!(solver::FomoSolver{T}) where {T}
   fill!(solver.m, 0)
-  fill!(solver.o,-Inf)
+  fill!(solver.o, -Inf)
   solver
 end
 
@@ -217,7 +217,7 @@ function FoSolver(nlp::AbstractNLPModel{T, V}; M::Int = 1) where {T, V}
   x = similar(nlp.meta.x0)
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
-  o = fill!(Vector{T}(undef,M),-Inf)
+  o = fill!(Vector{T}(undef,M), -Inf)
   return FoSolver{T, V}(x, g, c, o, T(0))
 end
 
@@ -247,7 +247,7 @@ end
 end
 
 function SolverCore.reset!(solver::FoSolver{T}) where {T}
-  fill!(solver.o,-Inf)
+  fill!(solver.o, -Inf)
   solver
 end
 
@@ -386,7 +386,7 @@ function SolverCore.solve!(
         momentum .= ∇fk .* (oneT - β) .+ momentum .* β
       end
       set_objective!(stats, fck)
-      circshift!(obj_mem,1)
+      circshift!(obj_mem, 1)
       obj_mem[1] = stats.objective
       max_obj_mem = maximum(obj_mem)
 
@@ -450,7 +450,7 @@ function SolverCore.solve!(
 end
 
 """
-find_beta(m, mdot∇f, norm_∇f, μk, fk, max_obj_mem, β, θ1, θ2)
+    find_beta(m, mdot∇f, norm_∇f, μk, fk, max_obj_mem, β, θ1, θ2)
 
 Compute βmax which saturates the contibution of the momentum term to the gradient.
 `βmax` is computed such that the two gradient-related conditions (first one is relaxed in the nonmonotone case) are ensured: 
