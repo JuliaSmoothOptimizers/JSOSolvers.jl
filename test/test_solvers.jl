@@ -14,6 +14,14 @@ function tests()
         unconstrained_nlp(solver)
         multiprecision_nlp(solver, :unc)
       end
+      @testset "$name : nonmonotone configuration" for (name, solver) in [
+        ("R2", (nlp; kwargs...) -> R2(nlp, M = 2; kwargs...)),
+        ("fomo_r2", (nlp; kwargs...) -> fomo(nlp, M = 2; kwargs...)),
+        ("fomo_tr", (nlp; kwargs...) -> fomo(nlp, M = 2, step_backend = JSOSolvers.tr_step(); kwargs...)),
+      ]
+        unconstrained_nlp(solver)
+        multiprecision_nlp(solver, :unc)
+      end
     end
     @testset "Bound-constrained solvers" begin
       @testset "$solver" for solver in [tron]
