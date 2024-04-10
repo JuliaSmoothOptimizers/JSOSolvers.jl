@@ -23,6 +23,9 @@ and βmax ∈ [0,β] chosen as to ensure d is gradient-related, i.e., the follow
 In the nonmonotone case, (1) rewrites
 (1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk + (fm - fk)/μk ≥ θ1 * ‖∇f(xk)‖²,
 with fm the greatest objective value over the last M successful iterations, and fk = f(xk).
+In the nonmonotone case, (1) rewrites
+(1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk + (fm - fk)/μk ≥ θ1 * ‖∇f(xk)‖²,
+with fm the greatest objective value over the last M successful iterations, and fk = f(xk).
 
 # Advanced usage
 
