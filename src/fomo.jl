@@ -23,9 +23,6 @@ and βmax ∈ [0,β] chosen as to ensure d is gradient-related, i.e., the follow
 In the nonmonotone case, (1) rewrites
 (1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk + (fm - fk)/μk ≥ θ1 * ‖∇f(xk)‖²,
 with fm the greatest objective value over the last M successful iterations, and fk = f(xk).
-In the nonmonotone case, (1) rewrites
-(1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk + (fm - fk)/μk ≥ θ1 * ‖∇f(xk)‖²,
-with fm the greatest objective value over the last M successful iterations, and fk = f(xk).
 
 # Advanced usage
 
@@ -118,7 +115,7 @@ mutable struct FomoSolver{T, V} <: AbstractFirstOrderSolver
   α::T
 end
 
-function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int=1) where {T, V}
+function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int = 1) where {T, V}
   x = similar(nlp.meta.x0)
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
@@ -129,7 +126,11 @@ function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int=1) where {T, V}
   return FomoSolver{T, V}(x, g, c, m, d, p, o, T(0))
 end
 
-@doc (@doc FomoSolver) function fomo(nlp::AbstractNLPModel{T, V}; M::Int = 1, kwargs...) where {T, V}
+@doc (@doc FomoSolver) function fomo(
+  nlp::AbstractNLPModel{T, V};
+  M::Int = 1,
+  kwargs...,
+) where {T, V}
   solver = FomoSolver(nlp; M)
   solver_specific = Dict(:avgβmax => T(0.0))
   stats = GenericExecutionStats(nlp; solver_specific = solver_specific)
@@ -220,7 +221,7 @@ function FoSolver(nlp::AbstractNLPModel{T, V}; M::Int = 1) where {T, V}
   x = similar(nlp.meta.x0)
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
-  o = fill!(Vector{T}(undef,M), -Inf)
+  o = fill!(Vector{T}(undef, M), -Inf)
   return FoSolver{T, V}(x, g, c, o, T(0))
 end
 
@@ -370,7 +371,7 @@ function SolverCore.solve!(
     ΔTk = ((oneT - βmax) * norm_∇fk^2 + βmax * mdot∇f) * μk # = dot(d,∇fk) * μk with momentum, ‖∇fk‖²μk without momentum
     fck = obj(nlp, c)
     unbounded = fck < fmin
-    ρk = (max_obj_mem - fck) /(max_obj_mem - stats.objective + ΔTk) 
+    ρk = (max_obj_mem - fck) / (max_obj_mem - stats.objective + ΔTk)
     # Update regularization parameters
     if ρk >= η2
       solver.α = min(αmax, γ2 * solver.α)
@@ -461,10 +462,20 @@ Compute βmax which saturates the contibution of the momentum term to the gradie
 2. ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) * ∇f(xk) .+ βmax .* m‖
 with `m` the momentum term and `mdot∇f = ∇f(xk)ᵀm`, `fk` the model at s=0, `max_obj_mem` the greatest value of objective over the last M successful iterations.
 """
-function find_beta(p::V, mdot∇f::T, norm_∇f::T, μk::T, fk::T, max_obj_mem::T, β::T, θ1::T, θ2::T) where {T, V}
+function find_beta(
+  p::V,
+  mdot∇f::T,
+  norm_∇f::T,
+  μk::T,
+  fk::T,
+  max_obj_mem::T,
+  β::T,
+  θ1::T,
+  θ2::T,
+) where {T, V}
   n1 = norm_∇f^2 - mdot∇f
   n2 = norm(p)
-  β1 = n1 > 0 ? ((1 - θ1) * norm_∇f^2 - (fk - max_obj_mem)/μk ) / n1 : β
+  β1 = n1 > 0 ? ((1 - θ1) * norm_∇f^2 - (fk - max_obj_mem) / μk) / n1 : β
   β2 = n2 != 0 ? (1 - θ2) * norm_∇f / n2 : β
   return min(β, min(β1, β2))
 end
