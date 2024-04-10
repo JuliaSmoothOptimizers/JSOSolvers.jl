@@ -37,6 +37,8 @@ if Sys.isunix()
         if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolver))
           if (symsolver == :FoSolver || symsolver == :FomoSolver)
             solver = eval(symsolver)(nlp; M = 2) # nonmonotone configuration allocates extra memory
+          else
+            solver = eval(symsolver)(nlp)
           end
           if symsolver == :FomoSolver
             T = eltype(nlp.meta.x0)
