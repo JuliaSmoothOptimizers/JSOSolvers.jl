@@ -462,7 +462,7 @@ Compute βmax which saturates the contribution of the momentum term to the gradi
 `βmax` is computed such that the two gradient-related conditions (first one is relaxed in the nonmonotone case) are ensured: 
 1. (1-βmax) * ‖∇f(xk)‖² + βmax * ∇f(xk)ᵀm + (max_obj_mem - fk)/μk ≥ θ1 * ‖∇f(xk)‖²
 2. ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) * ∇f(xk) .+ βmax .* m‖
-with `m` the momentum term and `mdot∇f = ∇f(xk)ᵀm`, `fk` the model at s=0, `max_obj_mem` the largest value of objective over the last M successful iterations.
+with `m` the momentum term and `mdot∇f = ∇f(xk)ᵀm`, `fk` the model at s=0, `max_obj_mem` the largest objective value over the last M successful iterations.
 """
 function find_beta(
   p::V,
