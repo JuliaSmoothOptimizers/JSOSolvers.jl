@@ -300,7 +300,7 @@ function SolverCore.solve!(
   obj_mem = solver.o
   M = length(obj_mem)
   mem_ind = 0
-  obj_mem[mem_ind+1] = stats.objective
+  obj_mem[mem_ind + 1] = stats.objective
   max_obj_mem = stats.objective
 
   grad!(nlp, x, ∇fk)
@@ -392,8 +392,8 @@ function SolverCore.solve!(
         momentum .= ∇fk .* (oneT - β) .+ momentum .* β
       end
       set_objective!(stats, fck)
-      mem_ind = (mem_ind+1) % M
-      obj_mem[mem_ind+1] = stats.objective
+      mem_ind = (mem_ind + 1) % M
+      obj_mem[mem_ind + 1] = stats.objective
       max_obj_mem = maximum(obj_mem)
 
       grad!(nlp, x, ∇fk)
