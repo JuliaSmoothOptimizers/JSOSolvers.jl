@@ -374,7 +374,7 @@ function SolverCore.solve!(
           ∇fNorm2,
           tr.radius,
           tr.ratio,
-          length(cg_stats.residuals),
+          cg_stats.niter,
           bk,
           cg_stats.status,
         ])
