@@ -146,6 +146,7 @@ function SolverCore.solve!(
   nm_itmax::Int = 25,
   verbose::Int = 0,
   subsolver_verbose::Int = 0,
+  M = I,
 ) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("trunk only works for minimization problem")
@@ -240,6 +241,7 @@ function SolverCore.solve!(
       itmax = max(2 * n, 50),
       timemax = max_time - stats.elapsed_time,
       verbose = subsolver_verbose,
+      M = M,
     )
     s, cg_stats = subsolver.x, subsolver.stats
 
