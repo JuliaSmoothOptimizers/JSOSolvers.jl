@@ -129,6 +129,20 @@ end
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
+"""
+    normM!(n, x, M, z)
+    
+Weighted norm of `x` with respect to `M`, i.e., `z = sqrt(x' * M * x)`. Uses `z` as workspace.
+"""
+function normM!(x, M, z)
+  if M === I
+    return norm(x)
+  else
+    mul!(z, M, x)
+    return √(x⋅z)
+  end
+end
+
 function SolverCore.solve!(
   solver::TrunkSolver{T, V},
   nlp::AbstractNLPModel{T, V},
@@ -179,10 +193,11 @@ function SolverCore.solve!(
   f = obj(nlp, x)
   grad!(nlp, x, ∇f)
   isa(nlp, QuasiNewtonModel) && (∇fn .= ∇f)
-  ∇fNorm2 = nrm2(n, ∇f)
+  ∇fNorm2 = norm(∇f)
+  ∇fNormM = normM!(∇f, M, Hs)
   ϵ = atol + rtol * ∇fNorm2
   tr = solver.tr
-  tr.radius = min(max(∇fNorm2 / 10, one(T)), T(100))
+  tr.radius = min(max(∇fNormM / 10, one(T)), T(100))
 
   # Non-monotone mode parameters.
   # fmin: current best overall objective value
@@ -229,7 +244,7 @@ function SolverCore.solve!(
     # Compute inexact solution to trust-region subproblem
     # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
     # In this particular case, we may use an operator with preallocation.
-    cgtol = max(rtol, min(T(0.1), √∇fNorm2, T(0.9) * cgtol))
+    cgtol = max(rtol, min(T(0.1), √∇fNormM, T(0.9) * cgtol))
     ∇f .*= -1
     Krylov.solve!(
       subsolver,
@@ -356,6 +371,7 @@ function SolverCore.solve!(
         tr.good_grad = false
       end
       ∇fNorm2 = nrm2(n, ∇f)
+      ∇fNormM = normM!(∇f, M, Hs)
 
       set_objective!(stats, f)
       set_time!(stats, time() - start_time)
