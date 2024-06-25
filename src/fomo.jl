@@ -6,6 +6,114 @@ abstract type AbstractFOMethod end
 struct tr_step <: AbstractFOMethod end
 struct r2_step <: AbstractFOMethod end
 
+const FOMO_η1 = "eps(T)^(1 / 4)" # TODO
+const FOMO_η2 = 95 // 100
+const FOMO_γ1 = 1 // 2
+const FOMO_γ2 = 2
+const FOMO_γ3 = 1 // 2
+const FOMO_αmax = "1 / eps(T)" # TODO
+const FOMO_β = 9 // 10
+const FOMO_θ1 = 1 // 10
+const FOMO_θ2 = "eps(T)^(1 / 3)" # TODO
+const FOMO_M = 1
+const FOMO_step_backend = :r2_step
+
+"""
+    FomoParameterSet{T} <: AbstractParameterSet
+
+This structure designed for `lbfgs` regroups the following parameters:
+  - `η1 = eps(T)^(1 / 4)`, `η2 = T($(FOMO_η2))`: step acceptance parameters.
+  - `γ1 = T($(FOMO_γ1))`, `γ2 = T($(FOMO_γ2))`: regularization update parameters.
+  - `γ3 = T($(FOMO_γ3))` : momentum factor βmax update parameter in case of unsuccessful iteration.
+  - `αmax = 1 / eps(T)`: maximum step parameter for fomo algorithm.
+  - `β = T($(FOMO_β)) ∈ [0,1)`: target decay rate for the momentum.
+  - `θ1 = T($(FOMO_θ1))`: momentum contribution parameter for convergence condition (1).
+  - `θ2 = eps(T)^(1 / 3)`: momentum contribution parameter for convergence condition (2). 
+  - `M = $(FOMO_M)` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
+  - `step_backend = $(FOMO_step_backend)()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
+
+  Default values are:
+  - `η1::T = $(FOMO_η1)`
+  - `η2::T = T($(FOMO_η2))`
+  - `γ1::T = T($(FOMO_γ1))`
+  - `γ2::T = T($(FOMO_γ2))`
+  - `γ3::T = T($(FOMO_γ3))`
+  - `αmax::T = $(FOMO_αmax)`
+  - `β = T($(FOMO_β)) ∈ [0,1)`
+  - `θ1 = T($(FOMO_θ1))`
+  - `θ2 = e$(FOMO_θ2)`
+  - `M = $(FOMO_M)`
+  - `step_backend = $FOMO_step_backend()
+"""
+struct FomoParameterSet{T} <: AbstractParameterSet
+  η1::Parameter{T, RealInterval{T}}
+  η2::Parameter{T, RealInterval{T}}
+  γ1::Parameter{T, RealInterval{T}}
+  γ2::Parameter{T, RealInterval{T}}
+  γ3::Parameter{T, RealInterval{T}}
+  αmax::Parameter{T, RealInterval{T}}
+  β::Parameter{T, RealInterval{T}}
+  θ1::Parameter{T, RealInterval{T}}
+  θ2::Parameter{T, RealInterval{T}}
+  M::Parameter{Int, IntegerRange{Int}}
+  step_backend::Parameter{Union{r2_step, tr_step}, CategoricalSet{Union{r2_step, tr_step}}}
+end
+
+# add a default constructor
+function FomoParameterSet{T}(;
+  η1::T = eps(T)^(1 / 4),
+  η2::T = T(FOMO_η2),
+  γ1::T = T(FOMO_γ1),
+  γ2::T = T(FOMO_γ2),
+  γ3::T = T(FOMO_γ3),
+  αmax::T = 1 / eps(T),
+  β::T = T(FOMO_β),
+  θ1::T = T(FOMO_θ1),
+  θ2::T = eps(T)^(1 / 3),
+  M::Int = FOMO_M,
+  step_backend::AbstractFOMethod = eval(FOMO_step_backend)(),
+) where {T}
+  @assert η1 <= η2
+  FomoParameterSet(
+    Parameter(η1, RealInterval(T(0), T(1), lower_open = true, upper_open = true)),
+    Parameter(η2, RealInterval(T(0), T(1), lower_open = true, upper_open = true)),
+    Parameter(γ1, RealInterval(T(0), T(1), lower_open = true, upper_open = true)),
+    Parameter(γ2, RealInterval(T(1), T(Inf), lower_open = true, upper_open = true)),
+    Parameter(γ3, RealInterval(T(0), T(1), lower_open = true, upper_open = true)),
+    Parameter(αmax, RealInterval(T(1), T(Inf), upper_open = true)),
+    Parameter(β, RealInterval(T(0), T(1), upper_open = true)),
+    Parameter(θ1, RealInterval(T(0), T(1), upper_open = true)),
+    Parameter(θ2, RealInterval(T(0), T(1), upper_open = true)),
+    Parameter(M, IntegerRange(Int(1), typemax(Int))),
+    Parameter(step_backend, CategoricalSet{Union{tr_step, r2_step}}([r2_step(); tr_step()])),
+  )
+end
+FomoParameterSet(
+  η1::T,
+  η2::T,
+  γ1::T,
+  γ2::T,
+  γ3::T,
+  αmax::T,
+  β::T,
+  θ1::T,
+  θ2::T,
+  M::Int,
+  step_backend::AbstractFOMethod,
+) where {T} = FomoParameterSet{T}(;
+  η1 = η1,
+  η2 = η2,
+  γ1 = γ1,
+  γ2 = γ2,
+  γ3 = γ3,
+  αmax = αmax,
+  β = β,
+  θ1 = θ1,
+  θ2 = θ2,
+  M = M,
+  step_backend = step_backend,
+)
+
 """
     fomo(nlp; kwargs...)
 
@@ -42,19 +150,19 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
-- `η1 = eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
-- `γ1 = T(1/2)`, `γ2 = T(2)`: regularization update parameters.
-- `γ3 = T(1/2)` : momentum factor βmax update parameter in case of unsuccessful iteration.
-- `αmax = 1/eps(T)`: maximum step parameter for fomo algorithm.
+- `η1 = $(FOMO_η1)`, `η2 = T($(FOMO_η2))`: step acceptance parameters.
+- `γ1 = T($(FOMO_γ1)))`, `γ2 = T($(FOMO_γ2))`: regularization update parameters.
+- `γ3 = T($(FOMO_γ3))` : momentum factor βmax update parameter in case of unsuccessful iteration.
+- `αmax = $(FOMO_αmax)`: maximum step parameter for fomo algorithm.
 - `max_eval::Int = -1`: maximum number of objective evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
-- `β = T(0.9) ∈ [0,1)`: target decay rate for the momentum.
-- `θ1 = T(0.1)`: momentum contribution parameter for convergence condition (1).
-- `θ2 = T(eps(T)^(1/3))`: momentum contribution parameter for convergence condition (2). 
-- `M = 1` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
+- `β = T($(FOMO_β)) ∈ [0,1)`: target decay rate for the momentum.
+- `θ1 = T($(FOMO_θ1))`: momentum contribution parameter for convergence condition (1).
+- `θ2 = $(FOMO_θ2)`: momentum contribution parameter for convergence condition (2). 
+- `M = $(FOMO_M)` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `step_backend = r2_step()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
+- `step_backend = $(FOMO_step_backend)()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 
 # Output
 
@@ -113,9 +221,11 @@ mutable struct FomoSolver{T, V} <: AbstractFirstOrderSolver
   p::V
   o::V
   α::T
+  params::FomoParameterSet{T}
 end
 
-function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int = 1) where {T, V}
+function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int = FOMO_M, kwargs...) where {T, V}
+  params = FomoParameterSet{T}(; M = M, kwargs...)
   x = similar(nlp.meta.x0)
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
@@ -123,15 +233,38 @@ function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int = 1) where {T, V}
   d = fill!(similar(nlp.meta.x0), 0)
   p = similar(nlp.meta.x0)
   o = fill!(Vector{T}(undef, M), -Inf)
-  return FomoSolver{T, V}(x, g, c, m, d, p, o, T(0))
+  return FomoSolver{T, V}(x, g, c, m, d, p, o, T(0), params)
 end
 
 @doc (@doc FomoSolver) function fomo(
   nlp::AbstractNLPModel{T, V};
-  M::Int = 1,
+  η1::T = eps(T)^(1 / 4),
+  η2::T = T(FOMO_η2),
+  γ1::T = T(FOMO_γ1),
+  γ2::T = T(FOMO_γ2),
+  γ3::T = T(FOMO_γ3),
+  αmax::T = 1 / eps(T),
+  β::T = T(FOMO_β),
+  θ1::T = T(FOMO_θ1),
+  θ2::T = eps(T)^(1 / 3),
+  M::Int = FOMO_M,
+  step_backend::AbstractFOMethod = eval(FOMO_step_backend)(),
   kwargs...,
 ) where {T, V}
-  solver = FomoSolver(nlp; M)
+  solver = FomoSolver(
+    nlp;
+    η1 = η1,
+    η2 = η2,
+    γ1 = γ1,
+    γ2 = γ2,
+    γ3 = γ3,
+    αmax = αmax,
+    β = β,
+    θ1 = θ1,
+    θ2 = θ2,
+    M = M,
+    step_backend = step_backend,
+  )
   solver_specific = Dict(:avgβmax => T(0.0))
   stats = GenericExecutionStats(nlp; solver_specific = solver_specific)
   return solve!(solver, nlp, stats; kwargs...)
@@ -168,15 +301,17 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
-- `η1 = eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
-- `γ1 = T(1/2)`, `γ2 = T(2)`: regularization update parameters.
-- `αmax = 1/eps(T)`: maximum step parameter for fomo algorithm.
+- `η1 = $(FOMO_η1)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
+- `η2 = T($(FOMO_η2))`: algorithm parameter, see [`FOMOParameterSet`](@ref).
+- `γ1 = T($(FOMO_γ1))`: algorithm parameter, see [`FOMOParameterSet`](@ref).
+- `γ2 = T($(FOMO_γ2))`: algorithm parameter, see [`FOMOParameterSet`](@ref).
+- `αmax = $(FOMO_αmax)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
 - `max_eval::Int = -1`: maximum number of evaluation of the objective function.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
-- `M = 1` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
+- `M = $FOMO_M` : algorithm parameter, see [`FOMOParameterSet`](@ref).
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `step_backend = r2_step()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
+- `step_backend = $(FOMO_step_backend)()`: algorithm parameter, see [`FOMOParameterSet`](@ref).
 
 # Output
 
@@ -215,14 +350,16 @@ mutable struct FoSolver{T, V} <: AbstractFirstOrderSolver
   c::V
   o::V
   α::T
+  params::FomoParameterSet{T}
 end
 
-function FoSolver(nlp::AbstractNLPModel{T, V}; M::Int = 1) where {T, V}
+function FoSolver(nlp::AbstractNLPModel{T, V}; M::Int = FOMO_M, kwargs...) where {T, V}
+  params = FomoParameterSet{T}(; M = M, kwargs...)
   x = similar(nlp.meta.x0)
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
   o = fill!(Vector{T}(undef, M), -Inf)
-  return FoSolver{T, V}(x, g, c, o, T(0))
+  return FoSolver{T, V}(x, g, c, o, T(0), params)
 end
 
 """
@@ -232,14 +369,41 @@ mutable struct R2Solver{T, V} <: AbstractOptimizationSolver end
 
 Base.@deprecate R2Solver(nlp::AbstractNLPModel; kwargs...) FoSolver(
   nlp::AbstractNLPModel;
-  M = 1,
+  M = FOMO_M,
   kwargs...,
 )
 
-@doc (@doc FoSolver) function fo(nlp::AbstractNLPModel{T, V}; M::Int = 1, kwargs...) where {T, V}
-  solver = FoSolver(nlp; M)
+@doc (@doc FoSolver) function fo(
+  nlp::AbstractNLPModel{T, V};
+  η1::T = eps(T)^(1 / 4),
+  η2::T = T(FOMO_η2),
+  γ1::T = T(FOMO_γ1),
+  γ2::T = T(FOMO_γ2),
+  γ3::T = T(FOMO_γ3),
+  αmax::T = 1 / eps(T),
+  β::T = T(FOMO_β),
+  θ1::T = T(FOMO_θ1),
+  θ2::T = eps(T)^(1 / 3),
+  M::Int = FOMO_M,
+  step_backend = eval(FOMO_step_backend)(),
+  kwargs...,
+) where {T, V}
+  solver = FoSolver(
+    nlp;
+    η1 = η1,
+    η2 = η2,
+    γ1 = γ1,
+    γ2 = γ2,
+    γ3 = γ3,
+    αmax = αmax,
+    β = β,
+    θ1 = θ1,
+    θ2 = θ2,
+    M = M,
+    step_backend = step_backend,
+  )
   stats = GenericExecutionStats(nlp)
-  return solve!(solver, nlp, stats; step_backend = r2_step(), kwargs...)
+  return solve!(solver, nlp, stats; kwargs...)
 end
 
 @doc (@doc FoSolver) function R2(nlp::AbstractNLPModel{T, V}; kwargs...) where {T, V}
@@ -265,24 +429,28 @@ function SolverCore.solve!(
   x::V = nlp.meta.x0,
   atol::T = √eps(T),
   rtol::T = √eps(T),
-  η1::T = T(eps(T)^(1 / 4)),
-  η2::T = T(0.95),
-  γ1::T = T(1 / 2),
-  γ2::T = T(2),
-  γ3::T = T(1 / 2),
-  αmax::T = 1 / eps(T),
   max_time::Float64 = 30.0,
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
-  β::T = T(0.9),
-  θ1::T = T(0.1),
-  θ2::T = T(eps(T)^(1 / 3)),
   verbose::Int = 0,
-  step_backend = r2_step(),
 ) where {T, V}
+  unconstrained(nlp) || error("fomo should only be called on unconstrained problems.")
+
+  # parameters
+  η1 = value(solver.params.η1)
+  η2 = value(solver.params.η2)
+  γ1 = value(solver.params.γ1)
+  γ2 = value(solver.params.γ2)
+  γ3 = value(solver.params.γ3)
+  αmax = value(solver.params.αmax)
+  β = value(solver.params.β)
+  θ1 = value(solver.params.θ1)
+  θ2 = value(solver.params.θ2)
+  M = value(solver.params.M)
+  step_backend = value(solver.params.step_backend)
+
   use_momentum = typeof(solver) <: FomoSolver
   is_r2 = typeof(step_backend) <: r2_step
-  unconstrained(nlp) || error("fomo should only be called on unconstrained problems.")
 
   reset!(stats)
   start_time = time()

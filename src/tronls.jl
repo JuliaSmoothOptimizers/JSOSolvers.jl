@@ -4,6 +4,39 @@ const tronls_allowed_subsolvers = [CglsSolver, CrlsSolver, LsqrSolver, LsmrSolve
 
 tron(nls::AbstractNLSModel; variant = :GaussNewton, kwargs...) = tron(Val(variant), nls; kwargs...)
 
+const TRONLS_μ₀ = 1 // 100
+const TRONLS_μ₁ = 1
+const TRONLS_σ = 10
+
+"""
+    TRONLSParameterSet{T} <: AbstractParameterSet
+
+This structure designed for `tron` regroups the following parameters:
+  - `μ₀::T = T($(TRONLS_μ₀))`: algorithm parameter in (0, 0.5).
+  - `μ₁::T = T($(TRONLS_μ₁))`: algorithm parameter in (0, +∞).
+  - `σ::T = T($(TRONLS_σ))`: algorithm parameter in (1, +∞).
+
+  Default values are:
+  - `μ₀::T = T($(TRONLS_μ₀))`
+  - `μ₁::T = T($(TRONLS_μ₁))`
+  - `σ::T = T($(TRONLS_σ))`
+"""
+struct TRONLSParameterSet{T} <: AbstractParameterSet
+  μ₀::Parameter{T, RealInterval{T}}
+  μ₁::Parameter{T, RealInterval{T}}
+  σ::Parameter{T, RealInterval{T}}
+end
+
+# add a default constructor
+function TRONLSParameterSet{T}(; μ₀::T = T(TRONLS_μ₀), μ₁::T = one(T), σ::T = T(10)) where {T}
+  TRONLSParameterSet(
+    Parameter(μ₀, RealInterval(T(0), T(1 // 2), lower_open = true)),
+    Parameter(μ₁, RealInterval(T(0), T(Inf), lower_open = true)),
+    Parameter(σ, RealInterval(T(1), T(Inf), lower_open = true)),
+  )
+end
+TRONLSParameterSet(μ₀::T, μ₁::T, σ::T) where {T} = TRONLSParameterSet{T}(μ₀ = μ₀, μ₁ = μ₁, σ = σ)
+
 """
     tron(nls; kwargs...)
 
@@ -21,9 +54,9 @@ For advanced usage, first define a `TronSolverNLS` to preallocate the memory use
 The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
 - `subsolver_type::Symbol = LsmrSolver`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.tronls_allowed_subsolvers` for a list.
-- `μ₀::T = T(1e-2)`: algorithm parameter in (0, 0.5).
-- `μ₁::T = one(T)`: algorithm parameter in (0, +∞).
-- `σ::T = T(10)`: algorithm parameter in (1, +∞).
+- `μ₀::T = T($(TRONLS_μ₀))`: algorithm parameter, see [`TRONLSParameterSet`](@ref).
+- `μ₁::T = T($(TRONLS_μ₁))`: algorithm parameter, see [`TRONLSParameterSet`](@ref).
+- `σ::T = T($(TRONLS_σ))`: algorithm parameter, see [`TRONLSParameterSet`](@ref).
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
@@ -103,10 +136,14 @@ mutable struct TronSolverNLS{
 
   AZ::Aop
   ls_subsolver::Sub
+  params::TRONLSParameterSet{T}
 end
 
 function TronSolverNLS(
   nlp::AbstractNLSModel{T, V};
+  μ₀::T = T(TRONLS_μ₀),
+  μ₁::T = T(TRONLS_μ₁),
+  σ::T = T(TRONLS_σ),
   subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
   max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
   kwargs...,
@@ -114,6 +151,7 @@ function TronSolverNLS(
   subsolver_type in tronls_allowed_subsolvers ||
     error("subproblem solver must be one of $(tronls_allowed_subsolvers)")
 
+  params = TRONLSParameterSet{T}(; μ₀ = μ₀, μ₁ = μ₁, σ = σ)
   nvar = nlp.meta.nvar
   nequ = nlp.nls_meta.nequ
   x = V(undef, nvar)
@@ -164,6 +202,7 @@ function TronSolverNLS(
     ls_op,
     AZ,
     ls_subsolver,
+    params,
   )
 end
 
@@ -182,13 +221,23 @@ end
   ::Val{:GaussNewton},
   nlp::AbstractNLSModel{T, V};
   x::V = nlp.meta.x0,
+  μ₀::Real = T(TRONLS_μ₀),
+  μ₁::Real = T(TRONLS_μ₁),
+  σ::Real = T(TRONLS_σ),
   subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
   kwargs...,
 ) where {T, V}
   dict = Dict(kwargs)
   subsolver_keys = intersect(keys(dict), tron_keys)
   subsolver_kwargs = Dict(k => dict[k] for k in subsolver_keys)
-  solver = TronSolverNLS(nlp, subsolver_type = subsolver_type; subsolver_kwargs...)
+  solver = TronSolverNLS(
+    nlp,
+    μ₀ = μ₀,
+    μ₁ = μ₁,
+    σ = σ,
+    subsolver_type = subsolver_type;
+    subsolver_kwargs...,
+  )
   for k in subsolver_keys
     pop!(dict, k)
   end
@@ -201,9 +250,6 @@ function SolverCore.solve!(
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
   x::V = nlp.meta.x0,
-  μ₀::Real = T(1e-2),
-  μ₁::Real = one(T),
-  σ::Real = T(10),
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   max_time::Real = 30.0,
@@ -222,6 +268,11 @@ function SolverCore.solve!(
   if !(unconstrained(nlp) || bound_constrained(nlp))
     error("tron should only be called for unconstrained or bound-constrained problems")
   end
+
+  # parameters
+  μ₀ = value(solver.params.μ₀)
+  μ₁ = value(solver.params.μ₁)
+  σ = value(solver.params.σ)
 
   reset!(stats)
   ℓ = nlp.meta.lvar

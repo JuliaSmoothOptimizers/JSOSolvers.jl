@@ -5,6 +5,44 @@ const trunkls_allowed_subsolvers = [CglsSolver, CrlsSolver, LsqrSolver, LsmrSolv
 trunk(nlp::AbstractNLSModel; variant = :GaussNewton, kwargs...) =
   trunk(Val(variant), nlp; kwargs...)
 
+const TRUNKLS_bk_max = 10
+const TRUNKLS_monotone = true
+const TRUNKLS_nm_itmax = 25
+
+"""
+    TRUNKLSParameterSet{T} <: AbstractParameterSet
+
+This structure designed for `tron` regroups the following parameters:
+  - `bk_max::Int = $(TRUNKLS_bk_max)`: algorithm parameter.
+  - `monotone::Bool = $(TRUNKLS_monotone)`: algorithm parameter.
+  - `nm_itmax::Int = $(TRUNKLS_nm_itmax)`: algorithm parameter.
+
+  Default values are:
+  - `bk_max = $(TRUNKLS_bk_max)`
+  - `monotone = $(TRUNKLS_monotone)`
+  - `nm_itmax = $(TRUNKLS_nm_itmax)`
+"""
+struct TRUNKLSParameterSet{T} <: AbstractParameterSet
+  bk_max::Parameter{T, IntegerRange{T}}
+  monotone::Parameter{Bool, BinaryRange{Bool}}
+  nm_itmax::Parameter{T, IntegerRange{T}}
+end
+
+# add a default constructor
+function TRUNKLSParameterSet{T}(;
+  bk_max::Int = T(TRUNKLS_bk_max),
+  monotone::Bool = TRUNKLS_monotone,
+  nm_itmax::Int = T(TRUNKLS_nm_itmax),
+) where {T}
+  TRUNKLSParameterSet(
+    Parameter(bk_max, IntegerRange(T(1), typemax(T))),
+    Parameter(monotone, BinaryRange()),
+    Parameter(nm_itmax, IntegerRange(T(1), typemax(T))),
+  )
+end
+TRUNKLSParameterSet(bk_max::T, monotone::Bool, nm_itmax::T) where {T} =
+  TRUNKLSParameterSet{T}(bk_max = bk_max, monotone = monotone, nm_itmax = nm_itmax)
+
 """
     trunk(nls; kwargs...)
 
@@ -28,9 +66,9 @@ The keyword arguments may include
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
-- `bk_max::Int = 10`: algorithm parameter.
-- `monotone::Bool = true`: algorithm parameter.
-- `nm_itmax::Int = 25`: algorithm parameter.
+- `bk_max::Int = $(TRUNKLS_bk_max)`: algorithm parameter, see [`TRUNKLSParameterSet`](@ref).
+- `monotone::Bool = $(TRUNKLS_monotone)`: algorithm parameter, see [`TRUNKLSParameterSet`](@ref).
+- `nm_itmax::Int = $(TRUNKLS_nm_itmax)`: algorithm parameter, see [`TRUNKLSParameterSet`](@ref).
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver.
 
@@ -96,12 +134,17 @@ mutable struct TrunkSolverNLS{
   Atv::V
   A::Op
   subsolver::Sub
+  params::TRUNKLSParameterSet{Int}
 end
 
 function TrunkSolverNLS(
   nlp::AbstractNLPModel{T, V};
+  bk_max::Int = TRUNKLS_bk_max,
+  monotone::Bool = TRUNKLS_monotone,
+  nm_itmax::Int = TRUNKLS_nm_itmax,
   subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
 ) where {T, V <: AbstractVector{T}}
+  params = TRUNKLSParameterSet{Int}(; bk_max = bk_max, monotone = monotone, nm_itmax = nm_itmax)
   subsolver_type in trunkls_allowed_subsolvers ||
     error("subproblem solver must be one of $(trunkls_allowed_subsolvers)")
 
@@ -124,7 +167,21 @@ function TrunkSolverNLS(
   subsolver = subsolver_type(nequ, nvar, V)
   Sub = typeof(subsolver)
 
-  return TrunkSolverNLS{T, V, Sub, Op}(x, xt, temp, gx, gt, tr, rt, Fx, Av, Atv, A, subsolver)
+  return TrunkSolverNLS{T, V, Sub, Op}(
+    x,
+    xt,
+    temp,
+    gx,
+    gt,
+    tr,
+    rt,
+    Fx,
+    Av,
+    Atv,
+    A,
+    subsolver,
+    params,
+  )
 end
 
 function SolverCore.reset!(solver::TrunkSolverNLS)
@@ -163,9 +220,6 @@ function SolverCore.solve!(
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   max_time::Float64 = 30.0,
-  bk_max::Int = 10,
-  monotone::Bool = true,
-  nm_itmax::Int = 25,
   verbose::Int = 0,
   subsolver_verbose::Int = 0,
 ) where {T, V <: AbstractVector{T}}
@@ -175,6 +229,11 @@ function SolverCore.solve!(
   if !unconstrained(nlp)
     error("trunk should only be called for unconstrained problems. Try tron instead")
   end
+
+  # parameters
+  bk_max = value(solver.params.bk_max)
+  monotone = value(solver.params.monotone)
+  nm_itmax = value(solver.params.nm_itmax)
 
   reset!(stats)
   start_time = time()
