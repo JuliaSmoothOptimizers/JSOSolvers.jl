@@ -4,7 +4,8 @@ module JSOSolvers
 using LinearAlgebra, Logging, Printf
 
 # JSO packages
-using Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverParameters, SolverTools
+using Krylov,
+  LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverParameters, SolverTools
 
 import SolverCore.solve!
 export solve!

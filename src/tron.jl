@@ -5,6 +5,39 @@ export tron, TronSolver
 
 tron(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = tron(Val(variant), nlp; kwargs...)
 
+const TRON_μ₀ = 1 // 100
+const TRON_μ₁ = 1
+const TRON_σ = 10
+
+"""
+    TRONParameterSet{T} <: AbstractParameterSet
+
+This structure designed for `tron` regroups the following parameters:
+  - `μ₀::T = T($(TRON_μ₀))`: algorithm parameter in (0, 0.5).
+  - `μ₁::T = T($(TRON_μ₁))`: algorithm parameter in (0, +∞).
+  - `σ::T = T($(TRON_σ))`: algorithm parameter in (1, +∞).
+
+  Default values are:
+  - `μ₀::T = T($(TRON_μ₀))`
+  - `μ₁::T = T($(TRON_μ₁))`
+  - `σ::T = T($(TRON_σ))`
+"""
+struct TRONParameterSet{T} <: AbstractParameterSet
+  μ₀::Parameter{T, RealInterval{T}}
+  μ₁::Parameter{T, RealInterval{T}}
+  σ::Parameter{T, RealInterval{T}}
+end
+
+# add a default constructor
+function TRONParameterSet{T}(; μ₀::T = T(TRON_μ₀), μ₁::T = T(TRON_μ₁), σ::T = T(TRON_σ)) where {T}
+  TRONParameterSet(
+    Parameter(μ₀, RealInterval(T(0), T(1 // 2), lower_open = true)),
+    Parameter(μ₁, RealInterval(T(0), T(Inf), lower_open = true)),
+    Parameter(σ, RealInterval(T(1), T(Inf), lower_open = true)),
+  )
+end
+TRONParameterSet(μ₀::T, μ₁::T, σ::T) where {T} = TRONParameterSet{T}(μ₀ = μ₀, μ₁ = μ₁, σ = σ)
+
 """
     tron(nlp; kwargs...)
 
@@ -21,9 +54,9 @@ For advanced usage, first define a `TronSolver` to preallocate the memory used i
 - `nlp::AbstractNLPModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
-- `μ₀::T = T(1e-2)`: algorithm parameter in (0, 0.5).
-- `μ₁::T = one(T)`: algorithm parameter in (0, +∞).
-- `σ::T = T(10)`: algorithm parameter in (1, +∞).
+- `μ₀::T = T($(TRON_μ₀))`: algorithm parameter, see [`TRONParameterSet`](@ref).
+- `μ₁::T = T($(TRON_μ₁))`: algorithm parameter, see [`TRONParameterSet`](@ref).
+- `σ::T = T($(TRON_σ))`: algorithm parameter, see [`TRONParameterSet`](@ref).
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
@@ -98,13 +131,18 @@ mutable struct TronSolver{
   cg_op::LinearOperator{T}
 
   ZHZ::Aop
+  params::TRONParameterSet{T}
 end
 
 function TronSolver(
   nlp::AbstractNLPModel{T, V};
+  μ₀::T = T(TRON_μ₀),
+  μ₁::T = T(TRON_μ₁),
+  σ::T = T(TRON_σ),
   max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
   kwargs...,
 ) where {T, V <: AbstractVector{T}}
+  params = TRONParameterSet{T}(; μ₀ = μ₀, μ₁ = μ₁, σ = σ)
   nvar = nlp.meta.nvar
   x = V(undef, nvar)
   xc = V(undef, nvar)
@@ -145,6 +183,7 @@ function TronSolver(
     cg_op_diag,
     cg_op,
     ZHZ,
+    params,
   )
 end
 
@@ -165,12 +204,15 @@ end
   ::Val{:Newton},
   nlp::AbstractNLPModel{T, V};
   x::V = nlp.meta.x0,
+  μ₀::T = T(TRON_μ₀),
+  μ₁::T = T(TRON_μ₁),
+  σ::T = T(TRON_σ),
   kwargs...,
 ) where {T, V}
   dict = Dict(kwargs)
   subsolver_keys = intersect(keys(dict), tron_keys)
   subsolver_kwargs = Dict(k => dict[k] for k in subsolver_keys)
-  solver = TronSolver(nlp; subsolver_kwargs...)
+  solver = TronSolver(nlp; μ₀ = μ₀, μ₁ = μ₁, σ = σ, subsolver_kwargs...)
   for k in subsolver_keys
     pop!(dict, k)
   end
@@ -183,9 +225,6 @@ function SolverCore.solve!(
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
   x::V = nlp.meta.x0,
-  μ₀::T = T(1e-2),
-  μ₁::T = one(T),
-  σ::T = T(10),
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   max_time::Float64 = 30.0,
@@ -203,6 +242,11 @@ function SolverCore.solve!(
   if !(unconstrained(nlp) || bound_constrained(nlp))
     error("tron should only be called for unconstrained or bound-constrained problems")
   end
+
+  # parameters
+  μ₀ = value(solver.params.μ₀)
+  μ₁ = value(solver.params.μ₁)
+  σ = value(solver.params.σ)
 
   reset!(stats)
   ℓ = nlp.meta.lvar
@@ -408,7 +452,7 @@ function projected_line_search!(
   u::AbstractVector{T},
   Hs::AbstractVector{T},
   s::AbstractVector{T};
-  μ₀::Real = T(1e-2),
+  μ₀::Real = T(TRON_μ₀),
 ) where {T <: Real}
   α = one(T)
   _, brkmin, _ = breakpoints(x, d, ℓ, u)
@@ -460,9 +504,9 @@ function cauchy!(
   u::AbstractVector{T},
   s::AbstractVector{T},
   Hs::AbstractVector{T};
-  μ₀::Real = T(1e-2),
-  μ₁::Real = one(T),
-  σ::Real = T(10),
+  μ₀::Real = T(TRON_μ₀),
+  μ₁::Real = T(TRON_μ₁),
+  σ::Real = T(TRON_σ),
 ) where {T <: Real}
   # TODO: Use brkmin to care for g direction
   s .= .-g

@@ -2,6 +2,44 @@ export trunk, TrunkSolver
 
 trunk(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = trunk(Val(variant), nlp; kwargs...)
 
+const TRUNK_bk_max = 10
+const TRUNK_monotone = true
+const TRUNK_nm_itmax = 25
+
+"""
+    TRUNKParameterSet{T} <: AbstractParameterSet
+
+This structure designed for `tron` regroups the following parameters:
+  - `bk_max::Int = $(TRUNK_bk_max)`: algorithm parameter.
+  - `monotone::Bool = $(TRUNK_monotone)`: algorithm parameter.
+  - `nm_itmax::Int = $(TRUNK_nm_itmax)`: algorithm parameter.
+
+  Default values are:
+  - `bk_max = $(TRUNK_bk_max)`
+  - `monotone = $(TRUNK_monotone)`
+  - `nm_itmax = $(TRUNK_nm_itmax)`
+"""
+struct TRUNKParameterSet{T} <: AbstractParameterSet
+  bk_max::Parameter{T, IntegerRange{T}}
+  monotone::Parameter{Bool, BinaryRange{Bool}}
+  nm_itmax::Parameter{T, IntegerRange{T}}
+end
+
+# add a default constructor
+function TRUNKParameterSet{T}(;
+  bk_max::Int = T(TRUNK_bk_max),
+  monotone::Bool = TRUNK_monotone,
+  nm_itmax::Int = T(TRUNK_nm_itmax),
+) where {T}
+  TRUNKParameterSet(
+    Parameter(bk_max, IntegerRange(T(1), typemax(T))),
+    Parameter(monotone, BinaryRange()),
+    Parameter(nm_itmax, IntegerRange(T(1), typemax(T))),
+  )
+end
+TRUNKParameterSet(bk_max::T, monotone::Bool, nm_itmax::T) where {T} =
+  TRUNKParameterSet{T}(bk_max = bk_max, monotone = monotone, nm_itmax = nm_itmax)
+
 """
     trunk(nlp; kwargs...)
 
@@ -22,9 +60,9 @@ The keyword arguments may include
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
-- `bk_max::Int = 10`: algorithm parameter.
-- `monotone::Bool = true`: algorithm parameter.
-- `nm_itmax::Int = 25`: algorithm parameter.
+- `bk_max::Int = $(TRUNK_bk_max)`: algorithm parameter, see [`TRUNKParameterSet`](@ref).
+- `monotone::Bool = $(TRUNK_monotone)`: algorithm parameter, see [`TRUNKParameterSet`](@ref).
+- `nm_itmax::Int = $(TRUNK_nm_itmax)`: algorithm parameter, see [`TRUNKParameterSet`](@ref).
 - `verbose::Int = 0`: if > 0, display iteration information every `verbose` iteration.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver.
 
@@ -83,12 +121,17 @@ mutable struct TrunkSolver{
   subsolver::Sub
   H::Op
   tr::TrustRegion{T, V}
+  params::TRUNKParameterSet{Int}
 end
 
 function TrunkSolver(
   nlp::AbstractNLPModel{T, V};
+  bk_max::Int = TRUNK_bk_max,
+  monotone::Bool = TRUNK_monotone,
+  nm_itmax::Int = TRUNK_nm_itmax,
   subsolver_type::Type{<:KrylovSolver} = CgSolver,
 ) where {T, V <: AbstractVector{T}}
+  params = TRUNKParameterSet{Int}(; bk_max = bk_max, monotone = monotone, nm_itmax = nm_itmax)
   nvar = nlp.meta.nvar
   x = V(undef, nvar)
   xt = V(undef, nvar)
@@ -101,7 +144,7 @@ function TrunkSolver(
   H = hess_op!(nlp, x, Hs)
   Op = typeof(H)
   tr = TrustRegion(gt, one(T))
-  return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, gn, Hs, subsolver, H, tr)
+  return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, gn, Hs, subsolver, H, tr, params)
 end
 
 function SolverCore.reset!(solver::TrunkSolver)
@@ -125,7 +168,7 @@ end
   subsolver_type::Type{<:KrylovSolver} = CgSolver,
   kwargs...,
 ) where {V}
-  solver = TrunkSolver(nlp, subsolver_type = subsolver_type)
+  solver = TrunkSolver(nlp; subsolver_type = subsolver_type)
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
@@ -141,9 +184,6 @@ function SolverCore.solve!(
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   max_time::Float64 = 30.0,
-  bk_max::Int = 10,
-  monotone::Bool = true,
-  nm_itmax::Int = 25,
   verbose::Int = 0,
   subsolver_verbose::Int = 0,
 ) where {T, V <: AbstractVector{T}}
@@ -153,6 +193,11 @@ function SolverCore.solve!(
   if !unconstrained(nlp)
     error("trunk should only be called for unconstrained problems. Try tron instead")
   end
+
+  # parameters
+  bk_max = value(solver.params.bk_max)
+  monotone = value(solver.params.monotone)
+  nm_itmax = value(solver.params.nm_itmax)
 
   reset!(stats)
   start_time = time()
