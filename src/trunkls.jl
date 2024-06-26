@@ -1,10 +1,11 @@
-export TrunkSolverNLS
+export TrunkSolverNLS, TRUNKLS_bk_max
 
 const trunkls_allowed_subsolvers = [CglsSolver, CrlsSolver, LsqrSolver, LsmrSolver]
 
 trunk(nlp::AbstractNLSModel; variant = :GaussNewton, kwargs...) =
   trunk(Val(variant), nlp; kwargs...)
 
+# Default algorithm parameter values
 const TRUNKLS_bk_max = 10
 const TRUNKLS_monotone = true
 const TRUNKLS_nm_itmax = 25

@@ -1,5 +1,6 @@
-export lbfgs, LBFGSSolver
+export lbfgs, LBFGSSolver, LBFGSParameterSet
 
+# Default algorithm parameter values
 const LBFGS_mem = 5
 const LBFGS_τ₁ = 0.9999
 const LBFGS_bk_max = 25
