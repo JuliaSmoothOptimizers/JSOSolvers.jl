@@ -1,4 +1,4 @@
-export TrunkSolverNLS, TRUNKLS_bk_max
+export TrunkSolverNLS, TRUNKLSParameterSet
 
 const trunkls_allowed_subsolvers = [CglsSolver, CrlsSolver, LsqrSolver, LsmrSolver]
 

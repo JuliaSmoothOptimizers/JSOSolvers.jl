@@ -1,4 +1,5 @@
-export fomo, FomoSolver, FomoParameterSet, FoSolver, fo, R2, TR, tr_step, r2_step
+export fomo, FomoSolver, FOMOParameterSet, FoSolver, fo, R2, TR
+export tr_step, r2_step
 
 abstract type AbstractFirstOrderSolver <: AbstractOptimizationSolver end
 
@@ -20,7 +21,7 @@ const FOMO_M = 1
 const FOMO_step_backend = :r2_step
 
 """
-    FomoParameterSet{T} <: AbstractParameterSet
+    FOMOParameterSet{T} <: AbstractParameterSet
 
 This structure designed for `lbfgs` regroups the following parameters:
   - `η1 = $(FOMO_η1)`, `η2 = T($(FOMO_η2))`: step acceptance parameters.
@@ -46,7 +47,7 @@ This structure designed for `lbfgs` regroups the following parameters:
   - `M = $(FOMO_M)`
   - `step_backend = $FOMO_step_backend()
 """
-struct FomoParameterSet{T} <: AbstractParameterSet
+struct FOMOParameterSet{T} <: AbstractParameterSet
   η1::Parameter{T, RealInterval{T}}
   η2::Parameter{T, RealInterval{T}}
   γ1::Parameter{T, RealInterval{T}}
@@ -61,7 +62,7 @@ struct FomoParameterSet{T} <: AbstractParameterSet
 end
 
 # add a default constructor
-function FomoParameterSet{T}(;
+function FOMOParameterSet{T}(;
   η1::T = eps(T)^(1 // 4),
   η2::T = T(FOMO_η2),
   γ1::T = T(FOMO_γ1),
@@ -75,7 +76,7 @@ function FomoParameterSet{T}(;
   step_backend::AbstractFOMethod = eval(FOMO_step_backend)(),
 ) where {T}
   @assert η1 <= η2
-  FomoParameterSet(
+  FOMOParameterSet(
     Parameter(η1, RealInterval(T(0), T(1), lower_open = true, upper_open = true)),
     Parameter(η2, RealInterval(T(0), T(1), lower_open = true, upper_open = true)),
     Parameter(γ1, RealInterval(T(0), T(1), lower_open = true, upper_open = true)),
@@ -89,7 +90,7 @@ function FomoParameterSet{T}(;
     Parameter(step_backend, CategoricalSet{Union{tr_step, r2_step}}([r2_step(); tr_step()])),
   )
 end
-FomoParameterSet(
+FOMOParameterSet(
   η1::T,
   η2::T,
   γ1::T,
@@ -101,7 +102,7 @@ FomoParameterSet(
   θ2::T,
   M::Int,
   step_backend::AbstractFOMethod,
-) where {T} = FomoParameterSet{T}(;
+) where {T} = FOMOParameterSet{T}(;
   η1 = η1,
   η2 = η2,
   γ1 = γ1,
@@ -222,11 +223,11 @@ mutable struct FomoSolver{T, V} <: AbstractFirstOrderSolver
   p::V
   o::V
   α::T
-  params::FomoParameterSet{T}
+  params::FOMOParameterSet{T}
 end
 
 function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int = FOMO_M, kwargs...) where {T, V}
-  params = FomoParameterSet{T}(; M = M, kwargs...)
+  params = FOMOParameterSet{T}(; M = M, kwargs...)
   x = similar(nlp.meta.x0)
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
@@ -351,11 +352,11 @@ mutable struct FoSolver{T, V} <: AbstractFirstOrderSolver
   c::V
   o::V
   α::T
-  params::FomoParameterSet{T}
+  params::FOMOParameterSet{T}
 end
 
 function FoSolver(nlp::AbstractNLPModel{T, V}; M::Int = FOMO_M, kwargs...) where {T, V}
-  params = FomoParameterSet{T}(; M = M, kwargs...)
+  params = FOMOParameterSet{T}(; M = M, kwargs...)
   x = similar(nlp.meta.x0)
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
