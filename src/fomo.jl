@@ -1,4 +1,4 @@
-export fomo, FomoSolver, FoSolver, fo, R2, TR, tr_step, r2_step
+export fomo, FomoSolver, FomoParameterSet, FoSolver, fo, R2, TR, tr_step, r2_step
 
 abstract type AbstractFirstOrderSolver <: AbstractOptimizationSolver end
 
@@ -6,7 +6,8 @@ abstract type AbstractFOMethod end
 struct tr_step <: AbstractFOMethod end
 struct r2_step <: AbstractFOMethod end
 
-const FOMO_η1 = "eps(T)^(1 / 4)" # TODO
+# Default algorithm parameter values
+const FOMO_η1 = "eps(T)^(1 // 4)" # TODO: handle values that depend on T
 const FOMO_η2 = 95 // 100
 const FOMO_γ1 = 1 // 2
 const FOMO_γ2 = 2
@@ -14,7 +15,7 @@ const FOMO_γ3 = 1 // 2
 const FOMO_αmax = "1 / eps(T)" # TODO
 const FOMO_β = 9 // 10
 const FOMO_θ1 = 1 // 10
-const FOMO_θ2 = "eps(T)^(1 / 3)" # TODO
+const FOMO_θ2 = "eps(T)^(1 // 3)" # TODO
 const FOMO_M = 1
 const FOMO_step_backend = :r2_step
 
@@ -22,13 +23,13 @@ const FOMO_step_backend = :r2_step
     FomoParameterSet{T} <: AbstractParameterSet
 
 This structure designed for `lbfgs` regroups the following parameters:
-  - `η1 = eps(T)^(1 / 4)`, `η2 = T($(FOMO_η2))`: step acceptance parameters.
+  - `η1 = $(FOMO_η1)`, `η2 = T($(FOMO_η2))`: step acceptance parameters.
   - `γ1 = T($(FOMO_γ1))`, `γ2 = T($(FOMO_γ2))`: regularization update parameters.
   - `γ3 = T($(FOMO_γ3))` : momentum factor βmax update parameter in case of unsuccessful iteration.
-  - `αmax = 1 / eps(T)`: maximum step parameter for fomo algorithm.
+  - `αmax = $(FOMO_αmax)`: maximum step parameter for fomo algorithm.
   - `β = T($(FOMO_β)) ∈ [0,1)`: target decay rate for the momentum.
   - `θ1 = T($(FOMO_θ1))`: momentum contribution parameter for convergence condition (1).
-  - `θ2 = eps(T)^(1 / 3)`: momentum contribution parameter for convergence condition (2). 
+  - `θ2 = $(FOMO_θ2)`: momentum contribution parameter for convergence condition (2). 
   - `M = $(FOMO_M)` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
   - `step_backend = $(FOMO_step_backend)()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 
@@ -61,7 +62,7 @@ end
 
 # add a default constructor
 function FomoParameterSet{T}(;
-  η1::T = eps(T)^(1 / 4),
+  η1::T = eps(T)^(1 // 4),
   η2::T = T(FOMO_η2),
   γ1::T = T(FOMO_γ1),
   γ2::T = T(FOMO_γ2),
@@ -69,7 +70,7 @@ function FomoParameterSet{T}(;
   αmax::T = 1 / eps(T),
   β::T = T(FOMO_β),
   θ1::T = T(FOMO_θ1),
-  θ2::T = eps(T)^(1 / 3),
+  θ2::T = eps(T)^(1 // 3),
   M::Int = FOMO_M,
   step_backend::AbstractFOMethod = eval(FOMO_step_backend)(),
 ) where {T}
@@ -238,7 +239,7 @@ end
 
 @doc (@doc FomoSolver) function fomo(
   nlp::AbstractNLPModel{T, V};
-  η1::T = eps(T)^(1 / 4),
+  η1::T = eps(T)^(1 // 4),
   η2::T = T(FOMO_η2),
   γ1::T = T(FOMO_γ1),
   γ2::T = T(FOMO_γ2),
@@ -246,7 +247,7 @@ end
   αmax::T = 1 / eps(T),
   β::T = T(FOMO_β),
   θ1::T = T(FOMO_θ1),
-  θ2::T = eps(T)^(1 / 3),
+  θ2::T = eps(T)^(1 // 3),
   M::Int = FOMO_M,
   step_backend::AbstractFOMethod = eval(FOMO_step_backend)(),
   kwargs...,
@@ -375,7 +376,7 @@ Base.@deprecate R2Solver(nlp::AbstractNLPModel; kwargs...) FoSolver(
 
 @doc (@doc FoSolver) function fo(
   nlp::AbstractNLPModel{T, V};
-  η1::T = eps(T)^(1 / 4),
+  η1::T = eps(T)^(1 // 4),
   η2::T = T(FOMO_η2),
   γ1::T = T(FOMO_γ1),
   γ2::T = T(FOMO_γ2),
@@ -383,7 +384,7 @@ Base.@deprecate R2Solver(nlp::AbstractNLPModel; kwargs...) FoSolver(
   αmax::T = 1 / eps(T),
   β::T = T(FOMO_β),
   θ1::T = T(FOMO_θ1),
-  θ2::T = eps(T)^(1 / 3),
+  θ2::T = eps(T)^(1 // 3),
   M::Int = FOMO_M,
   step_backend = eval(FOMO_step_backend)(),
   kwargs...,

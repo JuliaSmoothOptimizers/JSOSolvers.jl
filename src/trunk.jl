@@ -1,7 +1,8 @@
-export trunk, TrunkSolver
+export trunk, TrunkSolver, TRUNKParameterSet
 
 trunk(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = trunk(Val(variant), nlp; kwargs...)
 
+# Default algorithm parameter values
 const TRUNK_bk_max = 10
 const TRUNK_monotone = true
 const TRUNK_nm_itmax = 25

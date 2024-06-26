@@ -1,9 +1,10 @@
-export TronSolverNLS
+export TronSolverNLS, TRONLSParameterSet
 
 const tronls_allowed_subsolvers = [CglsSolver, CrlsSolver, LsqrSolver, LsmrSolver]
 
 tron(nls::AbstractNLSModel; variant = :GaussNewton, kwargs...) = tron(Val(variant), nls; kwargs...)
 
+# Default algorithm parameter values
 const TRONLS_μ₀ = 1 // 100
 const TRONLS_μ₁ = 1
 const TRONLS_σ = 10

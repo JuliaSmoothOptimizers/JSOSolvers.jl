@@ -1,10 +1,11 @@
 #  Some parts of this code were adapted from
 # https://github.com/PythonOptimizers/NLP.py/blob/develop/nlp/optimize/tron.py
 
-export tron, TronSolver
+export tron, TronSolver, TRONParameterSet
 
 tron(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = tron(Val(variant), nlp; kwargs...)
 
+# Default algorithm parameter values
 const TRON_μ₀ = 1 // 100
 const TRON_μ₁ = 1
 const TRON_σ = 10
