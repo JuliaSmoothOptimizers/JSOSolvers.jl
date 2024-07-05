@@ -23,7 +23,7 @@ const FOMO_step_backend = :r2_step
 """
     FOMOParameterSet{T} <: AbstractParameterSet
 
-This structure designed for `lbfgs` regroups the following parameters:
+This structure designed for `fomo` regroups the following parameters:
   - `η1 = $(FOMO_η1)`, `η2 = T($(FOMO_η2))`: step acceptance parameters.
   - `γ1 = T($(FOMO_γ1))`, `γ2 = T($(FOMO_γ2))`: regularization update parameters.
   - `γ3 = T($(FOMO_γ3))` : momentum factor βmax update parameter in case of unsuccessful iteration.
@@ -81,10 +81,10 @@ function FOMOParameterSet{T}(;
     Parameter(η2, RealInterval(T(0), T(1), lower_open = true, upper_open = true)),
     Parameter(γ1, RealInterval(T(0), T(1), lower_open = true, upper_open = true)),
     Parameter(γ2, RealInterval(T(1), T(Inf), lower_open = true, upper_open = true)),
-    Parameter(γ3, RealInterval(T(0), T(1), lower_open = true, upper_open = true)),
+    Parameter(γ3, RealInterval(T(0), T(1))),
     Parameter(αmax, RealInterval(T(1), T(Inf), upper_open = true)),
     Parameter(β, RealInterval(T(0), T(1), upper_open = true)),
-    Parameter(θ1, RealInterval(T(0), T(1), upper_open = true)),
+    Parameter(θ1, RealInterval(T(0), T(1))),
     Parameter(θ2, RealInterval(T(0), T(1), upper_open = true)),
     Parameter(M, IntegerRange(Int(1), typemax(Int))),
     Parameter(step_backend, CategoricalSet{Union{tr_step, r2_step}}([r2_step(); tr_step()])),
