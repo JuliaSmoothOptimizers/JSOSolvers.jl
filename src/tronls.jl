@@ -5,22 +5,28 @@ const tronls_allowed_subsolvers = [CglsSolver, CrlsSolver, LsqrSolver, LsmrSolve
 tron(nls::AbstractNLSModel; variant = :GaussNewton, kwargs...) = tron(Val(variant), nls; kwargs...)
 
 # Default algorithm parameter values
-const TRONLS_μ₀ = 1 // 100
-const TRONLS_μ₁ = 1
-const TRONLS_σ = 10
+const TRONLS_μ₀ = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1 // 100), "T(1 / 100)")
+const TRONLS_μ₁ = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1), "T(1)")
+const TRONLS_σ = DefaultParameter(nlp -> eltype(nlp.meta.x0)(10), "T(10)")
 
 """
     TRONLSParameterSet{T} <: AbstractParameterSet
 
 This structure designed for `tron` regroups the following parameters:
-  - `μ₀::T = T($(TRONLS_μ₀))`: algorithm parameter in (0, 0.5).
-  - `μ₁::T = T($(TRONLS_μ₁))`: algorithm parameter in (0, +∞).
-  - `σ::T = T($(TRONLS_σ))`: algorithm parameter in (1, +∞).
+  - `μ₀`: algorithm parameter in (0, 0.5).
+  - `μ₁`: algorithm parameter in (0, +∞).
+  - `σ`: algorithm parameter in (1, +∞).
 
-  Default values are:
-  - `μ₀::T = T($(TRONLS_μ₀))`
-  - `μ₁::T = T($(TRONLS_μ₁))`
-  - `σ::T = T($(TRONLS_σ))`
+An additional constructor is
+
+    TRONLSParameterSet(nlp: kwargs...)
+
+where the kwargs are the parameters above.
+
+Default values are:
+  - `μ₀::T = $(TRONLS_μ₀)`
+  - `μ₁::T = $(TRONLS_μ₁)`
+  - `σ::T = $(TRONLS_σ)`
 """
 struct TRONLSParameterSet{T} <: AbstractParameterSet
   μ₀::Parameter{T, RealInterval{T}}
@@ -29,14 +35,18 @@ struct TRONLSParameterSet{T} <: AbstractParameterSet
 end
 
 # add a default constructor
-function TRONLSParameterSet{T}(; μ₀::T = T(TRONLS_μ₀), μ₁::T = one(T), σ::T = T(10)) where {T}
+function TRONLSParameterSet(
+  nlp::AbstractNLPModel{T};
+  μ₀::T = get(TRONLS_μ₀, nlp),
+  μ₁::T = get(TRONLS_μ₁, nlp),
+  σ::T = get(TRONLS_σ, nlp),
+) where {T}
   TRONLSParameterSet(
     Parameter(μ₀, RealInterval(T(0), T(1 // 2), lower_open = true)),
     Parameter(μ₁, RealInterval(T(0), T(Inf), lower_open = true)),
     Parameter(σ, RealInterval(T(1), T(Inf), lower_open = true)),
   )
 end
-TRONLSParameterSet(μ₀::T, μ₁::T, σ::T) where {T} = TRONLSParameterSet{T}(μ₀ = μ₀, μ₁ = μ₁, σ = σ)
 
 """
     tron(nls; kwargs...)
@@ -55,9 +65,9 @@ For advanced usage, first define a `TronSolverNLS` to preallocate the memory use
 The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
 - `subsolver_type::Symbol = LsmrSolver`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.tronls_allowed_subsolvers` for a list.
-- `μ₀::T = T($(TRONLS_μ₀))`: algorithm parameter, see [`TRONLSParameterSet`](@ref).
-- `μ₁::T = T($(TRONLS_μ₁))`: algorithm parameter, see [`TRONLSParameterSet`](@ref).
-- `σ::T = T($(TRONLS_σ))`: algorithm parameter, see [`TRONLSParameterSet`](@ref).
+- `μ₀::T = $(TRONLS_μ₀)`: algorithm parameter, see [`TRONLSParameterSet`](@ref).
+- `μ₁::T = $(TRONLS_μ₁)`: algorithm parameter, see [`TRONLSParameterSet`](@ref).
+- `σ::T = $(TRONLS_σ)`: algorithm parameter, see [`TRONLSParameterSet`](@ref).
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
@@ -142,9 +152,9 @@ end
 
 function TronSolverNLS(
   nlp::AbstractNLSModel{T, V};
-  μ₀::T = T(TRONLS_μ₀),
-  μ₁::T = T(TRONLS_μ₁),
-  σ::T = T(TRONLS_σ),
+  μ₀::T = get(TRONLS_μ₀, nlp),
+  μ₁::T = get(TRONLS_μ₁, nlp),
+  σ::T = get(TRONLS_σ, nlp),
   subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
   max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
   kwargs...,
@@ -152,7 +162,7 @@ function TronSolverNLS(
   subsolver_type in tronls_allowed_subsolvers ||
     error("subproblem solver must be one of $(tronls_allowed_subsolvers)")
 
-  params = TRONLSParameterSet{T}(; μ₀ = μ₀, μ₁ = μ₁, σ = σ)
+  params = TRONLSParameterSet(nlp; μ₀ = μ₀, μ₁ = μ₁, σ = σ)
   nvar = nlp.meta.nvar
   nequ = nlp.nls_meta.nequ
   x = V(undef, nvar)
@@ -222,9 +232,9 @@ end
   ::Val{:GaussNewton},
   nlp::AbstractNLSModel{T, V};
   x::V = nlp.meta.x0,
-  μ₀::Real = T(TRONLS_μ₀),
-  μ₁::Real = T(TRONLS_μ₁),
-  σ::Real = T(TRONLS_σ),
+  μ₀::Real = get(TRONLS_μ₀, nlp),
+  μ₁::Real = get(TRONLS_μ₁, nlp),
+  σ::Real = get(TRONLS_σ, nlp),
   subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
   kwargs...,
 ) where {T, V}

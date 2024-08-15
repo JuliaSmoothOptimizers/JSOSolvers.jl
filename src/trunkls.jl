@@ -6,43 +6,48 @@ trunk(nlp::AbstractNLSModel; variant = :GaussNewton, kwargs...) =
   trunk(Val(variant), nlp; kwargs...)
 
 # Default algorithm parameter values
-const TRUNKLS_bk_max = 10
-const TRUNKLS_monotone = true
-const TRUNKLS_nm_itmax = 25
+const TRUNKLS_bk_max = DefaultParameter(10)
+const TRUNKLS_monotone = DefaultParameter(true)
+const TRUNKLS_nm_itmax = DefaultParameter(25)
 
 """
-    TRUNKLSParameterSet{T} <: AbstractParameterSet
+    TRUNKLSParameterSet <: AbstractParameterSet
 
 This structure designed for `tron` regroups the following parameters:
-  - `bk_max::Int = $(TRUNKLS_bk_max)`: algorithm parameter.
-  - `monotone::Bool = $(TRUNKLS_monotone)`: algorithm parameter.
-  - `nm_itmax::Int = $(TRUNKLS_nm_itmax)`: algorithm parameter.
+  - `bk_max`: algorithm parameter.
+  - `monotone`: algorithm parameter.
+  - `nm_itmax`: algorithm parameter.
 
-  Default values are:
-  - `bk_max = $(TRUNKLS_bk_max)`
-  - `monotone = $(TRUNKLS_monotone)`
-  - `nm_itmax = $(TRUNKLS_nm_itmax)`
+An additional constructor is
+
+    TRUNKLSParameterSet(nlp: kwargs...)
+
+where the kwargs are the parameters above.
+
+Default values are:
+  - `bk_max::Int = $(TRUNKLS_bk_max)`
+  - `monotone::Bool = $(TRUNKLS_monotone)`
+  - `nm_itmax::Int = $(TRUNKLS_nm_itmax)`
 """
-struct TRUNKLSParameterSet{T} <: AbstractParameterSet
-  bk_max::Parameter{T, IntegerRange{T}}
+struct TRUNKLSParameterSet <: AbstractParameterSet
+  bk_max::Parameter{Int, IntegerRange{Int}}
   monotone::Parameter{Bool, BinaryRange{Bool}}
-  nm_itmax::Parameter{T, IntegerRange{T}}
+  nm_itmax::Parameter{Int, IntegerRange{Int}}
 end
 
 # add a default constructor
-function TRUNKLSParameterSet{T}(;
-  bk_max::Int = T(TRUNKLS_bk_max),
-  monotone::Bool = TRUNKLS_monotone,
-  nm_itmax::Int = T(TRUNKLS_nm_itmax),
-) where {T}
+function TRUNKLSParameterSet(
+  nlp::AbstractNLPModel;
+  bk_max::Int = get(TRUNKLS_bk_max, nlp),
+  monotone::Bool = get(TRUNKLS_monotone, nlp),
+  nm_itmax::Int = get(TRUNKLS_nm_itmax, nlp),
+)
   TRUNKLSParameterSet(
-    Parameter(bk_max, IntegerRange(T(1), typemax(T))),
+    Parameter(bk_max, IntegerRange(1, typemax(Int))),
     Parameter(monotone, BinaryRange()),
-    Parameter(nm_itmax, IntegerRange(T(1), typemax(T))),
+    Parameter(nm_itmax, IntegerRange(1, typemax(Int))),
   )
 end
-TRUNKLSParameterSet(bk_max::T, monotone::Bool, nm_itmax::T) where {T} =
-  TRUNKLSParameterSet{T}(bk_max = bk_max, monotone = monotone, nm_itmax = nm_itmax)
 
 """
     trunk(nls; kwargs...)
@@ -135,17 +140,17 @@ mutable struct TrunkSolverNLS{
   Atv::V
   A::Op
   subsolver::Sub
-  params::TRUNKLSParameterSet{Int}
+  params::TRUNKLSParameterSet
 end
 
 function TrunkSolverNLS(
   nlp::AbstractNLPModel{T, V};
-  bk_max::Int = TRUNKLS_bk_max,
-  monotone::Bool = TRUNKLS_monotone,
-  nm_itmax::Int = TRUNKLS_nm_itmax,
+  bk_max::Int = get(TRUNKLS_bk_max, nlp),
+  monotone::Bool = get(TRUNKLS_monotone, nlp),
+  nm_itmax::Int = get(TRUNKLS_nm_itmax, nlp),
   subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
 ) where {T, V <: AbstractVector{T}}
-  params = TRUNKLSParameterSet{Int}(; bk_max = bk_max, monotone = monotone, nm_itmax = nm_itmax)
+  params = TRUNKLSParameterSet(nlp; bk_max = bk_max, monotone = monotone, nm_itmax = nm_itmax)
   subsolver_type in trunkls_allowed_subsolvers ||
     error("subproblem solver must be one of $(trunkls_allowed_subsolvers)")
 
