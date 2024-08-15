@@ -8,44 +8,54 @@ struct tr_step <: AbstractFOMethod end
 struct r2_step <: AbstractFOMethod end
 
 # Default algorithm parameter values
-const FOMO_η1 = "eps(T)^(1 // 4)" # TODO: handle values that depend on T
-const FOMO_η2 = 95 // 100
-const FOMO_γ1 = 1 // 2
-const FOMO_γ2 = 2
-const FOMO_γ3 = 1 // 2
-const FOMO_αmax = "1 / eps(T)" # TODO
-const FOMO_β = 9 // 10
-const FOMO_θ1 = 1 // 10
-const FOMO_θ2 = "eps(T)^(1 // 3)" # TODO
-const FOMO_M = 1
-const FOMO_step_backend = :r2_step
+const FOMO_η1 =
+  DefaultParameter((nlp::AbstractNLPModel) -> eps(eltype(nlp.meta.x0))^(1 // 4), "eps(T)^(1 // 4)")
+const FOMO_η2 =
+  DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(95 // 100), "T(95/100)")
+const FOMO_γ1 = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1 // 2), "T(1/2)")
+const FOMO_γ2 = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(2), "T(2)")
+const FOMO_γ3 = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1 // 2), "T(1/2)")
+const FOMO_αmax =
+  DefaultParameter((nlp::AbstractNLPModel) -> 1 / eps(eltype(nlp.meta.x0)), "1/eps(T)")
+const FOMO_β = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(9 // 10), "T(9/10)")
+const FOMO_θ1 = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1 // 10), "T(1/10)")
+const FOMO_θ2 =
+  DefaultParameter((nlp::AbstractNLPModel) -> eps(eltype(nlp.meta.x0))^(1 // 3), "eps(T)^(1/3)")
+const FOMO_M = DefaultParameter(1)
+const FOMO_step_backend = DefaultParameter(nlp -> r2_step(), "r2_step()")
 
 """
     FOMOParameterSet{T} <: AbstractParameterSet
 
 This structure designed for `fomo` regroups the following parameters:
-  - `η1 = $(FOMO_η1)`, `η2 = T($(FOMO_η2))`: step acceptance parameters.
-  - `γ1 = T($(FOMO_γ1))`, `γ2 = T($(FOMO_γ2))`: regularization update parameters.
-  - `γ3 = T($(FOMO_γ3))` : momentum factor βmax update parameter in case of unsuccessful iteration.
-  - `αmax = $(FOMO_αmax)`: maximum step parameter for fomo algorithm.
-  - `β = T($(FOMO_β)) ∈ [0,1)`: target decay rate for the momentum.
-  - `θ1 = T($(FOMO_θ1))`: momentum contribution parameter for convergence condition (1).
-  - `θ2 = $(FOMO_θ2)`: momentum contribution parameter for convergence condition (2). 
-  - `M = $(FOMO_M)` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
-  - `step_backend = $(FOMO_step_backend)()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
+  - `η1`, `η2`: step acceptance parameters.
+  - `γ1`, `γ2`: regularization update parameters.
+  - `γ3` : momentum factor βmax update parameter in case of unsuccessful iteration.
+  - `αmax`: maximum step parameter for fomo algorithm.
+  - `β ∈ [0,1)`: target decay rate for the momentum.
+  - `θ1`: momentum contribution parameter for convergence condition (1).
+  - `θ2`: momentum contribution parameter for convergence condition (2). 
+  - `M` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
+  - `step_backend`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 
-  Default values are:
+An additional constructor is
+
+    FOMOParameterSet(nlp: kwargs...)
+
+where the kwargs are the parameters above.
+
+Default values are:
   - `η1::T = $(FOMO_η1)`
-  - `η2::T = T($(FOMO_η2))`
-  - `γ1::T = T($(FOMO_γ1))`
-  - `γ2::T = T($(FOMO_γ2))`
-  - `γ3::T = T($(FOMO_γ3))`
+  - `η2::T = $(FOMO_η2)`
+  - `γ1::T = $(FOMO_γ1)`
+  - `γ2::T = $(FOMO_γ2)`
+  - `γ3::T = $(FOMO_γ3)`
   - `αmax::T = $(FOMO_αmax)`
-  - `β = T($(FOMO_β)) ∈ [0,1)`
-  - `θ1 = T($(FOMO_θ1))`
-  - `θ2 = e$(FOMO_θ2)`
+  - `β = $(FOMO_β) ∈ [0,1)`
+  - `θ1 = $(FOMO_θ1)`
+  - `θ2 = $(FOMO_θ2)`
   - `M = $(FOMO_M)`
-  - `step_backend = $FOMO_step_backend()
+  - `step_backend = $(FOMO_step_backend)
 """
 struct FOMOParameterSet{T} <: AbstractParameterSet
   η1::Parameter{T, RealInterval{T}}
@@ -62,18 +72,19 @@ struct FOMOParameterSet{T} <: AbstractParameterSet
 end
 
 # add a default constructor
-function FOMOParameterSet{T}(;
-  η1::T = eps(T)^(1 // 4),
-  η2::T = T(FOMO_η2),
-  γ1::T = T(FOMO_γ1),
-  γ2::T = T(FOMO_γ2),
-  γ3::T = T(FOMO_γ3),
-  αmax::T = 1 / eps(T),
-  β::T = T(FOMO_β),
-  θ1::T = T(FOMO_θ1),
-  θ2::T = eps(T)^(1 // 3),
-  M::Int = FOMO_M,
-  step_backend::AbstractFOMethod = eval(FOMO_step_backend)(),
+function FOMOParameterSet(
+  nlp::AbstractNLPModel{T};
+  η1::T = get(FOMO_η1, nlp),
+  η2::T = get(FOMO_η2, nlp),
+  γ1::T = get(FOMO_γ1, nlp),
+  γ2::T = get(FOMO_γ2, nlp),
+  γ3::T = get(FOMO_γ3, nlp),
+  αmax::T = get(FOMO_αmax, nlp),
+  β::T = get(FOMO_β, nlp),
+  θ1::T = get(FOMO_θ1, nlp),
+  θ2::T = get(FOMO_θ2, nlp),
+  M::Int = get(FOMO_M, nlp),
+  step_backend::AbstractFOMethod = get(FOMO_step_backend, nlp),
 ) where {T}
   @assert η1 <= η2
   FOMOParameterSet(
@@ -90,31 +101,6 @@ function FOMOParameterSet{T}(;
     Parameter(step_backend, CategoricalSet{Union{tr_step, r2_step}}([r2_step(); tr_step()])),
   )
 end
-FOMOParameterSet(
-  η1::T,
-  η2::T,
-  γ1::T,
-  γ2::T,
-  γ3::T,
-  αmax::T,
-  β::T,
-  θ1::T,
-  θ2::T,
-  M::Int,
-  step_backend::AbstractFOMethod,
-) where {T} = FOMOParameterSet{T}(;
-  η1 = η1,
-  η2 = η2,
-  γ1 = γ1,
-  γ2 = γ2,
-  γ3 = γ3,
-  αmax = αmax,
-  β = β,
-  θ1 = θ1,
-  θ2 = θ2,
-  M = M,
-  step_backend = step_backend,
-)
 
 """
     fomo(nlp; kwargs...)
@@ -152,19 +138,19 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
-- `η1 = $(FOMO_η1)`, `η2 = T($(FOMO_η2))`: step acceptance parameters.
-- `γ1 = T($(FOMO_γ1)))`, `γ2 = T($(FOMO_γ2))`: regularization update parameters.
-- `γ3 = T($(FOMO_γ3))` : momentum factor βmax update parameter in case of unsuccessful iteration.
+- `η1 = $(FOMO_η1)`, `η2 = $(FOMO_η2)`: step acceptance parameters.
+- `γ1 = $(FOMO_γ1)`, `γ2 = $(FOMO_γ2)`: regularization update parameters.
+- `γ3 = $(FOMO_γ3)` : momentum factor βmax update parameter in case of unsuccessful iteration.
 - `αmax = $(FOMO_αmax)`: maximum step parameter for fomo algorithm.
 - `max_eval::Int = -1`: maximum number of objective evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
-- `β = T($(FOMO_β)) ∈ [0,1)`: target decay rate for the momentum.
-- `θ1 = T($(FOMO_θ1))`: momentum contribution parameter for convergence condition (1).
+- `β = $(FOMO_β) ∈ [0,1)`: target decay rate for the momentum.
+- `θ1 = $(FOMO_θ1)`: momentum contribution parameter for convergence condition (1).
 - `θ2 = $(FOMO_θ2)`: momentum contribution parameter for convergence condition (2). 
 - `M = $(FOMO_M)` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `step_backend = $(FOMO_step_backend)()`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
+- `step_backend = $(FOMO_step_backend)`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 
 # Output
 
@@ -226,8 +212,8 @@ mutable struct FomoSolver{T, V} <: AbstractFirstOrderSolver
   params::FOMOParameterSet{T}
 end
 
-function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int = FOMO_M, kwargs...) where {T, V}
-  params = FOMOParameterSet{T}(; M = M, kwargs...)
+function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int = get(FOMO_M, nlp), kwargs...) where {T, V}
+  params = FOMOParameterSet(nlp; M = M, kwargs...)
   x = similar(nlp.meta.x0)
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
@@ -240,17 +226,17 @@ end
 
 @doc (@doc FomoSolver) function fomo(
   nlp::AbstractNLPModel{T, V};
-  η1::T = eps(T)^(1 // 4),
-  η2::T = T(FOMO_η2),
-  γ1::T = T(FOMO_γ1),
-  γ2::T = T(FOMO_γ2),
-  γ3::T = T(FOMO_γ3),
-  αmax::T = 1 / eps(T),
-  β::T = T(FOMO_β),
-  θ1::T = T(FOMO_θ1),
-  θ2::T = eps(T)^(1 // 3),
-  M::Int = FOMO_M,
-  step_backend::AbstractFOMethod = eval(FOMO_step_backend)(),
+  η1::T = get(FOMO_η1, nlp),
+  η2::T = get(FOMO_η2, nlp),
+  γ1::T = get(FOMO_γ1, nlp),
+  γ2::T = get(FOMO_γ2, nlp),
+  γ3::T = get(FOMO_γ3, nlp),
+  αmax::T = get(FOMO_αmax, nlp),
+  β::T = get(FOMO_β, nlp),
+  θ1::T = get(FOMO_θ1, nlp),
+  θ2::T = get(FOMO_θ2, nlp),
+  M::Int = get(FOMO_M, nlp),
+  step_backend::AbstractFOMethod = get(FOMO_step_backend, nlp),
   kwargs...,
 ) where {T, V}
   solver = FomoSolver(
@@ -304,16 +290,16 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `η1 = $(FOMO_η1)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
-- `η2 = T($(FOMO_η2))`: algorithm parameter, see [`FOMOParameterSet`](@ref).
-- `γ1 = T($(FOMO_γ1))`: algorithm parameter, see [`FOMOParameterSet`](@ref).
-- `γ2 = T($(FOMO_γ2))`: algorithm parameter, see [`FOMOParameterSet`](@ref).
+- `η2 = $(FOMO_η2)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
+- `γ1 = $(FOMO_γ1)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
+- `γ2 = $(FOMO_γ2)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
 - `αmax = $(FOMO_αmax)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
 - `max_eval::Int = -1`: maximum number of evaluation of the objective function.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
-- `M = $FOMO_M` : algorithm parameter, see [`FOMOParameterSet`](@ref).
+- `M = $(FOMO_M)` : algorithm parameter, see [`FOMOParameterSet`](@ref).
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `step_backend = $(FOMO_step_backend)()`: algorithm parameter, see [`FOMOParameterSet`](@ref).
+- `step_backend = $(FOMO_step_backend)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
 
 # Output
 
@@ -355,8 +341,8 @@ mutable struct FoSolver{T, V} <: AbstractFirstOrderSolver
   params::FOMOParameterSet{T}
 end
 
-function FoSolver(nlp::AbstractNLPModel{T, V}; M::Int = FOMO_M, kwargs...) where {T, V}
-  params = FOMOParameterSet{T}(; M = M, kwargs...)
+function FoSolver(nlp::AbstractNLPModel{T, V}; M::Int = get(FOMO_M, nlp), kwargs...) where {T, V}
+  params = FOMOParameterSet(nlp; M = M, kwargs...)
   x = similar(nlp.meta.x0)
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
@@ -377,17 +363,17 @@ Base.@deprecate R2Solver(nlp::AbstractNLPModel; kwargs...) FoSolver(
 
 @doc (@doc FoSolver) function fo(
   nlp::AbstractNLPModel{T, V};
-  η1::T = eps(T)^(1 // 4),
-  η2::T = T(FOMO_η2),
-  γ1::T = T(FOMO_γ1),
-  γ2::T = T(FOMO_γ2),
-  γ3::T = T(FOMO_γ3),
-  αmax::T = 1 / eps(T),
-  β::T = T(FOMO_β),
-  θ1::T = T(FOMO_θ1),
-  θ2::T = eps(T)^(1 // 3),
-  M::Int = FOMO_M,
-  step_backend = eval(FOMO_step_backend)(),
+  η1::T = get(FOMO_η1, nlp),
+  η2::T = get(FOMO_η2, nlp),
+  γ1::T = get(FOMO_γ1, nlp),
+  γ2::T = get(FOMO_γ2, nlp),
+  γ3::T = get(FOMO_γ3, nlp),
+  αmax::T = get(FOMO_αmax, nlp),
+  β::T = get(FOMO_β, nlp),
+  θ1::T = get(FOMO_θ1, nlp),
+  θ2::T = get(FOMO_θ2, nlp),
+  M::Int = get(FOMO_M, nlp),
+  step_backend::AbstractFOMethod = get(FOMO_step_backend, nlp),
   kwargs...,
 ) where {T, V}
   solver = FoSolver(

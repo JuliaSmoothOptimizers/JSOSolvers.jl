@@ -6,22 +6,28 @@ export tron, TronSolver, TRONParameterSet
 tron(nlp::AbstractNLPModel; variant = :Newton, kwargs...) = tron(Val(variant), nlp; kwargs...)
 
 # Default algorithm parameter values
-const TRON_μ₀ = 1 // 100
-const TRON_μ₁ = 1
-const TRON_σ = 10
+const TRON_μ₀ = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1 // 100), "T(1 / 100)")
+const TRON_μ₁ = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1), "T(1)")
+const TRON_σ = DefaultParameter(nlp -> eltype(nlp.meta.x0)(10), "T(10)")
 
 """
     TRONParameterSet{T} <: AbstractParameterSet
 
 This structure designed for `tron` regroups the following parameters:
-  - `μ₀::T = T($(TRON_μ₀))`: algorithm parameter in (0, 0.5).
-  - `μ₁::T = T($(TRON_μ₁))`: algorithm parameter in (0, +∞).
-  - `σ::T = T($(TRON_σ))`: algorithm parameter in (1, +∞).
+  - `μ₀::T`: algorithm parameter in (0, 0.5).
+  - `μ₁::T`: algorithm parameter in (0, +∞).
+  - `σ::T`: algorithm parameter in (1, +∞).
 
-  Default values are:
-  - `μ₀::T = T($(TRON_μ₀))`
-  - `μ₁::T = T($(TRON_μ₁))`
-  - `σ::T = T($(TRON_σ))`
+An additional constructor is
+
+    TRONParameterSet(nlp: kwargs...)
+
+where the kwargs are the parameters above.
+
+Default values are:
+  - `μ₀::T = $(TRON_μ₀)`
+  - `μ₁::T = $(TRON_μ₁)`
+  - `σ::T = $(TRON_σ)`
 """
 struct TRONParameterSet{T} <: AbstractParameterSet
   μ₀::Parameter{T, RealInterval{T}}
@@ -30,14 +36,18 @@ struct TRONParameterSet{T} <: AbstractParameterSet
 end
 
 # add a default constructor
-function TRONParameterSet{T}(; μ₀::T = T(TRON_μ₀), μ₁::T = T(TRON_μ₁), σ::T = T(TRON_σ)) where {T}
+function TRONParameterSet(
+  nlp::AbstractNLPModel{T};
+  μ₀::T = get(TRON_μ₀, nlp),
+  μ₁::T = get(TRON_μ₁, nlp),
+  σ::T = get(TRON_σ, nlp),
+) where {T}
   TRONParameterSet(
     Parameter(μ₀, RealInterval(T(0), T(1 // 2), lower_open = true)),
     Parameter(μ₁, RealInterval(T(0), T(Inf), lower_open = true)),
     Parameter(σ, RealInterval(T(1), T(Inf), lower_open = true)),
   )
 end
-TRONParameterSet(μ₀::T, μ₁::T, σ::T) where {T} = TRONParameterSet{T}(μ₀ = μ₀, μ₁ = μ₁, σ = σ)
 
 """
     tron(nlp; kwargs...)
@@ -55,9 +65,9 @@ For advanced usage, first define a `TronSolver` to preallocate the memory used i
 - `nlp::AbstractNLPModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
-- `μ₀::T = T($(TRON_μ₀))`: algorithm parameter, see [`TRONParameterSet`](@ref).
-- `μ₁::T = T($(TRON_μ₁))`: algorithm parameter, see [`TRONParameterSet`](@ref).
-- `σ::T = T($(TRON_σ))`: algorithm parameter, see [`TRONParameterSet`](@ref).
+- `μ₀::T = $(TRON_μ₀)`: algorithm parameter, see [`TRONParameterSet`](@ref).
+- `μ₁::T = $(TRON_μ₁)`: algorithm parameter, see [`TRONParameterSet`](@ref).
+- `σ::T = $(TRON_σ)`: algorithm parameter, see [`TRONParameterSet`](@ref).
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
@@ -137,13 +147,13 @@ end
 
 function TronSolver(
   nlp::AbstractNLPModel{T, V};
-  μ₀::T = T(TRON_μ₀),
-  μ₁::T = T(TRON_μ₁),
-  σ::T = T(TRON_σ),
+  μ₀::T = get(TRON_μ₀, nlp),
+  μ₁::T = get(TRON_μ₁, nlp),
+  σ::T = get(TRON_σ, nlp),
   max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
   kwargs...,
 ) where {T, V <: AbstractVector{T}}
-  params = TRONParameterSet{T}(; μ₀ = μ₀, μ₁ = μ₁, σ = σ)
+  params = TRONParameterSet(nlp; μ₀ = μ₀, μ₁ = μ₁, σ = σ)
   nvar = nlp.meta.nvar
   x = V(undef, nvar)
   xc = V(undef, nvar)
@@ -205,9 +215,9 @@ end
   ::Val{:Newton},
   nlp::AbstractNLPModel{T, V};
   x::V = nlp.meta.x0,
-  μ₀::T = T(TRON_μ₀),
-  μ₁::T = T(TRON_μ₁),
-  σ::T = T(TRON_σ),
+  μ₀::T = get(TRON_μ₀, nlp),
+  μ₁::T = get(TRON_μ₁, nlp),
+  σ::T = get(TRON_σ, nlp),
   kwargs...,
 ) where {T, V}
   dict = Dict(kwargs)
@@ -435,7 +445,8 @@ function SolverCore.solve!(
   stats
 end
 
-"""`s = projected_line_search!(x, H, g, d, ℓ, u, Hs; μ₀ = 1e-2)`
+"""
+    s = projected_line_search!(x, H, g, d, ℓ, u, Hs, μ₀)
 
 Performs a projected line search, searching for a step size `t` such that
 
@@ -452,8 +463,8 @@ function projected_line_search!(
   ℓ::AbstractVector{T},
   u::AbstractVector{T},
   Hs::AbstractVector{T},
-  s::AbstractVector{T};
-  μ₀::Real = T(TRON_μ₀),
+  s::AbstractVector{T},
+  μ₀::Real,
 ) where {T <: Real}
   α = one(T)
   _, brkmin, _ = breakpoints(x, d, ℓ, u)
@@ -643,7 +654,7 @@ function projected_newton!(
 
     # Projected line search
     cgs_rhs .*= -1
-    projected_line_search!(x, ZHZ, cgs_rhs, st, ℓ, u, Hs, w)
+    projected_line_search!(x, ZHZ, cgs_rhs, st, ℓ, u, Hs, w, value(solver.params.μ₀))
     s .+= w
 
     mul!(Hs, H, s)

@@ -1,21 +1,27 @@
 export lbfgs, LBFGSSolver, LBFGSParameterSet
 
 # Default algorithm parameter values
-const LBFGS_mem = 5
-const LBFGS_τ₁ = 0.9999
-const LBFGS_bk_max = 25
+const LBFGS_mem = DefaultParameter(5)
+const LBFGS_τ₁ = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.9999), "T(0.9999)")
+const LBFGS_bk_max = DefaultParameter(25)
 
 """
     LBFGSParameterSet{T} <: AbstractParameterSet
 
 This structure designed for `lbfgs` regroups the following parameters:
-  - `mem::Parameter{Int, IntegerRange{Int}}`: memory parameter of the `lbfgs` algorithm
-  - `τ₁::Parameter{T, RealInterval{T}}`: slope factor in the Wolfe condition when performing the line search
-  - `bk_max::Parameter{Int, IntegerRange{Int}}`: maximum number of backtracks when performing the line search.
+  - `mem`: memory parameter of the `lbfgs` algorithm
+  - `τ₁`: slope factor in the Wolfe condition when performing the line search
+  - `bk_max`: maximum number of backtracks when performing the line search.
 
-  Default values are:
+An additional constructor is
+
+    LBFGSParameterSet(nlp: kwargs...)
+
+where the kwargs are the parameters above.
+
+Default values are:
   - `mem::Int = $(LBFGS_mem)`
-  - `τ₁::T = T($(LBFGS_τ₁))`
+  - `τ₁::T = $(LBFGS_τ₁)`
   - `bk_max:: Int = $(LBFGS_bk_max)`
 """
 struct LBFGSParameterSet{T} <: AbstractParameterSet
@@ -25,10 +31,11 @@ struct LBFGSParameterSet{T} <: AbstractParameterSet
 end
 
 # add a default constructor
-function LBFGSParameterSet{T}(;
-  mem::Int = LBFGS_mem,
-  τ₁::T = T(LBFGS_τ₁),
-  bk_max::Int = LBFGS_bk_max,
+function LBFGSParameterSet(
+  nlp::AbstractNLPModel{T};
+  mem::Int = get(LBFGS_mem, nlp),
+  τ₁::T = get(LBFGS_τ₁, nlp),
+  bk_max::Int = get(LBFGS_bk_max, nlp),
 ) where {T}
   LBFGSParameterSet(
     Parameter(mem, IntegerRange(Int(5), Int(20))),
@@ -36,8 +43,6 @@ function LBFGSParameterSet{T}(;
     Parameter(bk_max, IntegerRange(Int(1), Int(100))),
   )
 end
-LBFGSParameterSet(mem::Int, τ₁::T, bk_max::Int) where {T} =
-  LBFGSParameterSet{T}(mem = mem, τ₁ = τ₁, bk_max = bk_max)
 
 """
     lbfgs(nlp; kwargs...)
@@ -59,7 +64,7 @@ The keyword arguments may include
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
-- `τ₁::T = T($(LBFGS_τ₁))`: algorithm parameter, see [`LBFGSParameterSet`](@ref).
+- `τ₁::T = $(LBFGS_τ₁)`: algorithm parameter, see [`LBFGSParameterSet`](@ref).
 - `bk_max:: Int = $(LBFGS_bk_max)`: algorithm parameter, see [`LBFGSParameterSet`](@ref).
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `verbose_subsolver::Int = 0`: if > 0, display iteration information every `verbose_subsolver` iteration of the subsolver.
@@ -107,7 +112,7 @@ end
 function LBFGSSolver(nlp::M; kwargs...) where {T, V, M <: AbstractNLPModel{T, V}}
   nvar = nlp.meta.nvar
 
-  params = LBFGSParameterSet{T}(; kwargs...)
+  params = LBFGSParameterSet(nlp; kwargs...)
   mem = value(params.mem)
 
   x = V(undef, nvar)
@@ -134,9 +139,9 @@ end
 @doc (@doc LBFGSSolver) function lbfgs(
   nlp::AbstractNLPModel{T, V};
   x::V = nlp.meta.x0,
-  mem::Int = LBFGS_mem,
-  τ₁::T = T(LBFGS_τ₁),
-  bk_max::Int = LBFGS_bk_max,
+  mem::Int = get(LBFGS_mem, nlp),
+  τ₁::T = get(LBFGS_τ₁, nlp),
+  bk_max::Int = get(LBFGS_bk_max, nlp),
   kwargs...,
 ) where {T, V}
   solver = LBFGSSolver(nlp; mem = mem, τ₁ = τ₁, bk_max = bk_max)
