@@ -20,12 +20,12 @@ authors:
     orcid: 0000-0003-4451-281X
     affiliation: 2
 affiliations:
- - name: GERAD and Department of Mathematics and Industrial Engineering, Polytechnique Montréal, QC, Canada.
-   index: 1
- - name: Netherlands eScience Center, Amsterdam, NL
-   index: 2
-  - name: TODO
-   index: 3
+  - name: GERAD and Department of Mathematics and Industrial Engineering, Polytechnique Montréal, QC, Canada.
+    index: 1
+  - name: Netherlands eScience Center, Amsterdam, NL
+    index: 2
+  - name: Univ Rennes, INSA Rennes, CNRS, IRMAR - UMR 6625, Rennes, France
+    index: 3
 date: 25 September 2024
 bibliography: paper.bib
 
@@ -46,19 +46,19 @@ In many of such engineering design problems, it is not computationally feasible 
 Matrix-free implementations of standard optimization methods—implementations that do not explicitly form Jacobians and Hessians.
 The matrix-free approach makes solving problems with thousands of design variables and constraints tractable, even if function and gradient evaluations are costly.
 
-***
+*
 Expliquer les différents algos et leurs implémentations
-- TRON: A trust-region solver for bound-constrained problems, implementing  [@tron];
-- TRUNK: A factorization-free trust-region truncated-CG Newton method following the description given in [@conn2000trust];
-- L-BFGS: A limited-memory factorization-free line-search BFGS method;
-- FOMO: a first-order quadratic regularization method.
+TRON: A trust-region solver for bound-constrained problems, implementing  [@tron];
+TRUNK: A factorization-free trust-region truncated-CG Newton method following the description given in [@conn2000trust];
+L-BFGS: A limited-memory factorization-free line-search BFGS method;
+FOMO: a first-order quadratic regularization method.
 The implementation of TRON and TRUNK also have nonlinear least squares variants.
 
 List of strenght of JSO-Solvers:
-- in-place solve with 0 allocations
-- flexible data type
-- some of the solvers are GPU-compatible
-***
+in-place solve with 0 allocations
+flexible data type
+some of the solvers are GPU-compatible
+*
 
 `JSOSolvers.jl` is built upon the JuliaSmoothOptimizers (JSO) tools [@jso].
 JSO is an academic organization containing a collection of Julia packages for nonlinear optimization software development, testing, and benchmarking.
