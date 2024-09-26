@@ -35,7 +35,7 @@ bibliography: paper.bib
 
 `JSOSolvers.jl` is a Julia [@bezanson2017julia] implementation of optimization solvers to address nonlinear nonconvex continuous optimization problems that are unconstrained or bound-constrained
 \begin{equation}\label{eq:nlp}
-    \minimize{x \in \R^n} \ f(x) \quad \st \ell \leq x \leq u,
+    \underset{x \in \mathbb{R}^n}{\text{minimize}} \ f(x) \quad \text{subject to} \quad \ell \leq x \leq u,
 \end{equation}
 where  $f:\mathbb{R}^n \rightarrow \mathbb{R}$ is (twice) continuously differentiable functions, with  $\ell \in \left(\mathbb{R} \cup \{-\infty\} \right)^n$, and  $u \in \left(\mathbb{R} \cup \{+\infty\} \right)^n$.
 
