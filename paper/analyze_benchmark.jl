@@ -5,7 +5,7 @@ Pkg.activate(path)
 using DataFrames, Dates, JLD2
 using SolverBenchmark, SolverCore, NLPModels
 
-name = "2024-09-25_ipopt_lbfgs_trunk_tron_adop_Float64_372"
+name = "2024-09-28_ipopt_lbfgs_trunk_tron_cutest_Float64_279"
 if name == "" # select the last jld2 file by default
   # TODO: this fails if there is a file with less than 4 characters
   files = filter(x -> x[(end - 4):end] == ".jld2", readdir(abspath(path)))

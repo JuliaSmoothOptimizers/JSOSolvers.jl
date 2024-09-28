@@ -38,7 +38,8 @@ tol = 1e-5 # relative tolerance
 ###############################################################################
 
 (problems, bench) = if run_cutest
-  ((CUTEstModel(p) for p in readlines("list_problems.dat")), "cutest")
+  #ERROR: LoadError: DIXMAANE1 not found
+  ((CUTEstModel(p) for p in setdiff(readlines("list_problems.dat"),["DIXMAANE1", "DIXMAANA1", "DIXMAANI1", "DIXMAANM1", "LRW8A", "LRW1A", "10FOLDTRLS", "LRCOVTYPE", "LRA9A", "LRIJCNN1", "SINQUAD2", "SISSER2"])), "cutest")
 elseif run_jump
   (
     (
@@ -78,14 +79,14 @@ solvers = Dict(
       tol = tol,
     ),
   :lbfgs => model -> lbfgs(model, atol = 0.0, rtol = tol),
-  :tron => model -> trunk(model, atol = 0.0, rtol = tol),
+  :tron => model -> tron(model, atol = 0.0, rtol = tol),
   :trunk => model -> trunk(model, atol = 0.0, rtol = tol),
 )
 
 stats = bmark_solvers(
   solvers,
   problems,
-  #skipif=prob -> (get_nvar(prob) < 3) # useful for debugging
+  #skipif=prob -> (prob.meta.name == "DIXMAANE1"), #(get_nvar(prob) < 3) # useful for debugging
 )
 
 using JLD2, Dates
