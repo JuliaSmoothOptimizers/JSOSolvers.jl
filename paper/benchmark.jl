@@ -33,7 +33,7 @@ end
 # Add scalable benchmark? (meta.variable_nvar .== true)
 T = Float64 # may be changed for ADNLPModels benchmark only
 
-max_time = 10.0 # 20 minutes
+max_time = 1200.0 # 20 minutes
 tol = 1e-5 # relative tolerance
 ###############################################################################
 
@@ -71,16 +71,16 @@ solvers = Dict(
     nlp -> ipopt(
       nlp,
       print_level = 0,
-      dual_inf_tol = Inf,
-      constr_viol_tol = Inf,
-      compl_inf_tol = Inf,
-      acceptable_iter = 0,
+      #dual_inf_tol = Inf,
+      #constr_viol_tol = Inf,
+      #compl_inf_tol = Inf,
+      #acceptable_iter = 0,
       max_cpu_time = max_time,
       tol = tol,
     ),
-  :lbfgs => model -> lbfgs(model, atol = 0.0, rtol = tol),
-  :tron => model -> tron(model, atol = 0.0, rtol = tol),
-  :trunk => model -> trunk(model, atol = 0.0, rtol = tol),
+  :lbfgs => model -> lbfgs(model, atol = 0.0, rtol = tol, max_time = max_time),
+  :tron => model -> tron(model, atol = 0.0, rtol = tol, max_time = max_time),
+  :trunk => model -> trunk(model, atol = 0.0, rtol = tol, max_time = max_time),
 )
 
 stats = bmark_solvers(
