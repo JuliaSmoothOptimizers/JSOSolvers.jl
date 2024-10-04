@@ -136,7 +136,7 @@ Weighted norm of `x` with respect to `M`, i.e., `z = sqrt(x' * M * x)`. Uses `z`
 """
 function normM!(x, M, z)
   if M === I
-    return norm(x)
+    return nrm2(n, x)
   else
     mul!(z, M, x)
     return √(x⋅z)
