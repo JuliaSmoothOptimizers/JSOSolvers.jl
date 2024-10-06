@@ -83,10 +83,10 @@ end
   x0 = [-1.2; 1.0]
   nlp = ADNLPModel(x -> 100 * (x[2] - x[1]^2)^2 + (x[1] - 1)^2, x0)
   function DiagPrecon(x)
-     H = Matrix(hess(nlp, x))
-     λmin = minimum(eigvals(H))
-     Diagonal(H + λmin * I)
-  end 
+    H = Matrix(hess(nlp, x))
+    λmin = minimum(eigvals(H))
+    Diagonal(H + λmin * I)
+  end
   M = DiagPrecon(x0)
   function LinearAlgebra.ldiv!(y, M::Diagonal, x)
     y .= M \ x
@@ -94,6 +94,6 @@ end
   function callback(nlp, solver, stats)
     M[:] = DiagPrecon(solver.x)
   end
-  stats = trunk(nlp, callback=callback, M=M)
+  stats = trunk(nlp, callback = callback, M = M)
   @test stats.status == :first_order
 end
