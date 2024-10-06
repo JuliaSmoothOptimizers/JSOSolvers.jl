@@ -26,7 +26,6 @@ Notably, you can access, and modify, the following:
   - `stats.elapsed_time`: elapsed time in seconds.
 "
 
-
 """
     normM!(n, x, M, z)
     
@@ -37,7 +36,7 @@ function normM!(n, x, M, z)
     return nrm2(n, x)
   else
     mul!(z, M, x)
-    return √(x⋅z)
+    return √(x ⋅ z)
   end
 end
 
