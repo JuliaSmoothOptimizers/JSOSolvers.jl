@@ -229,7 +229,7 @@ function SolverCore.solve!(
 
   while !done
     # Compute inexact solution to trust-region subproblem
-    # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
+    # minimize g's + 1/2 s'Hs  subject to ‖s‖_M ≤ radius.
     # In this particular case, we may use an operator with preallocation.
     cgtol = max(rtol, min(T(0.1), √∇fNormM, T(0.9) * cgtol))
     ∇f .*= -1
