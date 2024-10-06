@@ -82,11 +82,12 @@ end
 @testset "Preconditioner in Trunk" begin
   x0 = [-1.2; 1.0]
   nlp = ADNLPModel(x -> 100 * (x[2] - x[1]^2)^2 + (x[1] - 1)^2, x0)
-  DiagPrecon(x) = Diagonal(inv( [200 + 800 * x[1]^2 - 400 * x[2]  0.0;
-                               0.0                              200] ))
-
+  function DiagPrecon(x)
+     H = Matrix(hess(nlp, x))
+     λmin = minimum(eigvals(H))
+     Diagonal(H + λmin * I)
+  end 
   M = DiagPrecon(x0)
-  # implement `ldiv!` for `Diagonal` to avoid copying
   function LinearAlgebra.ldiv!(y, M::Diagonal, x)
     y .= M \ x
   end
@@ -95,5 +96,4 @@ end
   end
   stats = trunk(nlp, callback=callback, M=M)
   @test stats.status == :first_order
-
 end
