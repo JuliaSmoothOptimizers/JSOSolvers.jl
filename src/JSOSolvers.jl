@@ -26,6 +26,21 @@ Notably, you can access, and modify, the following:
   - `stats.elapsed_time`: elapsed time in seconds.
 "
 
+
+"""
+    normM!(n, x, M, z)
+    
+Weighted norm of `x` with respect to `M`, i.e., `z = sqrt(x' * M * x)`. Uses `z` as workspace.
+"""
+function normM!(n, x, M, z)
+  if M === I
+    return nrm2(n, x)
+  else
+    mul!(z, M, x)
+    return √(x⋅z)
+  end
+end
+
 # Unconstrained solvers
 include("lbfgs.jl")
 include("trunk.jl")

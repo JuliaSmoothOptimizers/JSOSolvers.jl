@@ -27,6 +27,7 @@ The keyword arguments may include
 - `nm_itmax::Int = 25`: algorithm parameter.
 - `verbose::Int = 0`: if > 0, display iteration information every `verbose` iteration.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver.
+- `M`: linear operator that models a Hermitian positive-definite matrix of size `n`; passed to Krylov subsolvers. 
 
 # Output
 The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -146,6 +147,7 @@ function SolverCore.solve!(
   nm_itmax::Int = 25,
   verbose::Int = 0,
   subsolver_verbose::Int = 0,
+  M = I,
 ) where {T, V <: AbstractVector{T}}
   if !(nlp.meta.minimize)
     error("trunk only works for minimization problem")
@@ -178,10 +180,11 @@ function SolverCore.solve!(
   f = obj(nlp, x)
   grad!(nlp, x, ∇f)
   isa(nlp, QuasiNewtonModel) && (∇fn .= ∇f)
-  ∇fNorm2 = nrm2(n, ∇f)
+  ∇fNorm2 = norm(∇f)
+  ∇fNormM = normM!(n, ∇f, M, Hs)
   ϵ = atol + rtol * ∇fNorm2
   tr = solver.tr
-  tr.radius = min(max(∇fNorm2 / 10, one(T)), T(100))
+  tr.radius = min(max(∇fNormM / 10, one(T)), T(100))
 
   # Non-monotone mode parameters.
   # fmin: current best overall objective value
@@ -226,9 +229,9 @@ function SolverCore.solve!(
 
   while !done
     # Compute inexact solution to trust-region subproblem
-    # minimize g's + 1/2 s'Hs  subject to ‖s‖ ≤ radius.
+    # minimize g's + 1/2 s'Hs  subject to ‖s‖_M ≤ radius.
     # In this particular case, we may use an operator with preallocation.
-    cgtol = max(rtol, min(T(0.1), √∇fNorm2, T(0.9) * cgtol))
+    cgtol = max(rtol, min(T(0.1), √∇fNormM, T(0.9) * cgtol))
     ∇f .*= -1
     Krylov.solve!(
       subsolver,
@@ -240,6 +243,7 @@ function SolverCore.solve!(
       itmax = max(2 * n, 50),
       timemax = max_time - stats.elapsed_time,
       verbose = subsolver_verbose,
+      M = M,
     )
     s, cg_stats = subsolver.x, subsolver.stats
 
@@ -354,6 +358,7 @@ function SolverCore.solve!(
         tr.good_grad = false
       end
       ∇fNorm2 = nrm2(n, ∇f)
+      ∇fNormM = normM!(n, ∇f, M, Hs)
 
       set_objective!(stats, f)
       set_time!(stats, time() - start_time)
@@ -374,7 +379,7 @@ function SolverCore.solve!(
           ∇fNorm2,
           tr.radius,
           tr.ratio,
-          length(cg_stats.residuals),
+          cg_stats.niter,
           bk,
           cg_stats.status,
         ])
