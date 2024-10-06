@@ -82,7 +82,7 @@ end
 @testset "Preconditioner in Trunk" begin
   x0 = [-1.2; 1.0]
   nlp = ADNLPModel(x -> 100 * (x[2] - x[1]^2)^2 + (x[1] - 1)^2, x0)
-  DiagPrecon(x) = Diagonal(( [200 + 800 * x[1]^2 - 400 * x[2]  0.0;
+  DiagPrecon(x) = Diagonal(inv( [200 + 800 * x[1]^2 - 400 * x[2]  0.0;
                                0.0                              200] ))
 
   M = DiagPrecon(x0)
@@ -94,6 +94,6 @@ end
     M[:] = DiagPrecon(solver.x)
   end
   stats = trunk(nlp, callback=callback, M=M)
-  @test stats.status == :success
+  @test stats.status == :first_order
 
 end
