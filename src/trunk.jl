@@ -27,6 +27,7 @@ The keyword arguments may include
 - `nm_itmax::Int = 25`: algorithm parameter.
 - `verbose::Int = 0`: if > 0, display iteration information every `verbose` iteration.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver.
+- `M`: linear operator that models a Hermitian positive-definite matrix of size `n`; passed to Krylov subsolvers. 
 
 # Output
 The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -129,20 +130,6 @@ end
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
-"""
-    normM!(n, x, M, z)
-    
-Weighted norm of `x` with respect to `M`, i.e., `z = sqrt(x' * M * x)`. Uses `z` as workspace.
-"""
-function normM!(x, M, z)
-  if M === I
-    return nrm2(n, x)
-  else
-    mul!(z, M, x)
-    return √(x⋅z)
-  end
-end
-
 function SolverCore.solve!(
   solver::TrunkSolver{T, V},
   nlp::AbstractNLPModel{T, V},
@@ -194,7 +181,7 @@ function SolverCore.solve!(
   grad!(nlp, x, ∇f)
   isa(nlp, QuasiNewtonModel) && (∇fn .= ∇f)
   ∇fNorm2 = norm(∇f)
-  ∇fNormM = normM!(∇f, M, Hs)
+  ∇fNormM = normM!(n, ∇f, M, Hs)
   ϵ = atol + rtol * ∇fNorm2
   tr = solver.tr
   tr.radius = min(max(∇fNormM / 10, one(T)), T(100))
@@ -371,7 +358,7 @@ function SolverCore.solve!(
         tr.good_grad = false
       end
       ∇fNorm2 = nrm2(n, ∇f)
-      ∇fNormM = normM!(∇f, M, Hs)
+      ∇fNormM = normM!(n, ∇f, M, Hs)
 
       set_objective!(stats, f)
       set_time!(stats, time() - start_time)

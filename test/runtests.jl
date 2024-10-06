@@ -78,3 +78,22 @@ include("objgrad-on-tron.jl")
   nls = ADNLSModel(x -> [100 * (x[2] - x[1]^2); x[1] - 1], [-1.2; 1.0], 2)
   stats = tron(nls, max_radius = max_radius, increase_factor = increase_factor, callback = cb)
 end
+
+@testset "Preconditioner in Trunk" begin
+  x0 = [-1.2; 1.0]
+  nlp = ADNLPModel(x -> 100 * (x[2] - x[1]^2)^2 + (x[1] - 1)^2, x0)
+  DiagPrecon(x) = Diagonal(( [200 + 800 * x[1]^2 - 400 * x[2]  0.0;
+                               0.0                              200] ))
+
+  M = DiagPrecon(x0)
+  # implement `ldiv!` for `Diagonal` to avoid copying
+  function LinearAlgebra.ldiv!(y, M::Diagonal, x)
+    y .= M \ x
+  end
+  function callback(nlp, solver, stats)
+    M[:] = DiagPrecon(solver.x)
+  end
+  stats = trunk(nlp, callback=callback, M=M)
+  @test stats.status == :success
+
+end
