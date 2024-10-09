@@ -85,12 +85,9 @@ end
   function DiagPrecon(x)
     H = Matrix(hess(nlp, x))
     λmin = minimum(eigvals(H))
-    Diagonal(H + λmin * I)
+    Diagonal(H + (λmin+1e-6)*I )
   end
   M = DiagPrecon(x0)
-  function LinearAlgebra.ldiv!(y, M::Diagonal, x)
-    y .= M \ x
-  end
   function callback(nlp, solver, stats)
     M[:] = DiagPrecon(solver.x)
   end
