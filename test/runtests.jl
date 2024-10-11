@@ -85,7 +85,7 @@ end
   function DiagPrecon(x)
     H = Matrix(hess(nlp, x))
     λmin = minimum(eigvals(H))
-    Diagonal(H + (λmin+1e-6)*I )
+    Diagonal(H + (λmin + 1e-6) * I)
   end
   M = DiagPrecon(x0)
   function callback(nlp, solver, stats)
