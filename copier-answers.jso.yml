@@ -1,0 +1,8 @@
+PackageName: "JSOSolvers"
+PackageOwner: "JuliaSmoothOptimizers"
+PackageUUID: "10dff2fc-5484-5881-a0e0-c90441020f8a"
+_src_path: "https://github.com/JuliaSmoothOptimizers/JSOBestieTemplate.jl"
+_commit: "v0.13.0"
+AddBreakage: true
+AddBenchmark: false
+AddBenchmarkCI: true
