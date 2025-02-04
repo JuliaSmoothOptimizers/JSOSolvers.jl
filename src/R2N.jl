@@ -280,7 +280,6 @@ function SolverCore.solve!(
     ΔTk = slope + curv / 2
     ck .= x .+ s
     fck = obj(nlp, ck)
-    unbounded = fck < fmin
 
     if non_mono_size > 1  #non-monotone behaviour
       k = mod(stats.iter, non_mono_size) + 1
@@ -304,6 +303,7 @@ function SolverCore.solve!(
         ∇fn .= ∇fk
       end
       set_objective!(stats, fck)
+      unbounded = fck < fmin
       norm_∇fk = norm(∇fk)
     else
       μk = μk * λ
