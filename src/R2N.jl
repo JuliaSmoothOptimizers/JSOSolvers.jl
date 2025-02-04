@@ -216,7 +216,8 @@ function SolverCore.solve!(
   cgtol = solver.cgtol
 
   set_iter!(stats, 0)
-  set_objective!(stats, obj(nlp, x))
+  f0 = obj(nlp, x)
+  set_objective!(stats, f0)
 
   grad!(nlp, x, ∇fk)
   isa(nlp, QuasiNewtonModel) && (∇fn .= ∇fk)
@@ -228,6 +229,9 @@ function SolverCore.solve!(
   ρk = zero(T)
 
   # Stopping criterion: 
+  fmin = min(-one(T), f0) / eps(T)
+  unbounded = f0 < fmin
+  
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
 
@@ -248,6 +252,7 @@ function SolverCore.solve!(
       nlp,
       elapsed_time = stats.elapsed_time,
       optimal = optimal,
+      unbounded = unbounded,
       max_eval = max_eval,
       iter = stats.iter,
       max_iter = max_iter,
@@ -275,11 +280,7 @@ function SolverCore.solve!(
     ΔTk = slope + curv / 2
     ck .= x .+ s
     fck = obj(nlp, ck)
-
-    if fck == -Inf
-      set_status!(stats, :unbounded)
-      break
-    end
+    unbounded = fck < fmin
 
     if non_mono_size > 1  #non-monotone behaviour
       k = mod(stats.iter, non_mono_size) + 1
@@ -345,6 +346,7 @@ function SolverCore.solve!(
         nlp,
         elapsed_time = stats.elapsed_time,
         optimal = optimal,
+        unbounded = unbounded,
         max_eval = max_eval,
         iter = stats.iter,
         max_iter = max_iter,
