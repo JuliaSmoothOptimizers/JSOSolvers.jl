@@ -8,6 +8,7 @@ function tests()
         ("lbfgs", lbfgs),
         ("tron", tron),
         ("R2", R2),
+        ("R2N", R2N),
         ("fomo_r2", fomo),
         ("fomo_tr", (nlp; kwargs...) -> fomo(nlp, step_backend = JSOSolvers.tr_step(); kwargs...)),
       ]
@@ -16,6 +17,7 @@ function tests()
       end
       @testset "$name : nonmonotone configuration" for (name, solver) in [
         ("R2", (nlp; kwargs...) -> R2(nlp, M = 2; kwargs...)),
+        ("R2N", (nlp; kwargs...) -> R2N(nlp, M = 2; kwargs...)),
         ("fomo_r2", (nlp; kwargs...) -> fomo(nlp, M = 2; kwargs...)),
         (
           "fomo_tr",
