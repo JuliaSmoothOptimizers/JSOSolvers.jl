@@ -1,5 +1,5 @@
 @testset "Test restart with a different initial guess: $fun" for (fun, s) in (
-  # (:R2N, :R2NSolver),
+  (:R2N, :R2NSolver),
   (:R2, :FoSolver),
   (:fomo, :FomoSolver),
   (:lbfgs, :LBFGSSolver),

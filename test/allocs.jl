@@ -31,7 +31,7 @@ end
 if Sys.isunix()
   @testset "Allocation tests" begin
     @testset "$symsolver" for symsolver in
-                              (:LBFGSSolver, :FoSolver, :FomoSolver, :TrunkSolver, :TronSolver)
+                              (:LBFGSSolver, :FoSolver, :FomoSolver, :TrunkSolver, :TronSolver, :R2NSolver)
       for model in NLPModelsTest.nlp_problems
         nlp = eval(Meta.parse(model))()
         if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolver))

@@ -75,8 +75,4 @@ end
   stats = with_logger(NullLogger()) do
     R2(nlp, callback = cb)
   end
-
-  stats = with_logger(NullLogger()) do
-    R2N(nlp, callback = cb)
-  end
 end

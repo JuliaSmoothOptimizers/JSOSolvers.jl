@@ -142,20 +142,14 @@ function R2NSolver(
 end
 
 function SolverCore.reset!(solver::R2NSolver{T}) where {T}
-#   fill!(solver.obj_vec, typemin(T))
-#   solver.σ = zero(T)
-#   solver.μ = zero(T)
-  solver.cgtol = one(T)
+  fill!(solver.obj_vec, typemin(T))
   reset!(solver.H)
   solver
 end
 function SolverCore.reset!(solver::R2NSolver{T}, nlp::AbstractNLPModel) where {T}
   fill!(solver.obj_vec, typemin(T))
-  solver.σ = zero(T)
   @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
   solver.H = isa(nlp, QuasiNewtonModel) ? nlp.op : hess_op!(nlp, solver.x, solver.Hs)
-  solver.shifted_H = LinearOperator(Matrix{T}(I, nlp.meta.nvar, nlp.meta.nvar))
-  solver.cgtol = one(T)
   solver
 end
 
@@ -201,8 +195,6 @@ function SolverCore.solve!(
   #   @info "only solver allowed is trunked CG for LSR1Model"
   #   solver.subsolver_type = CrSolver
   # end
-  #TODO add checks for ranges of values for parameters
-
   reset!(stats)
   start_time = time()
   set_time!(stats, 0.0)
@@ -272,10 +264,6 @@ function SolverCore.solve!(
 
   while !done
     ∇fk .*= -1
-    # solver.σ = σk
-    # solver.μ = μk
-    # solver.cgtol = cgtol
-
     subsolve!(solver, s, zero(T), n, subsolver_verbose)
 
     slope = dot(s, ∇fk) # = -dot(s, ∇fk) but ∇fk is negative
@@ -326,14 +314,9 @@ function SolverCore.solve!(
 
     callback(nlp, solver, stats)
 
-    σk = solver.σ
+    norm_∇fk = stats.dual_feas # if the user change it, they just change the stats.norm 
     μk = solver.μ
     cgtol = solver.cgtol
-
-    # norm_∇fk = norm(∇fk) # TODO add to stats solver #user should do this in the callback
-    #TODO add it to the callback and example callback to change gx, norm and cgtol (update the stats and solver)
-    norm_∇fk = stats.dual_feas # if the user change it, they just change the stats.norm 
-
     σk = μk * norm_∇fk
 
     optimal = norm_∇fk ≤ ϵ
@@ -344,22 +327,24 @@ function SolverCore.solve!(
       infoline =
         @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %+7.1e  %1s" stats.iter stats.objective norm_∇fk μk σk ρk σ_stat
     end
-
-    set_status!(
-      stats,
-      get_status(
-        nlp,
-        elapsed_time = stats.elapsed_time,
-        optimal = optimal,
-        unbounded = unbounded,
-        max_eval = max_eval,
-        iter = stats.iter,
-        max_iter = max_iter,
-        max_time = max_time,
-      ),
-    )
-
-    done = stats.status != :unknown
+    if stats.status == :user
+      done = true
+    else
+      set_status!(
+        stats,
+        get_status(
+          nlp,
+          elapsed_time = stats.elapsed_time,
+          optimal = optimal,
+          unbounded = unbounded,
+          max_eval = max_eval,
+          iter = stats.iter,
+          max_iter = max_iter,
+          max_time = max_time,
+        ),
+      )
+      done = stats.status != :unknown
+    end
   end
 
   set_solution!(stats, x)
@@ -377,10 +362,12 @@ function subsolve!(R2N::R2NSolver, s, atol, n, subsolver_verbose)
   if subsolver_type isa MinresSolver
     minres!(
       subsolver_type,
-      H, #A
+      (H + σ * shifted_H), #A
       ∇f, #b 
       λ = σ,
       itmax = 2 * n,
+      atol = atol,
+      rtol = cgtol,
       verbose = subsolver_verbose,
     )
     s .= subsolver_type.x
@@ -395,7 +382,6 @@ function subsolve!(R2N::R2NSolver, s, atol, n, subsolver_verbose)
       verbose = subsolver_verbose,
     )
     s .= subsolver_type.x
-    # stas = subsolver_type.stats
 
   elseif subsolver_type isa ShiftedLBFGSSolver
     solve_shifted_system!(s, H, ∇f, σ)
