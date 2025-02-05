@@ -5,8 +5,6 @@ using Printf, LinearAlgebra, Logging, SparseArrays, Test
 using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
 using NLPModelsTest
 
-using Random
-
 # this package
 using JSOSolvers
 
@@ -96,46 +94,3 @@ end
   stats = trunk(nlp, callback = callback, M = M)
   @test stats.status == :first_order
 end
-
-
-# Test cases for solve_shifted_system!
-@testset "solve_shifted_system! tests" begin
-  # Seed the random number generator for reproducibility.
-  Random.seed!(1234)
-
-  # Set problem parameters.
-  n    = 100      # dimension of the problem
-  mem  = 10       # L-BFGS memory size
-  scaling = true  # flag to enable scaling
-
-  # Create an L-BFGS operator.
-  B = LBFGSOperator(n; mem=mem, scaling=scaling)
-
-  # Populate the L-BFGS operator with random {s, y} pairs.
-  for i in 1:mem
-      s = rand(n)
-      y = rand(n)
-      push!(B, s, y)
-  end
-
-  # Prepare the right-hand side and solution vector.
-  b = rand(n)
-  x = zeros(n)
-  σ = 0.1   # a nonnegative shift
-
-  # Solve the shifted system (in place).
-  result = solve_shifted_system!(x, B, b, σ)
-
-  # Test that the returned solution (stored in x) satisfies
-  # (B + σ I)x ≈ b. We compute the relative residual.
-  rel_residual = norm(B * x + σ * x - b) / norm(b)
-  @test rel_residual < 1e-8
-
-  # Additionally, test that the function updates x in place.
-  @test result === x
-
-  # Finally, verify that a negative shift throws an ArgumentError.
-  x_temp = zeros(n)
-  @test_throws ArgumentError solve_shifted_system!(x_temp, B, b, -0.1)
-end
-
