@@ -94,3 +94,13 @@ end
   stats = trunk(nlp, callback = callback, M = M)
   @test stats.status == :first_order
 end
+
+@testset "Checking Exact Subsolver R2N" begin
+  f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
+  nlp = ADNLPModel(f, [-1.2; 1.0])
+  X = [nlp.meta.x0[1]]
+  Y = [nlp.meta.x0[2]]
+
+  stats = R2N(LBFGSModel(nlp))
+  @test stats.status == :first_order
+end
