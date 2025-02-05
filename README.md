@@ -34,7 +34,7 @@ This package provides an implementation of four classic algorithms for unconstra
     > high-order regularized models. *Mathematical Programming*, 163(1), 359-368.
     > DOI: [10.1007/s10107-016-1065-8](https://doi.org/10.1007/s10107-016-1065-8)
 
-- `R2N`: an inexact second-order quadratic regularization method for unconstrained optimization with shifted L-BFGS systems;
+- `R2N`: An inexact second-order quadratic regularization method for unconstrained optimization (with shifted L-BFGS or shifted Hessian operator);
 - `fomo`: a first-order method with momentum for unconstrained optimization;
 
 - `tron`: a pure Julia implementation of TRON, a trust-region solver for bound-constrained optimization described in

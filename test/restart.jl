@@ -19,7 +19,6 @@
   SolverCore.reset!(solver)
 
   stats = SolverCore.solve!(solver, nlp, stats, atol = 1e-10, rtol = 1e-10)
-  println("stats.status:", stats.status)
   @test stats.status == :first_order
   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)
 end

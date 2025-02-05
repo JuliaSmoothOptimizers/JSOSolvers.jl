@@ -1,5 +1,3 @@
-using LinearAlgebra
-using LinearOperators
 export R2N, R2NSolver
 export ShiftedLBFGSSolver
 
@@ -12,7 +10,7 @@ end
 """
     R2N(nlp; kwargs...)
 
-A first-order quadratic regularization method for unconstrained optimization.
+An inexact second-order quadratic regularization method for unconstrained optimization (with shifted L-BFGS or shifted Hessian operator).
 
 For advanced usage, first define a `R2NSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
 
@@ -78,6 +76,7 @@ stats = solve!(solver, nlp)
 "Execution stats: first-order stationary"
 ```
 """
+
 mutable struct R2NSolver{
   T,
   V,
@@ -92,7 +91,7 @@ mutable struct R2NSolver{
   σ::T
   μ::T
   H::Op
-  shifted_H::Op2
+  opI::Op2
   Hs::V
   s::V
   obj_vec::V # used for non-monotone behaviour
@@ -112,11 +111,11 @@ function R2NSolver(
   gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
   Hs = V(undef, nvar)
   H = isa(nlp, QuasiNewtonModel) ? nlp.op : hess_op!(nlp, x, Hs)
-  shifted_H = LinearOperator(Matrix{T}(I, nvar, nvar))
+  opI = opEye(T, nvar)
   Op = typeof(H)
-  Op2 = typeof(shifted_H)
-  σ = zero(T) # init it to zero for now 
-  μ = zero(T) # init it to zero for now
+  Op2 = typeof(opI)
+  σ = zero(T)
+  μ = zero(T)
   s = V(undef, nvar)
   cgtol = one(T) # must be ≤ 1.0
   obj_vec = fill(typemin(T), non_mono_size)
@@ -132,7 +131,7 @@ function R2NSolver(
     σ,
     μ,
     H,
-    shifted_H,
+    opI,
     Hs,
     s,
     obj_vec,
@@ -173,8 +172,8 @@ function SolverCore.solve!(
   rtol::T = √eps(T),
   η1 = T(0.0001),
   η2 = T(0.001),
-  λ = T(2), #>1
-  σmin = zero(T),# μmin = σmin to match the paper
+  λ = T(2),
+  σmin = zero(T),
   max_time::Float64 = 30.0,
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
@@ -189,7 +188,7 @@ function SolverCore.solve!(
   if (solver.subsolver_type isa ShiftedLBFGSSolver && !isa(nlp, LBFGSModel))
     error("Unsupported subsolver type, ShiftedLBFGSSolver is only can be used by LBFGSModel")
   end
-  @assert(λ > 1) #λ must be greater than 1
+  @assert(λ > 1)
   reset!(stats)
   start_time = time()
   set_time!(stats, 0.0)
@@ -201,7 +200,6 @@ function SolverCore.solve!(
   ∇fn = solver.gn #current 
   s = solver.s
   H = solver.H
-  shifted_H = solver.shifted_H
   Hs = solver.Hs
   σk = solver.σ
   μk = solver.μ
@@ -223,19 +221,42 @@ function SolverCore.solve!(
   # Stopping criterion: 
   fmin = min(-one(T), f0) / eps(T)
   unbounded = f0 < fmin
-  
+
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
 
   if optimal
     @info("Optimal point found at initial point")
-    @info @sprintf "%5s  %9s  %7s  %7s  %7s  %7s  %1s" "iter" "f" "‖∇f‖" "μ" "σ" "ρ" ""
-    @info @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %+7.1e  %1s" stats.iter stats.objective norm_∇fk μk σk ρk ""
+    @info log_header(
+      [:iter, :f, :grad_norm, :mu, :sigma, :rho, :dir],
+      [Int, Float64, Float64, Float64, Float64, Float64, String],
+      hdr_override = Dict(
+        :f => "f(x)",
+        :grad_norm => "‖∇f‖",
+        :mu => "μ",
+        :sigma => "σ",
+        :rho => "ρ",
+        :dir => "DIR",
+      ),
+    )
+
+    # Define and log the row information with corresponding data values
+    @info log_row([stats.iter, stats.objective, norm_∇fk, μk, σk, ρk, ""])
   end
   if verbose > 0 && mod(stats.iter, verbose) == 0
-    @info @sprintf "%5s  %9s  %7s  %7s  %7s  %7s  %1s" "iter" "f" "‖∇f‖" "μ" "σ" "ρ" ""
-    infoline =
-      @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %+7.1e  %1s" stats.iter stats.objective norm_∇fk μk σk ρk ""
+    @info log_header(
+      [:iter, :f, :grad_norm, :mu, :sigma, :rho, :dir],
+      [Int, Float64, Float64, Float64, Float64, Float64, String],
+      hdr_override = Dict(
+        :f => "f(x)",
+        :grad_norm => "‖∇f‖",
+        :mu => "μ",
+        :sigma => "σ",
+        :rho => "ρ",
+        :dir => "DIR",
+      ),
+    )
+    @info log_row([stats.iter, stats.objective, norm_∇fk, μk, σk, ρk, ""])
   end
 
   set_status!(
@@ -256,7 +277,7 @@ function SolverCore.solve!(
 
   done = stats.status != :unknown
   cgtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * cgtol))
-  
+
   local ρk
   while !done
     ∇fk .*= -1
@@ -317,11 +338,16 @@ function SolverCore.solve!(
 
     optimal = norm_∇fk ≤ ϵ
 
-    if verbose > 0 && mod(stats.iter, verbose) == 0 #TODO change it in the verbose callback #TODO turn off and on as a flag in the callback
-      @info infoline
-      σ_stat = step_accepted ? "↘" : "↗"
-      infoline =
-        @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %+7.1e  %1s" stats.iter stats.objective norm_∇fk μk σk ρk σ_stat
+    if verbose > 0 && mod(stats.iter, verbose) == 0
+      @info log_row([
+        stats.iter,            # Current iteration number
+        stats.objective,       # Objective function value
+        norm_∇fk,              # Gradient norm
+        μk,                    # Mu value
+        σk,                    # Sigma value
+        ρk,                    # Rho value
+        step_accepted ? "↘" : "↗", # Step acceptance status
+      ])
     end
     if stats.status == :user
       done = true
@@ -353,12 +379,12 @@ function subsolve!(R2N::R2NSolver, s, atol, n, subsolver_verbose)
   H = R2N.H
   subsolver_type = R2N.subsolver_type
   σ = R2N.σ
-  shifted_H = R2N.shifted_H
+  opI = R2N.opI
 
   if subsolver_type isa MinresSolver
     minres!(
       subsolver_type,
-      (H + σ * shifted_H), #A
+      H,
       ∇f, #b 
       λ = σ,
       itmax = 2 * n,
@@ -370,7 +396,7 @@ function subsolve!(R2N::R2NSolver, s, atol, n, subsolver_verbose)
   elseif subsolver_type isa KrylovSolver
     Krylov.solve!(
       subsolver_type,
-      (H + σ * shifted_H),
+      H + opI * σ,
       ∇f,
       atol = atol,
       rtol = cgtol,
