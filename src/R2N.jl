@@ -278,7 +278,6 @@ function SolverCore.solve!(
   done = stats.status != :unknown
   cgtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * cgtol))
 
-  local ρk
   while !done
     ∇fk .*= -1
     subsolve!(solver, s, zero(T), n, subsolver_verbose)
