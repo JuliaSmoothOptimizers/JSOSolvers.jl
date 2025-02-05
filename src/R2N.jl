@@ -190,11 +190,6 @@ function SolverCore.solve!(
     error("Unsupported subsolver type, ShiftedLBFGSSolver is only can be used by LBFGSModel")
   end
   @assert(λ > 1) #λ must be greater than 1
-  #TODO make sure that we have a shifted solver for LSR1Model
-  # if isa(nlp, LSR1Model)
-  #   @info "only solver allowed is trunked CG for LSR1Model"
-  #   solver.subsolver_type = CrSolver
-  # end
   reset!(stats)
   start_time = time()
   set_time!(stats, 0.0)
@@ -261,7 +256,8 @@ function SolverCore.solve!(
 
   done = stats.status != :unknown
   cgtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * cgtol))
-
+  
+  local ρk
   while !done
     ∇fk .*= -1
     subsolve!(solver, s, zero(T), n, subsolver_verbose)
