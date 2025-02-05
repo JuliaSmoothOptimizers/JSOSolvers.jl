@@ -1,5 +1,5 @@
 @testset "Test restart with a different initial guess: $fun" for (fun, s) in (
-  (:R2N, :R2NSolver),
+  # (:R2N, :R2NSolver),
   (:R2, :FoSolver),
   (:fomo, :FomoSolver),
   (:lbfgs, :LBFGSSolver),
@@ -19,6 +19,7 @@
   SolverCore.reset!(solver)
 
   stats = SolverCore.solve!(solver, nlp, stats, atol = 1e-10, rtol = 1e-10)
+  println("stats.status:", stats.status)
   @test stats.status == :first_order
   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)
 end

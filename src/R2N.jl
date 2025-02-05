@@ -142,13 +142,18 @@ function R2NSolver(
 end
 
 function SolverCore.reset!(solver::R2NSolver{T}) where {T}
-  fill!(solver.obj_vec, typemin(T))
+#   fill!(solver.obj_vec, typemin(T))
+#   solver.σ = zero(T)
+#   solver.μ = zero(T)
+  solver.cgtol = one(T)
+  reset!(solver.H)
   solver
 end
 function SolverCore.reset!(solver::R2NSolver{T}, nlp::AbstractNLPModel) where {T}
   fill!(solver.obj_vec, typemin(T))
+  solver.σ = zero(T)
   @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
-  solver.H = isa(nlp, QuasiNewtonModel) ? nlp.op : hess_op!(nlp, x, Hs)
+  solver.H = isa(nlp, QuasiNewtonModel) ? nlp.op : hess_op!(nlp, solver.x, solver.Hs)
   solver.shifted_H = LinearOperator(Matrix{T}(I, nlp.meta.nvar, nlp.meta.nvar))
   solver.cgtol = one(T)
   solver
@@ -172,7 +177,7 @@ function SolverCore.solve!(
   x::V = nlp.meta.x0,
   atol::T = √eps(T),
   rtol::T = √eps(T),
-  η1 = eps(T)^(1 / 4),
+  η1 = T(0.0001),
   η2 = T(0.001),
   λ = T(2), #>1
   σmin = zero(T),# μmin = σmin to match the paper
