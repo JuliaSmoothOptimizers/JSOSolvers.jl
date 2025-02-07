@@ -31,12 +31,14 @@ end
 if Sys.isunix()
   @testset "Allocation tests" begin
     @testset "$symsolver" for symsolver in
-                              (:LBFGSSolver, :FoSolver, :FomoSolver, :TrunkSolver, :TronSolver, :R2NSolver)
+                              (:LBFGSSolver, :FoSolver, :FomoSolver, :TrunkSolver, :TronSolver, :R2NSolver, :R2NExactSolver)
       for model in NLPModelsTest.nlp_problems
         nlp = eval(Meta.parse(model))()
         if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolver))
           if (symsolver == :FoSolver || symsolver == :FomoSolver)
             solver = eval(symsolver)(nlp; M = 2) # nonmonotone configuration allocates extra memory
+          elseif symsolver == :R2NExactSolver
+            solver = eval(:R2NExactSolver)(LBFGSModel(nlp), subsolver_type = JSOSolvers.ShiftedLBFGSSolver)
           else
             solver = eval(symsolver)(nlp)
           end

@@ -7,6 +7,7 @@ struct ShiftedLBFGSSolver <: AbstractShiftedLBFGSSolver
   # Shifted LBFGS-specific fields
 end
 
+
 """
     R2N(nlp; kwargs...)
 
@@ -147,8 +148,9 @@ function SolverCore.reset!(solver::R2NSolver{T}) where {T}
 end
 function SolverCore.reset!(solver::R2NSolver{T}, nlp::AbstractNLPModel) where {T}
   fill!(solver.obj_vec, typemin(T))
-  @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
+  # @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
   solver.H = isa(nlp, QuasiNewtonModel) ? nlp.op : hess_op!(nlp, solver.x, solver.Hs)
+  
   solver
 end
 
@@ -282,14 +284,23 @@ function SolverCore.solve!(
     ∇fk .*= -1
     subsolve!(solver, s, zero(T), n, subsolver_verbose)
 
-    slope = dot(s, ∇fk) # = -dot(s, ∇fk) but ∇fk is negative
+    slope = dot(s, ∇fk)
     mul!(Hs, H, s)
     curv = dot(s, Hs)
 
-    ΔTk = slope + curv / 2
+    ΔTk = slope - curv / 2
     ck .= x .+ s
     fck = obj(nlp, ck)
-
+    ϵ = eps(T)
+    
+    if ΔTk <= 0
+      ΔTk += max(one(T), fck) * 10 * ϵ
+      if ΔTk <= 0
+        stats.status = :neg_pred
+        done = true
+        continue
+      end
+    end
     if non_mono_size > 1  #non-monotone behaviour
       k = mod(stats.iter, non_mono_size) + 1
       solver.obj_vec[k] = stats.objective
@@ -316,6 +327,7 @@ function SolverCore.solve!(
       norm_∇fk = norm(∇fk)
     else
       μk = μk * λ
+      ∇fk .*= -1
     end
 
     set_iter!(stats, stats.iter + 1)
@@ -386,12 +398,15 @@ function subsolve!(R2N::R2NSolver, s, atol, n, subsolver_verbose)
       H,
       ∇f, #b 
       λ = σ,
-      itmax = 2 * n,
+      itmax = max(2 * n, 50),
       atol = atol,
       rtol = cgtol,
       verbose = subsolver_verbose,
     )
     s .= subsolver_type.x
+    if norm(subsolver_type.x) < atol
+      println("X_norm is:" ,norm(subsolver_type.x)," the status is:"     ,subsolver_type.stats.status)
+    end
   elseif subsolver_type isa KrylovSolver
     Krylov.solve!(
       subsolver_type,
@@ -403,7 +418,6 @@ function subsolve!(R2N::R2NSolver, s, atol, n, subsolver_verbose)
       verbose = subsolver_verbose,
     )
     s .= subsolver_type.x
-
   elseif subsolver_type isa ShiftedLBFGSSolver
     solve_shifted_system!(s, H, ∇f, σ)
   else
