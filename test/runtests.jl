@@ -18,37 +18,53 @@ using JSOSolvers
 end
 
 @testset "Test iteration limit" begin
-  @testset "$fun" for fun in (R2, R2N, fomo, lbfgs, tron, trunk)
+  @testset "$name" for (name, solver) in [
+    ("trunk", trunk),
+    ("lbfgs", lbfgs),
+    ("tron", tron),
+    ("R2", R2),
+    # ("R2N", R2N),
+    ("R2N_exact", (nlp; kwargs...) -> R2N(LBFGSModel(nlp), subsolver_type = JSOSolvers.ShiftedLBFGSSolver; kwargs...)),
+    ("fomo", fomo),
+  ]
     f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
     nlp = ADNLPModel(f, [-1.2; 1.0])
-
-    stats = eval(fun)(nlp, max_iter = 1)
+    stats = eval(solver)(nlp, max_iter = 1)
+    stats = solver(nlp, max_iter = 1)
     @test stats.status == :max_iter
   end
+ 
 
   @testset "$(fun)-NLS" for fun in (tron, trunk)
     f(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
     nlp = ADNLSModel(f, [-1.2; 1.0], 2)
-
     stats = eval(fun)(nlp, max_iter = 1)
     @test stats.status == :max_iter
   end
 end
 
 @testset "Test unbounded below" begin
-  @testset "$fun" for fun in (R2, R2N, fomo, lbfgs, tron, trunk)
+  @testset "$name" for (name, solver) in [
+    ("trunk", trunk),
+    ("lbfgs", lbfgs),
+    ("tron", tron),
+    ("R2", R2),
+    # ("R2N", R2N),
+    ("R2N_exact", (nlp; kwargs...) -> R2N(LBFGSModel(nlp), subsolver_type = JSOSolvers.ShiftedLBFGSSolver; kwargs...)),
+    ("fomo", fomo),
+  ]
     T = Float64
     x0 = [T(0)]
     f(x) = -exp(x[1])
     nlp = ADNLPModel(f, x0)
-
-    stats = eval(fun)(nlp)
+    stats = solver(nlp)
     @test stats.status == :unbounded
     @test stats.objective < -one(T) / eps(T)
   end
 end
 
 include("restart.jl")
+include("test_edge_cases.jl")
 include("callback.jl")
 include("consistency.jl")
 include("test_solvers.jl")
@@ -92,15 +108,5 @@ end
     M[:] = DiagPrecon(solver.x)
   end
   stats = trunk(nlp, callback = callback, M = M)
-  @test stats.status == :first_order
-end
-
-@testset "Checking Exact Subsolver R2N" begin
-  f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
-  nlp = ADNLPModel(f, [-1.2; 1.0])
-  X = [nlp.meta.x0[1]]
-  Y = [nlp.meta.x0[2]]
-
-  stats = R2N(LBFGSModel(nlp))
   @test stats.status == :first_order
 end
