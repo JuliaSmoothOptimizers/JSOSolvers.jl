@@ -1,4 +1,6 @@
 @testset "Test restart with a different initial guess: $fun" for (fun, s) in (
+  # (:R2N, :R2NSolver),
+  (:R2N_exact, :R2NSolver),
   (:R2, :FoSolver),
   (:fomo, :FomoSolver),
   (:lbfgs, :LBFGSSolver),
@@ -7,9 +9,15 @@
 )
   f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
   nlp = ADNLPModel(f, [-1.2; 1.0])
+  if fun == :R2N_exact
+    nlp = LBFGSModel(nlp)
+    solver = eval(s)(nlp,subsolver_type = JSOSolvers.ShiftedLBFGSSolver)
+  else 
+    solver = eval(s)(nlp)
+  end
 
   stats = GenericExecutionStats(nlp)
-  solver = eval(s)(nlp)
+
   stats = SolverCore.solve!(solver, nlp, stats)
   @test stats.status == :first_order
   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)
@@ -44,6 +52,8 @@ end
 end
 
 @testset "Test restart with a different problem: $fun" for (fun, s) in (
+  # (:R2N, :R2NSolver),
+  (:R2N_exact, :R2NSolver),
   (:R2, :FoSolver),
   (:fomo, :FomoSolver),
   (:lbfgs, :LBFGSSolver),
@@ -52,15 +62,25 @@ end
 )
   f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
   nlp = ADNLPModel(f, [-1.2; 1.0])
+  if fun == :R2N_exact
+    nlp = LBFGSModel(nlp)
+    solver = eval(s)(nlp,subsolver_type = JSOSolvers.ShiftedLBFGSSolver)
+  else 
+    solver = eval(s)(nlp) 
+  end
 
   stats = GenericExecutionStats(nlp)
-  solver = eval(s)(nlp)
   stats = SolverCore.solve!(solver, nlp, stats)
   @test stats.status == :first_order
   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)
 
   f2(x) = (x[1])^2 + 4 * (x[2] - x[1]^2)^2
   nlp = ADNLPModel(f2, [-1.2; 1.0])
+  if fun == :R2N_exact
+    nlp = LBFGSModel(nlp)
+  else 
+    solver = eval(s)(nlp) 
+  end
   SolverCore.reset!(solver, nlp)
 
   stats = SolverCore.solve!(solver, nlp, stats, atol = 1e-10, rtol = 1e-10)
