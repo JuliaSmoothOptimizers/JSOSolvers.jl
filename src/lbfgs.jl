@@ -127,11 +127,11 @@ function LBFGSSolver(nlp::M; kwargs...) where {T, V, M <: AbstractNLPModel{T, V}
 end
 
 function SolverCore.reset!(solver::LBFGSSolver)
-  reset!(solver.H)
+  LinearOperators.reset!(solver.H)
 end
 
 function SolverCore.reset!(solver::LBFGSSolver, nlp::AbstractNLPModel)
-  reset!(solver.H)
+  LinearOperators.reset!(solver.H)
   solver.h = LineModel(nlp, solver.x, solver.d)
   solver
 end
@@ -169,7 +169,7 @@ function SolverCore.solve!(
     error("lbfgs should only be called for unconstrained problems. Try tron instead")
   end
 
-  reset!(stats)
+  SolverCore.reset!(stats)
   start_time = time()
   set_time!(stats, 0.0)
 
@@ -187,7 +187,7 @@ function SolverCore.solve!(
   d = solver.d
   h = solver.h
   H = solver.H
-  reset!(H)
+  LinearOperators.reset!(H)
 
   f, ∇f = objgrad!(nlp, x, ∇f)
 

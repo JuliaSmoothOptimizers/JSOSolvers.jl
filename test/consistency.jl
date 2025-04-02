@@ -12,11 +12,11 @@ function consistency()
 
     @testset "NLP with $mtd" for mtd in [trunk, lbfgs, tron, R2, fomo]
       with_logger(NullLogger()) do
-        reset!(unlp)
+        NLPModels.reset!(unlp)
         stats = mtd(unlp; args...)
         @test stats isa GenericExecutionStats
         @test stats.status == :first_order
-        reset!(unlp)
+        NLPModels.reset!(unlp)
         stats = mtd(unlp; max_eval = 1)
         @test stats.status == :max_eval
         slow_nlp = ADNLPModel(x -> begin
@@ -30,7 +30,7 @@ function consistency()
 
     @testset "Quasi-Newton NLP with $mtd" for mtd in [trunk, lbfgs, tron, R2, fomo]
       with_logger(NullLogger()) do
-        reset!(qnlp)
+        NLPModels.reset!(qnlp)
         stats = mtd(qnlp; args...)
         @test stats isa GenericExecutionStats
         @test stats.status == :first_order
@@ -42,7 +42,7 @@ function consistency()
         stats = mtd(unls; args...)
         @test stats isa GenericExecutionStats
         @test stats.status == :first_order
-        reset!(unls)
+        NLPModels.reset!(unls)
         stats = mtd(unls; max_eval = 1)
         @test stats.status == :max_eval
         slow_nls = ADNLSModel(x -> begin

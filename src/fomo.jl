@@ -264,7 +264,7 @@ function SolverCore.reset!(solver::FomoSolver{T}) where {T}
   solver
 end
 
-SolverCore.reset!(solver::FomoSolver, ::AbstractNLPModel) = reset!(solver)
+SolverCore.reset!(solver::FomoSolver, ::AbstractNLPModel) = SolverCore.reset!(solver)
 
 """
     fo(nlp; kwargs...)
@@ -407,7 +407,7 @@ function SolverCore.reset!(solver::FoSolver{T}) where {T}
   solver
 end
 
-SolverCore.reset!(solver::FoSolver, ::AbstractNLPModel) = reset!(solver)
+SolverCore.reset!(solver::FoSolver, ::AbstractNLPModel) = SolverCore.reset!(solver)
 
 function SolverCore.solve!(
   solver::Union{FoSolver, FomoSolver},
@@ -440,7 +440,7 @@ function SolverCore.solve!(
   use_momentum = typeof(solver) <: FomoSolver
   is_r2 = typeof(step_backend) <: r2_step
 
-  reset!(stats)
+  SolverCore.reset!(stats)
   start_time = time()
   set_time!(stats, 0.0)
 

@@ -224,7 +224,7 @@ end
 function SolverCore.reset!(solver::TronSolverNLS, nlp::AbstractNLPModel)
   solver.A = jac_op_residual!(nlp, solver.xc, solver.Av, solver.Atv)
   solver.AZ = solver.A * solver.ls_op
-  reset!(solver)
+  SolverCore.reset!(solver)
   solver
 end
 
@@ -285,7 +285,7 @@ function SolverCore.solve!(
   μ₁ = value(solver.params.μ₁)
   σ = value(solver.params.σ)
 
-  reset!(stats)
+  SolverCore.reset!(stats)
   ℓ = nlp.meta.lvar
   u = nlp.meta.uvar
   n = nlp.meta.nvar
