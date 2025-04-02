@@ -48,8 +48,8 @@ if Sys.isunix()
           end
           with_logger(NullLogger()) do
             SolverCore.solve!(solver, nlp, stats)
-            reset!(solver)
-            reset!(nlp)
+            SolverCore.reset!(solver)
+            NLPModels.reset!(nlp)
             al = @wrappedallocs SolverCore.solve!(solver, nlp, stats)
             @test al == 0
           end
@@ -65,8 +65,8 @@ if Sys.isunix()
           stats = GenericExecutionStats(nlp)
           with_logger(NullLogger()) do
             SolverCore.solve!(solver, nlp, stats)
-            reset!(solver)
-            reset!(nlp)
+            SolverCore.reset!(solver)
+            NLPModels.reset!(nlp)
             al = @wrappedallocs SolverCore.solve!(solver, nlp, stats)
             @test al == 0
           end

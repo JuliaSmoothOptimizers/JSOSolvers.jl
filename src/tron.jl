@@ -259,7 +259,7 @@ function SolverCore.solve!(
   μ₁ = value(solver.params.μ₁)
   σ = value(solver.params.σ)
 
-  reset!(stats)
+  SolverCore.reset!(stats)
   ℓ = nlp.meta.lvar
   u = nlp.meta.uvar
   n = nlp.meta.nvar

@@ -207,7 +207,7 @@ function SolverCore.solve!(
   monotone = value(solver.params.monotone)
   nm_itmax = value(solver.params.nm_itmax)
 
-  reset!(stats)
+  SolverCore.reset!(stats)
   start_time = time()
   set_time!(stats, 0.0)
 
