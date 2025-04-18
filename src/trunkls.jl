@@ -1,6 +1,6 @@
 export TrunkSolverNLS, TRUNKLSParameterSet
 
-const trunkls_allowed_subsolvers = [CglsSolver, CrlsSolver, LsqrSolver, LsmrSolver]
+const trunkls_allowed_subsolvers = (:cgls, :crls, :lsqr, :lsmr)
 
 trunk(nlp::AbstractNLSModel; variant = :GaussNewton, kwargs...) =
   trunk(Val(variant), nlp; kwargs...)
@@ -58,7 +58,7 @@ A pure Julia implementation of a trust-region solver for nonlinear least-squares
 
 For advanced usage, first define a `TrunkSolverNLS` to preallocate the memory used in the algorithm, and then call `solve!`:
 
-    solver = TrunkSolverNLS(nls, subsolver_type::Type{<:KrylovSolver} = LsmrSolver)
+    solver = TrunkSolverNLS(nls, subsolver::Symbol = :lsmr)
     solve!(solver, nls; kwargs...)
 
 # Arguments
@@ -78,7 +78,7 @@ The keyword arguments may include
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver.
 
-See `JSOSolvers.trunkls_allowed_subsolvers` for a list of available `KrylovSolver`.
+See `JSOSolvers.trunkls_allowed_subsolvers` for a list of available Krylov solvers.
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -125,7 +125,7 @@ stats = solve!(solver, nls)
 mutable struct TrunkSolverNLS{
   T,
   V <: AbstractVector{T},
-  Sub <: KrylovSolver{T, T, V},
+  Sub <: KrylovWorkspace{T, T, V},
   Op <: AbstractLinearOperator{T},
 } <: AbstractOptimizationSolver
   x::V
@@ -148,10 +148,10 @@ function TrunkSolverNLS(
   bk_max::Int = get(TRUNKLS_bk_max, nlp),
   monotone::Bool = get(TRUNKLS_monotone, nlp),
   nm_itmax::Int = get(TRUNKLS_nm_itmax, nlp),
-  subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
+  subsolver::Symbol = :lsmr,
 ) where {T, V <: AbstractVector{T}}
   params = TRUNKLSParameterSet(nlp; bk_max = bk_max, monotone = monotone, nm_itmax = nm_itmax)
-  subsolver_type in trunkls_allowed_subsolvers ||
+  subsolver in trunkls_allowed_subsolvers ||
     error("subproblem solver must be one of $(trunkls_allowed_subsolvers)")
 
   nvar = nlp.meta.nvar
@@ -170,8 +170,8 @@ function TrunkSolverNLS(
   A = jac_op_residual!(nlp, x, Av, Atv)
   Op = typeof(A)
 
-  subsolver = subsolver_type(nequ, nvar, V)
-  Sub = typeof(subsolver)
+  workspace = krylov_workspace(Val(subsolver), nequ, nvar, V)
+  Sub = typeof(workspace)
 
   return TrunkSolverNLS{T, V, Sub, Op}(
     x,
@@ -185,7 +185,7 @@ function TrunkSolverNLS(
     Av,
     Atv,
     A,
-    subsolver,
+    workspace,
     params,
   )
 end
@@ -206,10 +206,10 @@ end
   ::Val{:GaussNewton},
   nlp::AbstractNLSModel;
   x::V = nlp.meta.x0,
-  subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
+  subsolver::Symbol = :lsmr,
   kwargs...,
 ) where {V}
-  solver = TrunkSolverNLS(nlp, subsolver_type = subsolver_type)
+  solver = TrunkSolverNLS(nlp; subsolver)
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
@@ -320,7 +320,7 @@ function SolverCore.solve!(
     # In this particular case, we may use an operator with preallocation.
     cgtol = max(rtol, min(T(0.1), 9 * cgtol / 10, sqrt(∇fNorm2)))
     temp .= .-r
-    Krylov.solve!(
+    krylov_solve!(
       subsolver,
       A,
       temp,

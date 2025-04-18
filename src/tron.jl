@@ -136,7 +136,7 @@ mutable struct TronSolver{
 
   ifix::BitVector
 
-  cg_solver::CgSolver{T, T, V}
+  cg_solver::CgWorkspace{T, T, V}
   cg_rhs::V
   cg_op_diag::V
   cg_op::LinearOperator{T}
@@ -175,7 +175,7 @@ function TronSolver(
   cg_op = opDiagonal(cg_op_diag)
 
   ZHZ = cg_op' * H * cg_op
-  cg_solver = CgSolver(ZHZ, Hs)
+  workspace = CgWorkspace(ZHZ, Hs)
   return TronSolver{T, V, Op, typeof(ZHZ)}(
     x,
     xc,
@@ -189,7 +189,7 @@ function TronSolver(
     H,
     tr,
     ifix,
-    cg_solver,
+    workspace,
     cg_rhs,
     cg_op_diag,
     cg_op,
@@ -637,7 +637,7 @@ function projected_newton!(
       cg_op_diag[i] = ifix[i] ? 0 : 1 # implictly changes cg_op and so ZHZ
     end
 
-    Krylov.cg!(
+    cg!(
       cg_solver,
       ZHZ,
       cgs_rhs,

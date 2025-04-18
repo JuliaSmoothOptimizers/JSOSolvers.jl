@@ -15,14 +15,14 @@ SolverParameters = "d076d87d-d1f9-4ea3-a44b-64b4cdd1e470"
 SolverTools = "b5612192-2639-5dc1-abfe-fbedd65fab29"
 
 [compat]
-Krylov = "0.9.6"
+Krylov = "0.10.0"
 LinearOperators = "2.0"
 NLPModels = "0.21"
 NLPModelsModifiers = "0.7"
 SolverCore = "0.3"
 SolverParameters = "0.1"
 SolverTools = "0.9"
-julia = "1.6"
+julia = "1.10"
 
 [extras]
 ADNLPModels = "54578032-b7ea-4c30-94aa-7cbd1cce6c9a"
