@@ -357,7 +357,7 @@ mutable struct R2Solver{T, V} <: AbstractOptimizationSolver end
 
 Base.@deprecate R2Solver(nlp::AbstractNLPModel; kwargs...) FoSolver(
   nlp::AbstractNLPModel;
-  M = FOMO_M,
+  M = get(FOMO_M, nlp),
   kwargs...,
 )
 
