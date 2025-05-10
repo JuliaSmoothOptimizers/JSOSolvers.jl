@@ -1,6 +1,6 @@
 export TronSolverNLS, TRONLSParameterSet
 
-const tronls_allowed_subsolvers = [CglsSolver, CrlsSolver, LsqrSolver, LsmrSolver]
+const tronls_allowed_subsolvers = (:cgls, :crls, :lsqr, :lsmr)
 
 tron(nls::AbstractNLSModel; variant = :GaussNewton, kwargs...) = tron(Val(variant), nls; kwargs...)
 
@@ -57,14 +57,14 @@ nonlinear least-squares problems:
     min ½‖F(x)‖²    s.t.    ℓ ≦ x ≦ u
 
 For advanced usage, first define a `TronSolverNLS` to preallocate the memory used in the algorithm, and then call `solve!`:
-    solver = TronSolverNLS(nls, subsolver_type::Type{<:KrylovSolver} = LsmrSolver; kwargs...)
+    solver = TronSolverNLS(nls, subsolver::Symbol=:lsmr; kwargs...)
     solve!(solver, nls; kwargs...)
 
 # Arguments
 - `nls::AbstractNLSModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
-- `subsolver_type::Symbol = LsmrSolver`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.tronls_allowed_subsolvers` for a list.
+- `subsolver::Symbol = :lsmr`: `Krylov.jl` method used as subproblem solver, see `JSOSolvers.tronls_allowed_subsolvers` for a list.
 - `μ₀::T = $(TRONLS_μ₀)`: algorithm parameter, see [`TRONLSParameterSet`](@ref).
 - `μ₁::T = $(TRONLS_μ₁)`: algorithm parameter, see [`TRONLSParameterSet`](@ref).
 - `σ::T = $(TRONLS_σ)`: algorithm parameter, see [`TRONLSParameterSet`](@ref).
@@ -155,11 +155,11 @@ function TronSolverNLS(
   μ₀::T = get(TRONLS_μ₀, nlp),
   μ₁::T = get(TRONLS_μ₁, nlp),
   σ::T = get(TRONLS_σ, nlp),
-  subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
+  subsolver::Symbol = :lsmr,
   max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
   kwargs...,
 ) where {T, V <: AbstractVector{T}}
-  subsolver_type in tronls_allowed_subsolvers ||
+  subsolver in tronls_allowed_subsolvers ||
     error("subproblem solver must be one of $(tronls_allowed_subsolvers)")
 
   params = TRONLSParameterSet(nlp; μ₀ = μ₀, μ₁ = μ₁, σ = σ)
@@ -189,7 +189,7 @@ function TronSolverNLS(
   ls_op = opDiagonal(ls_op_diag)
 
   AZ = A * ls_op
-  ls_subsolver = subsolver_type(AZ, As)
+  ls_subsolver = krylov_workspace(Val(subsolver), AZ, As)
   Sub = typeof(ls_subsolver)
 
   return TronSolverNLS{T, V, Sub, typeof(A), typeof(AZ)}(
@@ -235,7 +235,7 @@ end
   μ₀::Real = get(TRONLS_μ₀, nlp),
   μ₁::Real = get(TRONLS_μ₁, nlp),
   σ::Real = get(TRONLS_σ, nlp),
-  subsolver_type::Type{<:KrylovSolver} = LsmrSolver,
+  subsolver::Symbol = :lsmr,
   kwargs...,
 ) where {T, V}
   dict = Dict(kwargs)
@@ -246,7 +246,7 @@ end
     μ₀ = μ₀,
     μ₁ = μ₁,
     σ = σ,
-    subsolver_type = subsolver_type;
+    subsolver = subsolver;
     subsolver_kwargs...,
   )
   for k in subsolver_keys
@@ -670,7 +670,7 @@ function projected_gauss_newton!(
     end
 
     ls_rhs .= .-As .- Fx
-    Krylov.solve!(
+    krylov_solve!(
       ls_subsolver,
       AZ,
       ls_rhs,
