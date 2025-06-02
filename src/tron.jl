@@ -119,6 +119,7 @@ stats = solve!(solver, nlp)
 mutable struct TronSolver{
   T,
   V <: AbstractVector{T},
+  Sub <: KrylovWorkspace{T, T, V},
   Op <: AbstractLinearOperator{T},
   Aop <: AbstractLinearOperator{T},
 } <: AbstractOptimizationSolver
@@ -136,7 +137,7 @@ mutable struct TronSolver{
 
   ifix::BitVector
 
-  cg_solver::CgWorkspace{T, T, V}
+  cg_solver::Sub
   cg_rhs::V
   cg_op_diag::V
   cg_op::LinearOperator{T}
@@ -151,6 +152,7 @@ function TronSolver(
   μ₁::T = get(TRON_μ₁, nlp),
   σ::T = get(TRON_σ, nlp),
   max_radius::T = min(one(T) / sqrt(2 * eps(T)), T(100)),
+  subsolver::Symbol = :cg,
   kwargs...,
 ) where {T, V <: AbstractVector{T}}
   params = TRONParameterSet(nlp; μ₀ = μ₀, μ₁ = μ₁, σ = σ)
@@ -175,8 +177,8 @@ function TronSolver(
   cg_op = opDiagonal(cg_op_diag)
 
   ZHZ = cg_op' * H * cg_op
-  workspace = CgWorkspace(ZHZ, Hs)
-  return TronSolver{T, V, Op, typeof(ZHZ)}(
+  workspace = krylov_workspace(Val(subsolver), ZHZ, Hs)
+  return TronSolver{T, V, typeof(workspace), Op, typeof(ZHZ)}(
     x,
     xc,
     temp,
