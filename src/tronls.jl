@@ -241,14 +241,7 @@ end
   dict = Dict(kwargs)
   subsolver_keys = intersect(keys(dict), tron_keys)
   subsolver_kwargs = Dict(k => dict[k] for k in subsolver_keys)
-  solver = TronSolverNLS(
-    nlp,
-    μ₀ = μ₀,
-    μ₁ = μ₁,
-    σ = σ,
-    subsolver = subsolver;
-    subsolver_kwargs...,
-  )
+  solver = TronSolverNLS(nlp, μ₀ = μ₀, μ₁ = μ₁, σ = σ, subsolver = subsolver; subsolver_kwargs...)
   for k in subsolver_keys
     pop!(dict, k)
   end
