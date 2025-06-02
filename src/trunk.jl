@@ -53,7 +53,7 @@ A trust-region solver for unconstrained optimization using exact second derivati
 
 For advanced usage, first define a `TrunkSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
 
-    solver = TrunkSolver(nlp, subsolver_type::Type{<:KrylovSolver} = CgSolver)
+    solver = TrunkSolver(nlp, subsolver::Symbol = :cg)
     solve!(solver, nlp; kwargs...)
 
 # Arguments
@@ -116,7 +116,7 @@ stats = solve!(solver, nlp)
 mutable struct TrunkSolver{
   T,
   V <: AbstractVector{T},
-  Sub <: KrylovSolver{T, T, V},
+  Sub <: KrylovWorkspace{T, T, V},
   Op <: AbstractLinearOperator{T},
 } <: AbstractOptimizationSolver
   x::V
@@ -136,7 +136,7 @@ function TrunkSolver(
   bk_max::Int = get(TRUNK_bk_max, nlp),
   monotone::Bool = get(TRUNK_monotone, nlp),
   nm_itmax::Int = get(TRUNK_nm_itmax, nlp),
-  subsolver_type::Type{<:KrylovSolver} = CgSolver,
+  subsolver::Symbol = :cg,
 ) where {T, V <: AbstractVector{T}}
   params = TRUNKParameterSet(nlp; bk_max = bk_max, monotone = monotone, nm_itmax = nm_itmax)
   nvar = nlp.meta.nvar
@@ -146,12 +146,12 @@ function TrunkSolver(
   gt = V(undef, nvar)
   gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
   Hs = V(undef, nvar)
-  subsolver = subsolver_type(nvar, nvar, V)
-  Sub = typeof(subsolver)
+  workspace = krylov_workspace(Val(subsolver), nvar, nvar, V)
+  Sub = typeof(workspace)
   H = hess_op!(nlp, x, Hs)
   Op = typeof(H)
   tr = TrustRegion(gt, one(T))
-  return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, gn, Hs, subsolver, H, tr, params)
+  return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, gn, Hs, workspace, H, tr, params)
 end
 
 function SolverCore.reset!(solver::TrunkSolver)
@@ -172,10 +172,10 @@ end
   ::Val{:Newton},
   nlp::AbstractNLPModel;
   x::V = nlp.meta.x0,
-  subsolver_type::Type{<:KrylovSolver} = CgSolver,
+  subsolver::Symbol = :cg,
   kwargs...,
 ) where {V}
-  solver = TrunkSolver(nlp; subsolver_type = subsolver_type)
+  solver = TrunkSolver(nlp; subsolver)
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
@@ -284,7 +284,7 @@ function SolverCore.solve!(
     # In this particular case, we may use an operator with preallocation.
     cgtol = max(rtol, min(T(0.1), √∇fNormM, T(0.9) * cgtol))
     ∇f .*= -1
-    Krylov.solve!(
+    krylov_solve!(
       subsolver,
       H,
       ∇f,
