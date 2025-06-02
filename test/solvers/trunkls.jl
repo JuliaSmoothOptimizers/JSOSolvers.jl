@@ -4,7 +4,7 @@
   model = ADNLSModel(x -> [10 * (x[2] - x[1]^2), 1 - x[1]], [-2.0, 1.0], 2)
   for subsolver in JSOSolvers.trunkls_allowed_subsolvers
     stats = with_logger(NullLogger()) do
-      trunk(model, subsolver_type = subsolver)
+      trunk(model, subsolver = subsolver)
     end
     @test stats.status == :first_order
     @test stats.solution_reliable
@@ -16,7 +16,7 @@
     NLPModels.reset!(model)
   end
 
-  @test_throws ErrorException trunk(model, subsolver_type = MinresSolver)
+  @test_throws ErrorException trunk(model, subsolver = :minres)
 end
 
 @testset "Larger test" begin
@@ -28,7 +28,7 @@ end
   )
   for subsolver in JSOSolvers.trunkls_allowed_subsolvers
     stats = with_logger(NullLogger()) do
-      trunk(model, subsolver_type = subsolver)
+      trunk(model, subsolver = subsolver)
     end
     @test stats.status == :first_order
     @test stats.objective_reliable

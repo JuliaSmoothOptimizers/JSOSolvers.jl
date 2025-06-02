@@ -120,7 +120,7 @@ stats = solve!(solver, nls)
 mutable struct TronSolverNLS{
   T,
   V <: AbstractVector{T},
-  Sub <: KrylovSolver{T, T, V},
+  Sub <: KrylovWorkspace{T, T, V},
   Op <: AbstractLinearOperator{T},
   Aop <: AbstractLinearOperator{T},
 } <: AbstractOptimizationSolver
