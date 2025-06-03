@@ -79,7 +79,7 @@ The keyword arguments may include
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver.
 
-The keyword arguments of `TronSolver` are passed to the [`TRONTrustRegion`](https://github.com/JuliaSmoothOptimizers/SolverTools.jl/blob/main/src/trust-region/tron-trust-region.jl) constructor.
+The keyword arguments of `TronSolver` are passed to the [`TRONTrustRegion`](https://jso.dev/SolverTools.jl/stable/reference/#SolverTools.TRONTrustRegion) constructor.
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
