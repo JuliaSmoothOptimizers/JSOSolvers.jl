@@ -37,26 +37,34 @@ function consistency()
       end
     end
 
-    @testset "NLS with $mtd" for mtd in [trunk]
+    @testset "NLS with $mtd" for (mtd, solver) in [
+      ("trunk", trunk),
+      ("R2NLS", (unls; kwargs...) -> R2NLS(unls; kwargs...)),
+      ("R2NLS_CGLS", (unls; kwargs...) -> R2NLS(unls, subsolver_type = CglsSolver; kwargs...)),
+      ("R2NLS_LSQR", (unls; kwargs...) -> R2NLS(unls, subsolver_type = LsqrSolver; kwargs...)),
+      ("R2NLS_CRLS", (unls; kwargs...) -> R2NLS(unls, subsolver_type = LsqrSolver; kwargs...)),
+      ("R2NLS_LSMR", (unls; kwargs...) -> R2NLS(unls, subsolver_type = LsmrSolver; kwargs...)),
+      # ("R2NLS_QRMumps", (unls; kwargs...) -> R2NLS(unls, subsolver_type = QRMumpsSolver; kwargs...)),
+    ]
       with_logger(NullLogger()) do
-        stats = mtd(unls; args...)
+        stats = solver(unls; args...)
         @test stats isa GenericExecutionStats
         @test stats.status == :first_order
         NLPModels.reset!(unls)
-        stats = mtd(unls; max_eval = 1)
+        stats = solver(unls; max_eval = 1)
         @test stats.status == :max_eval
         slow_nls = ADNLSModel(x -> begin
           sleep(0.1)
           F(x)
         end, unls.meta.x0, nls_meta(unls).nequ)
-        stats = mtd(slow_nls; max_time = 0.0)
+        stats = solver(slow_nls; max_time = 0.0)
         @test stats.status == :max_time
       end
     end
 
-    @testset "Quasi-Newton NLS with $mtd" for mtd in [trunk]
+    @testset "Quasi-Newton NLS with $mtd" for (mtd, solver) in [("trunk", trunk)]
       with_logger(NullLogger()) do
-        stats = mtd(qnls; args...)
+        stats = solver(qnls; args...)
         @test stats isa GenericExecutionStats
         @test stats.status == :first_order
       end

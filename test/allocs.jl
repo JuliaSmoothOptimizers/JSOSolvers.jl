@@ -57,11 +57,32 @@ if Sys.isunix()
       end
     end
 
-    @testset "$symsolver" for symsolver in (:TrunkSolverNLS, :TronSolverNLS)
+    @testset "$name" for (name, symsolver) in (
+      (:TrunkSolverNLS, :TrunkSolverNLS),
+      (:R2NLSSolver, :R2NLSSolver),
+      (:R2NLSSolver_CG, :R2NLSSolver),
+      (:R2NLSSolver_LSQR, :R2NLSSolver),
+      (:R2NLSSolver_CR, :R2NLSSolver),
+      (:R2NLSSolver_LSMR, :R2NLSSolver),
+      # (:R2NLSSolver_QRMumps, :R2NLSSolver),
+      (:TronSolverNLS, :TronSolverNLS),
+    )
       for model in NLPModelsTest.nls_problems
         nlp = eval(Meta.parse(model))()
         if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolverNLS))
-          solver = eval(symsolver)(nlp)
+          if name == :R2NLSSolver_CG
+            solver = eval(symsolver)(nlp, subsolver_type = CglsSolver)
+          elseif name == :R2NLSSolver_LSQR
+            solver = eval(symsolver)(nlp, subsolver_type = LsqrSolver)
+          elseif name == :R2NLSSolver_CR
+            solver = eval(symsolver)(nlp, subsolver_type = CrlsSolver)
+          elseif name == :R2NLSSolver_LSMR
+            solver = eval(symsolver)(nlp, subsolver_type = LsmrSolver)
+          elseif name == :R2NLSSolver_QRMumps
+            solver = eval(symsolver)(nlp, subsolver_type = QRMumpsSolver)
+          else
+            solver = eval(symsolver)(nlp)
+          end
           stats = GenericExecutionStats(nlp)
           with_logger(NullLogger()) do
             SolverCore.solve!(solver, nlp, stats)

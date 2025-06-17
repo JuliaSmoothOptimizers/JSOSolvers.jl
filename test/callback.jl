@@ -56,6 +56,11 @@ end
     tron(nls, callback = cb)
   end
   @test stats.iter == 8
+
+  stats = with_logger(NullLogger()) do
+    R2NLS(nls, callback = cb)
+  end
+  @test stats.iter == 8
 end
 
 @testset "Testing Solver Values" begin
