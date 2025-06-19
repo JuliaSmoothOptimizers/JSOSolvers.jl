@@ -16,7 +16,7 @@ A solver structure for handling the linear least-squares subproblems within R2NL
 using the QRMumps package. This structure pre-allocates all necessary memory
 for the sparse matrix representation and the factorization.
 """
-mutable struct QRMumpsSolver{T, V} <: AbstractQRMumpsSolver
+mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
   # QRMumps structures
   spmat::Ref{qrm_spmat{T}}
   spfct::Ref{qrm_spfct{T}}
@@ -76,7 +76,7 @@ mutable struct QRMumpsSolver{T, V} <: AbstractQRMumpsSolver
 
 
     # 8. Create the solver object and set a finalizer for safe cleanup.
-    solver = new{T, V}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj)
+    solver = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj)
 
     finalizer(s -> begin
       qrm_spfct_free(s.spfct)
@@ -146,7 +146,7 @@ mutable struct R2NLSSolver{
   T,
   V,
   Op <: AbstractLinearOperator{T},
-  Sub <: Union{KrylovWorkspace{T, T, V}, QRMumpsSolver},
+  Sub <: Union{KrylovWorkspace{T, T, V}, QRMumpsSolver{T}},
 } <: AbstractOptimizationSolver
   x::V
   xt::V
@@ -543,7 +543,7 @@ end
 
 # Dispatch for QRMumpsSolver
 function subsolve!(
-  ls::QRMumpsSolver{T, V},
+  ls::QRMumpsSolver{T},
   R2NLS::R2NLSSolver{T, V},
   nlp::AbstractNLSModel{T, V},
   s::V,
