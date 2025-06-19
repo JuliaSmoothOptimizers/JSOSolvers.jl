@@ -26,18 +26,15 @@ mutable struct QRMumpsSolver{T, V} <: AbstractQRMumpsSolver
   jcn::Vector{Int}
   val::Vector{T}
 
-  # Temporary storage for Jacobian values
-  jac_vals::Vector{T}
-
   # Augmented RHS vector
-  b_aug::V
+  b_aug::Vector{T}
 
   # Problem dimensions
   m::Int
   n::Int
   nnzj::Int
 
-  function QRMumpsSolver(nlp::AbstractNLSModel{T, V}) where {T, V}
+  function QRMumpsSolver(nlp::AbstractNLSModel{T}) where {T}
     # Safely initialize QRMumps library
     if QRMUMPS_REF_COUNT[] == 0
       qrm_init()
@@ -54,7 +51,6 @@ mutable struct QRMumpsSolver{T, V} <: AbstractQRMumpsSolver
     irn = Vector{Int}(undef, nnzj + n)
     jcn = Vector{Int}(undef, nnzj + n)
     val = Vector{T}(undef, nnzj + n)
-    jac_vals = Vector{T}(undef, nnzj)
 
     # 3. Fill in the sparsity pattern of the Jacobian J(x)
     jac_structure_residual!(nlp, view(irn, 1:nnzj), view(jcn, 1:nnzj))
@@ -75,10 +71,12 @@ mutable struct QRMumpsSolver{T, V} <: AbstractQRMumpsSolver
     qrm_analyse!(spmat, spfct)
 
     # 7. Pre-allocate the augmented right-hand-side vector
-    b_aug = V(undef, m + n)
+    b_aug = Vector{T}(undef, m+n)
+    fill!(view(b_aug, (m+1):(m+n)), zero(T))
+
 
     # 8. Create the solver object and set a finalizer for safe cleanup.
-    solver = new{T, V}(spmat, spfct, irn, jcn, val, jac_vals, b_aug, m, n, nnzj)
+    solver = new{T, V}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj)
 
     finalizer(s -> begin
       qrm_spfct_free(s.spfct)
@@ -557,8 +555,7 @@ function subsolve!(
 ) where {T, V}
 
   # 1. Update Jacobian values at the current point x
-  jac_coord_residual!(nlp, R2NLS.x, ls.jac_vals)
-  ls.val[1:ls.nnzj] .= ls.jac_vals
+  jac_coord_residual!(nlp, R2NLS.x, view(ls.val, 1:ls.nnzj))
 
   # 2. Update regularization parameter σ
   sqrt_σ = sqrt(R2NLS.σ)
@@ -568,7 +565,7 @@ function subsolve!(
 
   # 3. Build the augmented right-hand side vector: b_aug = [-F(x); 0]
   ls.b_aug[1:m] .= .-R2NLS.Fx
-  fill!(view(ls.b_aug, (m+1):(m+n)), zero(T))
+  # fill!(view(ls.b_aug, (m+1):(m+n)), zero(T))
 
   # 4. Re-factorize the matrix with the updated numerical values.
   # The symbolic factorization is reused from the setup phase.
