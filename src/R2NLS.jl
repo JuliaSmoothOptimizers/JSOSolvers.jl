@@ -1,11 +1,96 @@
 export R2NLS, R2NLSSolver
 export QRMumpsSolver
-using QRMumps
+
+using QRMumps, LinearAlgebra, SparseArrays
+using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
+
+# A global reference counter to safely manage QRMumps initialization and finalization.
+const QRMUMPS_REF_COUNT = Ref(0)
 
 abstract type AbstractQRMumpsSolver end
 
-struct QRMumpsSolver <: AbstractQRMumpsSolver
-  # Placeholder for QRMumpsSolver
+"""
+    QRMumpsSolver
+
+A solver structure for handling the linear least-squares subproblems within R2NLS
+using the QRMumps package. This structure pre-allocates all necessary memory
+for the sparse matrix representation and the factorization.
+"""
+mutable struct QRMumpsSolver{T, V} <: AbstractQRMumpsSolver
+  # QRMumps structures
+  spmat::Ref{qrm_spmat{T}}
+  spfct::Ref{qrm_spfct{T}}
+
+  # COO storage for the augmented matrix [J; sqrt(σ) * I]
+  irn::Vector{Int}
+  jcn::Vector{Int}
+  val::Vector{T}
+
+  # Temporary storage for Jacobian values
+  jac_vals::Vector{T}
+
+  # Augmented RHS vector
+  b_aug::V
+
+  # Problem dimensions
+  m::Int
+  n::Int
+  nnzj::Int
+
+  function QRMumpsSolver(nlp::AbstractNLSModel{T, V}) where {T, V}
+    # Safely initialize QRMumps library
+    if QRMUMPS_REF_COUNT[] == 0
+      qrm_init()
+    end
+    QRMUMPS_REF_COUNT[] += 1
+
+    # 1. Get problem dimensions and Jacobian structure
+    meta_nls = nls_meta(nlp)
+    m, n = meta_nls.nequ, meta_nls.nvar
+    nnzj = meta_nls.nnzj
+
+    # 2. Allocate COO arrays for the augmented matrix [J; sqrt(σ)I]
+    # Total non-zeros = non-zeros in Jacobian (nnzj) + n diagonal entries for the identity block.
+    irn = Vector{Int}(undef, nnzj + n)
+    jcn = Vector{Int}(undef, nnzj + n)
+    val = Vector{T}(undef, nnzj + n)
+    jac_vals = Vector{T}(undef, nnzj)
+
+    # 3. Fill in the sparsity pattern of the Jacobian J(x)
+    jac_structure_residual!(nlp, view(irn, 1:nnzj), view(jcn, 1:nnzj))
+
+    # 4. Fill in the sparsity pattern for the √σ·Iₙ block
+    # This block lives in rows m+1 to m+n and columns 1 to n.
+    @inbounds for i = 1:n
+      irn[nnzj + i] = m + i
+      jcn[nnzj + i] = i
+    end
+
+    # 5. Initialize QRMumps sparse matrix and factorization structures
+    # The augmented matrix is (m+n) x n and is unsymmetric.
+    spmat = qrm_spmat_init(m + n, n, irn, jcn, val; sym = false)
+    spfct = qrm_spfct_init(spmat)
+
+    # 6. Perform symbolic analysis (once), as the sparsity pattern is constant.
+    qrm_analyse!(spmat, spfct)
+
+    # 7. Pre-allocate the augmented right-hand-side vector
+    b_aug = V(undef, m + n)
+
+    # 8. Create the solver object and set a finalizer for safe cleanup.
+    solver = new{T, V}(spmat, spfct, irn, jcn, val, jac_vals, b_aug, m, n, nnzj)
+
+    finalizer(s -> begin
+      qrm_spfct_free(s.spfct)
+      qrm_spmat_free(s.spmat)
+      QRMUMPS_REF_COUNT[] -= 1
+      if QRMUMPS_REF_COUNT[] == 0
+        qrm_finalize()
+      end
+    end, solver)
+
+    return solver
+  end
 end
 
 const R2NLS_allowed_subsolvers = (:cgls, :crls, :lsqr, :lsmr, :qrmumps)
@@ -35,7 +120,7 @@ For advanced usage, first create a `R2NLSSolver` to preallocate the necessary me
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `verbose::Int = 0`: if > 0, displays iteration details every `verbose` iterations.
 - `subsolver::Symbol = :lsmr`: method used as subproblem solver, see `JSOSolvers.R2N_allowed_subsolvers` for a list.
-- `subsolver_verbose::Int = 0`: if > 0, displays subsolver iteration details every `subsolver_verbose` iterations when a KrylovSolver type is selected.
+- `subsolver_verbose::Int = 0`: if > 0, displays subsolver iteration details every `subsolver_verbose` iterations when a KrylovWorkspace type is selected.
 - `non_mono_size = 1`: the size of the non-monotone behaviour. If > 1, the algorithm will use a non-monotone strategy to accept steps.
 
 # Output
@@ -63,7 +148,7 @@ mutable struct R2NLSSolver{
   T,
   V,
   Op <: AbstractLinearOperator{T},
-  Sub <: Union{KrylovSolver{T, T, V}, QRMumpsSolver},
+  Sub <: Union{KrylovWorkspace{T, T, V}, QRMumpsSolver},
 } <: AbstractOptimizationSolver
   x::V
   xt::V
@@ -103,17 +188,17 @@ function R2NLSSolver(
   Jtv = V(undef, nvar)
   Jx = jac_op_residual!(nlp, x, Jv, Jtv)
   Op = typeof(Jx)
-
+  s = V(undef, nvar)
+  scp = V(undef, nvar)
+  σ = one(T)
+  
   if subsolver == :qrmumps
-    ls_subsolver = QRMumpsSolver() #TODO: initialize QRMumpsSolver properly``
+    ls_subsolver = QRMumpsSolver(nlp)
   else
     ls_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
   end
   Sub = typeof(ls_subsolver)
 
-  s = V(undef, nvar)
-  scp = V(undef, nvar)
-  σ = one(T)
 
   subtol = one(T) # must be ≤ 1.0
   obj_vec = fill(typemin(T), non_mono_size)
@@ -432,9 +517,9 @@ function SolverCore.solve!(
   return stats
 end
 
-# Dispatch for KrylovSolver
+# Dispatch for KrylovWorkspace
 function subsolve!(
-  ls_subsolver::KrylovSolver,
+  ls_subsolver::KrylovWorkspace,
   R2NLS::R2NLSSolver,
   s,
   atol,
@@ -459,30 +544,44 @@ function subsolve!(
 end
 
 # Dispatch for QRMumpsSolver
-#TODO: This is a placeholder, needs to be implemented properly.
 function subsolve!(
-  ls_subsolver::QRMumpsSolver,
-  R2NLS::R2NLSSolver,
-  s,
+  ls::QRMumpsSolver{T, V},
+  R2NLS::R2NLSSolver{T, V},
+  nlp::AbstractNLSModel{T, V},
+  s::V,
   atol,
   n,
   m,
   max_time,
   subsolver_verbose,
-)
-  #TODO GPU vs CPU 
-  QRMumps.qrm_init()
-  # Augmented matrix A_aug is (m+n)×n
-  A_aug = [
-    R2NLS.Jx
-    sqrt(R2NLS.σ) * I(n)
-  ]      # I(n): identity of size n
-  # Augmented right-hand side
-  b_aug = [
-    -R2NLS.Fx
-    zeros(n)
-  ]
-  spmat = qrm_spmat_init(Matrix(A_aug))    # wrap in QRMumps format
-  s = qrm_min_norm(spmat, b_aug)   # min-norm solution of A_aug * s = b_aug
-  return true, "QRMumpsSolver", 0 #TODO fix this 
+) where {T, V}
+
+  # 1. Update Jacobian values at the current point x
+  jac_coord_residual!(nlp, R2NLS.x, ls.jac_vals)
+  ls.val[1:ls.nnzj] .= ls.jac_vals
+
+  # 2. Update regularization parameter σ
+  sqrt_σ = sqrt(R2NLS.σ)
+  @inbounds for i = 1:n
+    ls.val[ls.nnzj + i] = sqrt_σ
+  end
+
+  # 3. Build the augmented right-hand side vector: b_aug = [-F(x); 0]
+  ls.b_aug[1:m] .= .-R2NLS.Fx
+  fill!(view(ls.b_aug, (m+1):(m+n)), zero(T))
+
+  # 4. Re-factorize the matrix with the updated numerical values.
+  # The symbolic factorization is reused from the setup phase.
+  qrm_factorize!(ls.spmat, ls.spfct)
+
+  # 5. Solve the least-squares system in two steps
+  # 5a. Apply Q' transformation: z = Q' * b_aug
+  z = qrm_apply(ls.spfct, ls.b_aug, transp = 'n')
+
+  # 5b. Solve upper triangular system: R * s = z
+  # qrm_solve returns a new vector; we copy the result into s.
+  s .= qrm_solve(ls.spfct, z, transp = 'n')
+
+  # 6. Return status. For a direct solver, we assume success.
+  return true, "QRMumps", 1
 end
