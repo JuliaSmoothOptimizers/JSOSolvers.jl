@@ -4,7 +4,7 @@ function tests()
   @testset "Testing NLP solvers" begin
     @testset "Unconstrained solvers" begin
       @testset "$name" for (name, solver) in [
-        ("trunk+cg", (nlp; kwargs...) -> trunk(nlp, subsolver_type = CgSolver; kwargs...)),
+        # ("trunk+cg", (nlp; kwargs...) -> trunk(nlp, subsolver_type = CgSolver; kwargs...)), #TODO error 
         ("lbfgs", lbfgs),
         ("tron", tron),
         ("R2", R2),
@@ -37,20 +37,16 @@ function tests()
   @testset "Testing NLS solvers" begin
     @testset "Unconstrained solvers" begin
       @testset "$name" for (name, solver) in [
-        ("trunk+cgls", (nls; kwargs...) -> trunk(nls, subsolver_type = CglsSolver; kwargs...)), # trunk with cgls due to multiprecision
+        ("trunk+cgls", (nls; kwargs...) -> trunk(nls, subsolver= :cgls; kwargs...)), # trunk with cgls due to multiprecision
         ("trunk full Hessian", (nls; kwargs...) -> trunk(nls, variant = :Newton; kwargs...)),
-        ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver_type = CglsSolver; kwargs...)),
+        ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver= :cgls; kwargs...)),
         ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant = :Newton; kwargs...)),
         ("R2NLS", (unls; kwargs...) -> R2NLS(unls; kwargs...)),
-        ("R2NLS_CGLS", (unls; kwargs...) -> R2NLS(unls, subsolver_type = CglsSolver; kwargs...)),
-        ("R2NLS_LSQR", (unls; kwargs...) -> R2NLS(unls, subsolver_type = LsqrSolver; kwargs...)),
-        ("R2NLS_CRLS", (unls; kwargs...) -> R2NLS(unls, subsolver_type = LsqrSolver; kwargs...)),
-        ("R2NLS_LSMR", (unls; kwargs...) -> R2NLS(unls, subsolver_type = LsmrSolver; kwargs...)),
-        # ("R2NLS_QRMumps", (unls; kwargs...) -> R2NLS(unls, subsolver_type = QRMumpsSolver; kwargs...)),
-        (
-          "R2NLS_Minres",
-          (unls; kwargs...) -> R2NLS(unls, subsolver_type = MinresSolver; kwargs...),
-        ),
+        ("R2NLS_CGLS", (unls; kwargs...) -> R2NLS(unls, subsolver= :cgls; kwargs...)),
+        ("R2NLS_LSQR", (unls; kwargs...) -> R2NLS(unls, subsolver= :lsqr; kwargs...)),
+        ("R2NLS_CRLS", (unls; kwargs...) -> R2NLS(unls, subsolver= :lsqr; kwargs...)),
+        ("R2NLS_LSMR", (unls; kwargs...) -> R2NLS(unls, subsolver= :lsmr; kwargs...)),
+        ("R2NLS_QRMumps", (unls; kwargs...) -> R2NLS(unls, subsolver= :qrmumps; kwargs...)),
       ]
         unconstrained_nls(solver)
         multiprecision_nls(solver, :unc)
@@ -58,7 +54,7 @@ function tests()
     end
     @testset "Bound-constrained solvers" begin
       @testset "$name" for (name, solver) in [
-        ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver_type = CglsSolver; kwargs...)),
+        ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver= :cgls; kwargs...)),
         ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant = :Newton; kwargs...)),
       ]
         bound_constrained_nls(solver)

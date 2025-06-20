@@ -2,7 +2,6 @@ export R2NLS, R2NLSSolver
 export QRMumpsSolver
 
 using QRMumps, LinearAlgebra, SparseArrays
-using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
 
 # A global reference counter to safely manage QRMumps initialization and finalization.
 const QRMUMPS_REF_COUNT = Ref(0)
@@ -526,7 +525,7 @@ function subsolve!(
   max_time,
   subsolver_verbose,
 )
-  Krylov.solve!(
+  krylov_solve!(
     ls_subsolver,
     R2NLS.Jx,
     R2NLS.temp,
