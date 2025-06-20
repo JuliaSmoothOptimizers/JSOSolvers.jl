@@ -71,15 +71,15 @@ if Sys.isunix()
         nlp = eval(Meta.parse(model))()
         if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolverNLS))
           if name == :R2NLSSolver_CG
-            solver = eval(symsolver)(nlp, subsolver= :cgls)
+            solver = eval(symsolver)(nlp, subsolver = :cgls)
           elseif name == :R2NLSSolver_LSQR
-            solver = eval(symsolver)(nlp, subsolver= :lsqr)
+            solver = eval(symsolver)(nlp, subsolver = :lsqr)
           elseif name == :R2NLSSolver_CR
-            solver = eval(symsolver)(nlp, subsolver= :crls)
+            solver = eval(symsolver)(nlp, subsolver = :crls)
           elseif name == :R2NLSSolver_LSMR
-            solver = eval(symsolver)(nlp, subsolver= :lsmr)
+            solver = eval(symsolver)(nlp, subsolver = :lsmr)
           elseif name == :R2NLSSolver_QRMumps
-            solver = eval(symsolver)(nlp, subsolver= :qrmumps)
+            solver = eval(symsolver)(nlp, subsolver = :qrmumps)
           else
             solver = eval(symsolver)(nlp)
           end

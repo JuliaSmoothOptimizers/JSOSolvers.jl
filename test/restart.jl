@@ -30,23 +30,22 @@ end
   (:R2NLSSolver_LSQR, :R2NLSSolver),
   (:R2NLSSolver_CR, :R2NLSSolver),
   (:R2NLSSolver_LSMR, :R2NLSSolver),
-  (:R2NLSSolver_QRMumps, :R2NLSSolver),
+  # (:R2NLSSolver_QRMumps, :R2NLSSolver),
 )
   F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
   nlp = ADNLSModel(F, [-1.2; 1.0], 2)
 
   stats = GenericExecutionStats(nlp)
   if name == :R2NLSSolver_CG
-    solver = eval(s)(nlp, subsolver= :cgls)
+    solver = eval(s)(nlp, subsolver = :cgls)
   elseif name == :R2NLSSolver_LSQR
-    solver = eval(s)(nlp, subsolver= :lsqr)
+    solver = eval(s)(nlp, subsolver = :lsqr)
   elseif name == :R2NLSSolver_CR
-    solver = eval(s)(nlp, subsolver= :crls)
+    solver = eval(s)(nlp, subsolver = :crls)
   elseif name == :R2NLSSolver_LSMR
-    solver = eval(s)(nlp, subsolver= :lsmr)
+    solver = eval(s)(nlp, subsolver = :lsmr)
   elseif name == :R2NLSSolver_QRMumps
-    solver = eval(s)(nlp, subsolver= :qrmumps)
-
+    solver = eval(s)(nlp, subsolver = :qrmumps)
   else
     solver = eval(s)(nlp)
   end
@@ -95,22 +94,22 @@ end
   (:R2NLSSolver_LSQR, :R2NLSSolver),
   (:R2NLSSolver_CR, :R2NLSSolver),
   (:R2NLSSolver_LSMR, :R2NLSSolver),
-  (:R2NLSSolver_QRMumps, :R2NLSSolver)
+  # (:R2NLSSolver_QRMumps, :R2NLSSolver),
 )
   F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
   nlp = ADNLSModel(F, [-1.2; 1.0], 2)
 
   stats = GenericExecutionStats(nlp)
   if name == :R2NLSSolver_CG
-    solver = eval(s)(nlp, subsolver= :cgls)
+    solver = eval(s)(nlp, subsolver = :cgls)
   elseif name == :R2NLSSolver_LSQR
-    solver = eval(s)(nlp, subsolver= :lsqr)
+    solver = eval(s)(nlp, subsolver = :lsqr)
   elseif name == :R2NLSSolver_CR
-    solver = eval(s)(nlp, subsolver= :crls)
+    solver = eval(s)(nlp, subsolver = :crls)
   elseif name == :R2NLSSolver_LSMR
-    solver = eval(s)(nlp, subsolver= :lsmr)
+    solver = eval(s)(nlp, subsolver = :lsmr)
   elseif name == :R2NLSSolver_QRMumps
-    solver = eval(s)(nlp, subsolver= :qrmumps)
+    solver = eval(s)(nlp, subsolver = :qrmumps)
   else
     solver = eval(s)(nlp)
   end

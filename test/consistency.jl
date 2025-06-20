@@ -40,11 +40,11 @@ function consistency()
     @testset "NLS with $mtd" for (mtd, solver) in [
       ("trunk", trunk),
       ("R2NLS", (unls; kwargs...) -> R2NLS(unls; kwargs...)),
-      ("R2NLS_CGLS", (unls; kwargs...) -> R2NLS(unls, subsolver= :cgls; kwargs...)),
-      ("R2NLS_LSQR", (unls; kwargs...) -> R2NLS(unls, subsolver= :lsqr; kwargs...)),
-      ("R2NLS_CRLS", (unls; kwargs...) -> R2NLS(unls, subsolver= :lsqr; kwargs...)),
-      ("R2NLS_LSMR", (unls; kwargs...) -> R2NLS(unls, subsolver= :lsmr; kwargs...)),
-      # ("R2NLS_QRMumps", (unls; kwargs...) -> R2NLS(unls, subsolver= :qrmumps; kwargs...)),
+      ("R2NLS_CGLS", (unls; kwargs...) -> R2NLS(unls, subsolver = :cgls; kwargs...)),
+      ("R2NLS_LSQR", (unls; kwargs...) -> R2NLS(unls, subsolver = :lsqr; kwargs...)),
+      ("R2NLS_CRLS", (unls; kwargs...) -> R2NLS(unls, subsolver = :lsqr; kwargs...)),
+      ("R2NLS_LSMR", (unls; kwargs...) -> R2NLS(unls, subsolver = :lsmr; kwargs...)),
+      ("R2NLS_QRMumps", (unls; kwargs...) -> R2NLS(unls, subsolver= :qrmumps; kwargs...)),
     ]
       with_logger(NullLogger()) do
         stats = solver(unls; args...)

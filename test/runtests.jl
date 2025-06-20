@@ -32,11 +32,11 @@ end
     ("trunk", trunk),
     ("tron", tron),
     ("R2NLS", (nlp; kwargs...) -> R2NLS(nlp; kwargs...)),
-    ("R2NLS_CGLS", (nlp; kwargs...) -> R2NLS(nlp, subsolver= :cgls; kwargs...)),
-    ("R2NLS_LSQR", (nlp; kwargs...) -> R2NLS(nlp, subsolver= :lsqr; kwargs...)),
-    ("R2NLS_CRLS", (nlp; kwargs...) -> R2NLS(nlp, subsolver= :lsqr; kwargs...)),
-    ("R2NLS_LSMR", (nlp; kwargs...) -> R2NLS(nlp, subsolver= :lsmr; kwargs...)),
-    ("R2NLS_QRMumps", (nlp; kwargs...) -> R2NLS(nlp, subsolver= :qrmumps; kwargs...)),
+    ("R2NLS_CGLS", (nlp; kwargs...) -> R2NLS(nlp, subsolver = :cgls; kwargs...)),
+    ("R2NLS_LSQR", (nlp; kwargs...) -> R2NLS(nlp, subsolver = :lsqr; kwargs...)),
+    ("R2NLS_CRLS", (nlp; kwargs...) -> R2NLS(nlp, subsolver = :lsqr; kwargs...)),
+    ("R2NLS_LSMR", (nlp; kwargs...) -> R2NLS(nlp, subsolver = :lsmr; kwargs...)),
+    ("R2NLS_QRMumps", (nlp; kwargs...) -> R2NLS(nlp, subsolver = :qrmumps; kwargs...)),
   ]
     f(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
     nlp = ADNLSModel(f, [-1.2; 1.0], 2)

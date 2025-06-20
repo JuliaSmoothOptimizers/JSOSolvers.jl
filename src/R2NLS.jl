@@ -3,9 +3,6 @@ export QRMumpsSolver
 
 using QRMumps, LinearAlgebra, SparseArrays
 
-# A global reference counter to safely manage QRMumps initialization and finalization.
-const QRMUMPS_REF_COUNT = Ref(0)
-
 abstract type AbstractQRMumpsSolver end
 
 """
@@ -17,8 +14,7 @@ for the sparse matrix representation and the factorization.
 """
 mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
   # QRMumps structures
-  spmat::Ref{qrm_spmat{T}}
-  spfct::Ref{qrm_spfct{T}}
+  spmat::qrm_spmat{T}
 
   # COO storage for the augmented matrix [J; sqrt(σ) * I]
   irn::Vector{Int}
@@ -35,10 +31,7 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
 
   function QRMumpsSolver(nlp::AbstractNLSModel{T}) where {T}
     # Safely initialize QRMumps library
-    if QRMUMPS_REF_COUNT[] == 0
-      qrm_init()
-    end
-    QRMUMPS_REF_COUNT[] += 1
+    qrm_init()
 
     # 1. Get problem dimensions and Jacobian structure
     meta_nls = nls_meta(nlp)
@@ -62,29 +55,14 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
     end
 
     # 5. Initialize QRMumps sparse matrix and factorization structures
-    # The augmented matrix is (m+n) x n and is unsymmetric.
     spmat = qrm_spmat_init(m + n, n, irn, jcn, val; sym = false)
-    spfct = qrm_spfct_init(spmat)
 
-    # 6. Perform symbolic analysis (once), as the sparsity pattern is constant.
-    qrm_analyse!(spmat, spfct)
-
-    # 7. Pre-allocate the augmented right-hand-side vector
+    # 6. Pre-allocate the augmented right-hand-side vector
     b_aug = Vector{T}(undef, m+n)
-    fill!(view(b_aug, (m+1):(m+n)), zero(T))
+    fill!(view(b_aug, (m + 1):(m + n)), zero(T))
 
-
-    # 8. Create the solver object and set a finalizer for safe cleanup.
-    solver = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj)
-
-    finalizer(s -> begin
-      qrm_spfct_free(s.spfct)
-      qrm_spmat_free(s.spmat)
-      QRMUMPS_REF_COUNT[] -= 1
-      if QRMUMPS_REF_COUNT[] == 0
-        qrm_finalize()
-      end
-    end, solver)
+    # 7. Create the solver object and set a finalizer for safe cleanup.
+    solver = new{T}(spmat, irn, jcn, val, b_aug, m, n, nnzj)
 
     return solver
   end
@@ -188,14 +166,13 @@ function R2NLSSolver(
   s = V(undef, nvar)
   scp = V(undef, nvar)
   σ = one(T)
-  
+
   if subsolver == :qrmumps
     ls_subsolver = QRMumpsSolver(nlp)
   else
     ls_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
   end
   Sub = typeof(ls_subsolver)
-
 
   subtol = one(T) # must be ≤ 1.0
   obj_vec = fill(typemin(T), non_mono_size)
@@ -225,8 +202,6 @@ function SolverCore.reset!(solver::R2NLSSolver{T}) where {T}
 end
 function SolverCore.reset!(solver::R2NLSSolver{T}, nlp::AbstractNLSModel) where {T}
   fill!(solver.obj_vec, typemin(T))
-  solver.Jx = jac_op_residual!(nlp, solver.x, solver.Jv, solver.Jtv)
-  # solver.subtol = one(T)
   solver
 end
 
@@ -376,7 +351,7 @@ function SolverCore.solve!(
   σk = solver.σ
 
   done = stats.status != :unknown
-  v_k = one(T)
+  ν_k = one(T)
 
   while !done
 
@@ -386,13 +361,12 @@ function SolverCore.solve!(
     slope = σk * norm_∇fk^2 # slope= σ * ||∇f||^2    
     γ_k = (curv + slope) / norm_∇fk^2
 
-    #TODO decide if we use ν_k 
     if γ_k > 0
-      v_k = 2*(1-δ1) / (γ_k)
+      ν_k = 2*(1-δ1) / (γ_k)
       if verbose > 0
         cp_step_log = "α_k"
       end
-    else #TODO not sure about this 
+    else 
       λmax, found_λ = opnorm(Jx)
       found_λ || error("operator norm computation failed")
       if verbose > 0
@@ -406,13 +380,9 @@ function SolverCore.solve!(
     temp .= .-r
     # Compute the step s.
     subsolver_solved, sub_stats, subiter =
-      subsolve!(ls_subsolver, solver, s, zero(T), n, m, max_time, subsolver_verbose)
-
-    # if (!subsolver_solved) && stats.iter > 0 
-    #   #TODO Decide if we have this in R2NLS
-    # end
+      subsolve!(ls_subsolver, solver, nlp, s, zero(T), n, m, max_time, subsolver_verbose)
     if norm(s) > θ2 * norm(scp)
-      s .= scp # TODO check if deep copy
+      s .= scp
     end
 
     # Compute actual vs. predicted reduction.
@@ -424,7 +394,6 @@ function SolverCore.solve!(
     fck = obj(nlp, x, rt, recompute = false)
 
     ΔTk = -slope - curv / 2
-
     if non_mono_size > 1  #non-monotone behaviour
       k = mod(stats.iter, non_mono_size) + 1
       solver.obj_vec[k] = stats.objective
@@ -518,6 +487,7 @@ end
 function subsolve!(
   ls_subsolver::KrylovWorkspace,
   R2NLS::R2NLSSolver,
+  nlp,
   s,
   atol,
   n,
@@ -537,21 +507,21 @@ function subsolve!(
     verbose = subsolver_verbose,
   )
   s .= ls_subsolver.x
-  return issolved(ls_subsolver), ls_subsolver.stats.status, ls_subsolver.stats.niter
+  return Krylov.issolved(ls_subsolver), ls_subsolver.stats.status, ls_subsolver.stats.niter
 end
 
 # Dispatch for QRMumpsSolver
 function subsolve!(
-  ls::QRMumpsSolver{T},
-  R2NLS::R2NLSSolver{T, V},
-  nlp::AbstractNLSModel{T, V},
-  s::V,
+  ls::QRMumpsSolver,
+  R2NLS::R2NLSSolver,
+  nlp,
+  s,
   atol,
   n,
   m,
   max_time,
   subsolver_verbose,
-) where {T, V}
+)
 
   # 1. Update Jacobian values at the current point x
   jac_coord_residual!(nlp, R2NLS.x, view(ls.val, 1:ls.nnzj))
@@ -564,20 +534,12 @@ function subsolve!(
 
   # 3. Build the augmented right-hand side vector: b_aug = [-F(x); 0]
   ls.b_aug[1:m] .= .-R2NLS.Fx
-  # fill!(view(ls.b_aug, (m+1):(m+n)), zero(T))
+  # Update spmat
+  qrm_update!(ls.spmat, ls.val)
 
-  # 4. Re-factorize the matrix with the updated numerical values.
-  # The symbolic factorization is reused from the setup phase.
-  qrm_factorize!(ls.spmat, ls.spfct)
-
-  # 5. Solve the least-squares system in two steps
-  # 5a. Apply Q' transformation: z = Q' * b_aug
-  z = qrm_apply(ls.spfct, ls.b_aug, transp = 'n')
-
-  # 5b. Solve upper triangular system: R * s = z
-  # qrm_solve returns a new vector; we copy the result into s.
-  s .= qrm_solve(ls.spfct, z, transp = 'n')
-
-  # 6. Return status. For a direct solver, we assume success.
+  # 4. Solve the least-squares system
+  s = qrm_least_squares!(ls.spmat, ls.b_aug, s)
+  
+  # 5. Return status. For a direct solver, we assume success.
   return true, "QRMumps", 1
 end
