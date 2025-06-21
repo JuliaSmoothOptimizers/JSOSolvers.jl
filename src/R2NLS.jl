@@ -85,8 +85,8 @@ For advanced usage, first create a `R2NLSSolver` to preallocate the necessary me
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance; the algorithm stops when ‖J(x)ᵀF(x)‖ ≤ atol + rtol * ‖J(x₀)ᵀF(x₀)‖.
-- `η1 =T(0.0001) eps(T)^(1/4)`, `η2 =T(0.001) T(0.95)`: step acceptance parameters.
-- `θ1 = T(0.5)`, `θ2 = T(10)`: Cauchy step parameters.
+- `η1 =T(0.0001) eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
+- `θ1 = T(0.5)`, `θ2 = eps(T)^-1`: Cauchy step parameters.
 - `γ1 = T(1.5)`, `γ2 = T(2.5)`, `γ3 = T(0.5)`: regularization update parameters.
 - `δ1 = T(0.5)`: used for Cauchy point calculate.
 - `σmin = eps(T)`: minimum step parameter for the R2NLS algorithm.
@@ -379,8 +379,9 @@ function SolverCore.solve!(
 
     temp .= .-r
     # Compute the step s.
+    solver.σ = σk
     subsolver_solved, sub_stats, subiter =
-      subsolve!(ls_subsolver, solver, nlp, s, zero(T), n, m, max_time, subsolver_verbose)
+      subsolve!(ls_subsolver, solver, nlp, s, atol, n, m, max_time, subsolver_verbose)
     if norm(s) > θ2 * norm(scp)
       s .= scp
     end
