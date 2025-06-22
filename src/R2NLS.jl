@@ -528,7 +528,7 @@ function subsolve!(
   jac_coord_residual!(nlp, R2NLS.x, view(ls.val, 1:ls.nnzj))
 
   # 2. Update regularization parameter σ
-  sqrt_σ = sqrt(R2NLS.σ)
+  sqrt_σ = sqrt(R2NLS.σ) / 2 #TODO double check this 
   @inbounds for i = 1:n
     ls.val[ls.nnzj + i] = sqrt_σ
   end
