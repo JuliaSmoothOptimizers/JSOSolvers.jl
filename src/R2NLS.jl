@@ -165,7 +165,7 @@ function R2NLSSolver(
   Op = typeof(Jx)
   s = V(undef, nvar)
   scp = V(undef, nvar)
-  σ = one(T)
+  σ = eps(T)^(1 / 5)
 
   if subsolver == :qrmumps
     ls_subsolver = QRMumpsSolver(nlp)
