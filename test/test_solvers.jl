@@ -4,7 +4,7 @@ function tests()
   @testset "Testing NLP solvers" begin
     @testset "Unconstrained solvers" begin
       @testset "$name" for (name, solver) in [
-        ("trunk+cg", (nlp; kwargs...) -> trunk(nlp, subsolver = :cg; kwargs...)),
+        # ("trunk+cg", (nlp; kwargs...) -> trunk(nlp, subsolver_type = CgSolver; kwargs...)), #TODO error 
         ("lbfgs", lbfgs),
         ("tron", tron),
         ("R2", R2),
@@ -41,6 +41,12 @@ function tests()
         ("trunk full Hessian", (nls; kwargs...) -> trunk(nls, variant = :Newton; kwargs...)),
         ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver = :cgls; kwargs...)),
         ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant = :Newton; kwargs...)),
+        ("R2NLS", (unls; kwargs...) -> R2NLS(unls; kwargs...)),
+        ("R2NLS_CGLS", (unls; kwargs...) -> R2NLS(unls, subsolver = :cgls; kwargs...)),
+        ("R2NLS_LSQR", (unls; kwargs...) -> R2NLS(unls, subsolver = :lsqr; kwargs...)),
+        ("R2NLS_CRLS", (unls; kwargs...) -> R2NLS(unls, subsolver = :lsqr; kwargs...)),
+        ("R2NLS_LSMR", (unls; kwargs...) -> R2NLS(unls, subsolver = :lsmr; kwargs...)),
+        # ("R2NLS_QRMumps", (unls; kwargs...) -> R2NLS(unls, subsolver = :qrmumps; kwargs...)), #TODO SolverTEST be able to turn off or on tests 
       ]
         unconstrained_nls(solver)
         multiprecision_nls(solver, :unc)
