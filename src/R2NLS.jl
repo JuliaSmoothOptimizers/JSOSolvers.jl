@@ -67,6 +67,7 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
 
     return solver
   end
+  #TODO cleanup after last iteration
 end
 
 const R2NLS_allowed_subsolvers = (:cgls, :crls, :lsqr, :lsmr, :qrmumps)
