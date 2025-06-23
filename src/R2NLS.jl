@@ -35,7 +35,8 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
 
     # 1. Get problem dimensions and Jacobian structure
     meta_nls = nls_meta(nlp)
-    m, n = meta_nls.nequ, meta_nls.nvar
+    n = nlp.nls_meta.nvar
+    m = nlp.nls_meta.nequ
     nnzj = meta_nls.nnzj
 
     # 2. Allocate COO arrays for the augmented matrix [J; sqrt(σ)I]
@@ -169,6 +170,7 @@ function R2NLSSolver(
 
   if subsolver == :qrmumps
     ls_subsolver = QRMumpsSolver(nlp)
+    jac_coord_residual!(nlp, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
   else
     ls_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
   end
@@ -382,6 +384,7 @@ function SolverCore.solve!(
     solver.σ = σk
     subsolver_solved, sub_stats, subiter =
       subsolve!(ls_subsolver, solver, nlp, s, atol, n, m, max_time, subsolver_verbose)
+
     if norm(s) > θ2 * norm(scp)
       s .= scp
     end
@@ -413,6 +416,9 @@ function SolverCore.solve!(
       f = fck
       grad!(nlp, x, ∇f)
       set_objective!(stats, fck)
+      # if ls_subsolver isa QRMumpsSolver
+      #   jac_coord_residual!(nlp, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
+      # end
       unbounded = fck < fmin
       norm_∇fk = norm(∇f)
       if ρk >= η2
@@ -502,7 +508,7 @@ function subsolve!(
     R2NLS.temp,
     atol = atol,
     rtol = R2NLS.subtol,
-    λ = √(R2NLS.σ) / 2, # or sqrt(σk / 2),  λ ≥ 0 is a regularization parameter.
+    λ = √(R2NLS.σ), #/ 2, # or sqrt(σk / 2),  λ ≥ 0 is a regularization parameter.
     itmax = max(2 * (n + m), 50),
     # timemax = max_time - R2NLSSolver.stats.elapsed_time,
     verbose = subsolver_verbose,
@@ -528,18 +534,19 @@ function subsolve!(
   jac_coord_residual!(nlp, R2NLS.x, view(ls.val, 1:ls.nnzj))
 
   # 2. Update regularization parameter σ
-  sqrt_σ = sqrt(R2NLS.σ) / 2 #TODO double check this 
+  sqrt_σ = sqrt(R2NLS.σ) # / 2 #TODO double check this 
   @inbounds for i = 1:n
     ls.val[ls.nnzj + i] = sqrt_σ
   end
 
   # 3. Build the augmented right-hand side vector: b_aug = [-F(x); 0]
-  ls.b_aug[1:m] .= .-R2NLS.Fx
+  ls.b_aug[1:m] .= R2NLS.temp # -F(x)
+  fill!(view(ls.b_aug,(m+1):(m+n)), zero(eltype(ls.b_aug))) # we have to do this for some reason #Applying all of its Householder (or Givens) transforms to the entire RHS vector b_aug—i.e. computing QTbQTb.
   # Update spmat
   qrm_update!(ls.spmat, ls.val)
 
   # 4. Solve the least-squares system
-  s = qrm_least_squares!(ls.spmat, ls.b_aug, s)
+  qrm_least_squares!(ls.spmat, ls.b_aug, s)
   
   # 5. Return status. For a direct solver, we assume success.
   return true, "QRMumps", 1
