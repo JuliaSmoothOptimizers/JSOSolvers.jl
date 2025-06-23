@@ -146,7 +146,7 @@ function TrunkSolver(
   gt = V(undef, nvar)
   gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
   Hs = V(undef, nvar)
-  k_subsolver = krylov_workspace(Val(k_subsolver), nvar, nvar, V)
+  k_subsolver = krylov_workspace(Val(subsolver), nvar, nvar, V)
   Sub = typeof(k_subsolver)
   H = hess_op!(nlp, x, Hs)
   Op = typeof(H)
