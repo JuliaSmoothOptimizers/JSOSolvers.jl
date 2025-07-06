@@ -125,7 +125,7 @@ mutable struct TrunkSolver{
   gt::V
   gn::V
   Hs::V
-  subsolver::Sub
+  krylov_subsolver::Sub
   H::Op
   tr::TrustRegion{T, V}
   params::TRUNKParameterSet
@@ -146,12 +146,12 @@ function TrunkSolver(
   gt = V(undef, nvar)
   gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
   Hs = V(undef, nvar)
-  workspace = krylov_workspace(Val(subsolver), nvar, nvar, V)
-  Sub = typeof(workspace)
+  krylov_subsolver = krylov_workspace(Val(subsolver), nvar, nvar, V)
+  Sub = typeof(krylov_subsolver)
   H = hess_op!(nlp, x, Hs)
   Op = typeof(H)
   tr = TrustRegion(gt, one(T))
-  return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, gn, Hs, workspace, H, tr, params)
+  return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, gn, Hs, krylov_subsolver, H, tr, params)
 end
 
 function SolverCore.reset!(solver::TrunkSolver)
@@ -219,7 +219,7 @@ function SolverCore.solve!(
   ∇f = solver.gx
   ∇fn = solver.gn
   Hs = solver.Hs
-  subsolver = solver.subsolver
+  krylov_subsolver = solver.krylov_subsolver
   H = solver.H
   tr = solver.tr
 
@@ -285,7 +285,7 @@ function SolverCore.solve!(
     cgtol = max(rtol, min(T(0.1), √∇fNormM, T(0.9) * cgtol))
     ∇f .*= -1
     krylov_solve!(
-      subsolver,
+      krylov_subsolver,
       H,
       ∇f,
       atol = atol,
@@ -296,7 +296,7 @@ function SolverCore.solve!(
       verbose = subsolver_verbose,
       M = M,
     )
-    s, cg_stats = subsolver.x, subsolver.stats
+    s, cg_stats = krylov_subsolver.x, krylov_subsolver.stats
 
     # Compute actual vs. predicted reduction.
     sNorm = nrm2(n, s)

@@ -139,7 +139,7 @@ mutable struct TrunkSolverNLS{
   Av::V
   Atv::V
   A::Op
-  subsolver::Sub
+  krylov_subsolver::Sub
   params::TRUNKLSParameterSet
 end
 
@@ -170,8 +170,8 @@ function TrunkSolverNLS(
   A = jac_op_residual!(nlp, x, Av, Atv)
   Op = typeof(A)
 
-  workspace = krylov_workspace(Val(subsolver), nequ, nvar, V)
-  Sub = typeof(workspace)
+  krylov_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
+  Sub = typeof(krylov_subsolver)
 
   return TrunkSolverNLS{T, V, Sub, Op}(
     x,
@@ -185,7 +185,7 @@ function TrunkSolverNLS(
     Av,
     Atv,
     A,
-    workspace,
+    krylov_subsolver,
     params,
   )
 end
@@ -248,7 +248,7 @@ function SolverCore.solve!(
   solver.x .= x
   x = solver.x
   ∇f = solver.gx
-  subsolver = solver.subsolver
+  krylov_subsolver = solver.krylov_subsolver
 
   n = nlp.nls_meta.nvar
   m = nlp.nls_meta.nequ
@@ -321,7 +321,7 @@ function SolverCore.solve!(
     cgtol = max(rtol, min(T(0.1), 9 * cgtol / 10, sqrt(∇fNorm2)))
     temp .= .-r
     krylov_solve!(
-      subsolver,
+      krylov_subsolver,
       A,
       temp,
       atol = atol,
@@ -331,7 +331,7 @@ function SolverCore.solve!(
       timemax = max_time - stats.elapsed_time,
       verbose = subsolver_verbose,
     )
-    s, cg_stats = subsolver.x, subsolver.stats
+    s, cg_stats = krylov_subsolver.x, krylov_subsolver.stats
 
     # Compute actual vs. predicted reduction.
     sNorm = nrm2(n, s)
