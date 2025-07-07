@@ -399,6 +399,7 @@ function SolverCore.solve!(
     mul!(temp, Jx, s)
     slope = dot(r, temp)
     curv = dot(temp, temp)
+    
     residual!(nlp, xt, rt)
     fck = obj(nlp, x, rt, recompute = false)
 
