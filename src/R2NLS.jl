@@ -1,4 +1,4 @@
-export R2NLS, R2NLSSolver
+export R2NLS, R2SolverNLS
 export QRMumpsSolver
 
 using QRMumps, LinearAlgebra, SparseArrays
@@ -15,6 +15,7 @@ for the sparse matrix representation and the factorization.
 mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
   # QRMumps structures
   spmat::qrm_spmat{T}
+  spfct::qrm_spfct{T}
 
   # COO storage for the augmented matrix [J; sqrt(σ) * I]
   irn::Vector{Int}
@@ -57,13 +58,14 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
 
     # 5. Initialize QRMumps sparse matrix and factorization structures
     spmat = qrm_spmat_init(m + n, n, irn, jcn, val; sym = false)
+    spfct = qrm_spfct_init(spmat)
+    qrm_analyse!(spmat, spfct; transp='n')
 
     # 6. Pre-allocate the augmented right-hand-side vector
     b_aug = Vector{T}(undef, m+n)
-    fill!(view(b_aug, (m + 1):(m + n)), zero(T))
 
     # 7. Create the solver object and set a finalizer for safe cleanup.
-    solver = new{T}(spmat, irn, jcn, val, b_aug, m, n, nnzj)
+    solver = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj)
 
     return solver
   end
@@ -78,11 +80,11 @@ An inexact second-order quadratic regularization method designed specifically fo
 The objective is to solve
     min ½‖F(x)‖²
 where `F: ℝⁿ → ℝᵐ` is a vector-valued function defining the least-squares residuals.
-For advanced usage, first create a `R2NLSSolver` to preallocate the necessary memory for the algorithm, and then call `solve!`:
-    solver = R2NLSSolver(nlp)
+For advanced usage, first create a `R2SolverNLS` to preallocate the necessary memory for the algorithm, and then call `solve!`:
+    solver = R2SolverNLS(nlp)
     solve!(solver, nlp; kwargs...)
 # Arguments
-- `nlp::AbstractNLPModel{T, V}` is the nonlinear least-squares model to solve. See `NLPModels.jl` for additional details.
+- `nlp::AbstractNLSModel{T, V}` is the nonlinear least-squares model to solve. See `NLPModels.jl` for additional details.
 # Keyword Arguments
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
@@ -96,6 +98,7 @@ For advanced usage, first create a `R2NLSSolver` to preallocate the necessary me
 - `max_time::Float64 = 30.0`: maximum allowed time in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `verbose::Int = 0`: if > 0, displays iteration details every `verbose` iterations.
+- `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
 - `subsolver::Symbol = :lsmr`: method used as subproblem solver, see `JSOSolvers.R2N_allowed_subsolvers` for a list.
 - `subsolver_verbose::Int = 0`: if > 0, displays subsolver iteration details every `subsolver_verbose` iterations when a KrylovWorkspace type is selected.
 - `non_mono_size = 1`: the size of the non-monotone behaviour. If > 1, the algorithm will use a non-monotone strategy to accept steps.
@@ -107,21 +110,23 @@ $(Callback_docstring)
 # Examples
 ```jldoctest
 using JSOSolvers, ADNLPModels
-nlp = ADNLPModel(x -> [sin(x[1]); cos(x[1])], [1.0])
-stats = R2NLS(nlp)
+F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
+model = ADNLSModel(F, [-1.2; 1.0], 2)
+stats = R2NLS(model)
 # output
 "Execution stats: first-order stationary"
 ```
 ```jldoctest
 using JSOSolvers, ADNLPModels
-nlp = ADNLPModel(x -> [sin(x[1]); cos(x[1])], [1.0])
-solver = R2NLSSolver(nlp)
-stats = solve!(solver, nlp)
+F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
+model = ADNLSModel(F, [-1.2; 1.0], 2)
+solver = R2SolverNLS(model)
+stats = solve!(solver, model)
 # output
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct R2NLSSolver{
+mutable struct R2SolverNLS{
   T,
   V,
   Op <: AbstractLinearOperator{T},
@@ -144,7 +149,7 @@ mutable struct R2NLSSolver{
   σ::T
 end
 
-function R2NLSSolver(
+function R2SolverNLS(
   nlp::AbstractNLSModel{T, V};
   non_mono_size = 1,
   subsolver::Symbol = :lsmr,
@@ -171,7 +176,6 @@ function R2NLSSolver(
 
   if subsolver == :qrmumps
     ls_subsolver = QRMumpsSolver(nlp)
-    jac_coord_residual!(nlp, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
   else
     ls_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
   end
@@ -180,7 +184,7 @@ function R2NLSSolver(
   subtol = one(T) # must be ≤ 1.0
   obj_vec = fill(typemin(T), non_mono_size)
 
-  return R2NLSSolver{T, V, Op, Sub}(
+  return R2SolverNLS{T, V, Op, Sub}(
     x,
     xt,
     temp,
@@ -199,27 +203,27 @@ function R2NLSSolver(
   )
 end
 
-function SolverCore.reset!(solver::R2NLSSolver{T}) where {T}
+function SolverCore.reset!(solver::R2SolverNLS{T}) where {T}
   fill!(solver.obj_vec, typemin(T))
   solver
 end
-function SolverCore.reset!(solver::R2NLSSolver{T}, nlp::AbstractNLSModel) where {T}
+function SolverCore.reset!(solver::R2SolverNLS{T}, nlp::AbstractNLSModel) where {T}
   fill!(solver.obj_vec, typemin(T))
   solver
 end
 
-@doc (@doc R2NLSSolver) function R2NLS(
+@doc (@doc R2SolverNLS) function R2NLS(
   nlp::AbstractNLSModel{T, V};
   subsolver::Symbol = :lsmr,
   non_mono_size = 1,
   kwargs...,
 ) where {T, V}
-  solver = R2NLSSolver(nlp; non_mono_size = non_mono_size, subsolver = subsolver)
+  solver = R2SolverNLS(nlp; non_mono_size = non_mono_size, subsolver = subsolver)
   return solve!(solver, nlp; non_mono_size = non_mono_size, kwargs...)
 end
 
 function SolverCore.solve!(
-  solver::R2NLSSolver{T, V},
+  solver::R2SolverNLS{T, V},
   nlp::AbstractNLSModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
@@ -241,6 +245,7 @@ function SolverCore.solve!(
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   verbose::Int = 0,
+  scp_flag::Bool = true,
   subsolver_verbose::Int = 0,
   non_mono_size = 1,
 ) where {T, V}
@@ -363,30 +368,29 @@ function SolverCore.solve!(
     curv = dot(temp, temp) # curv = ∇f' Jx'Jx *∇f
     slope = σk * norm_∇fk^2 # slope= σ * ||∇f||^2    
     γ_k = (curv + slope) / norm_∇fk^2
+    temp .= .-r
+    solver.σ = σk
 
     if γ_k > 0
       ν_k = 2*(1-δ1) / (γ_k)
-      if verbose > 0
-        cp_step_log = "α_k"
+      cp_step_log = "α_k"
+      # Compute the step s.
+      subsolver_solved, sub_stats, subiter =
+        subsolve!(ls_subsolver, solver, nlp, s, atol, n, m, max_time, subsolver_verbose)
+      if scp_flag 
+        # Based on the flag, scp is calcualted
+        scp .= -ν_k * ∇f
+        if norm(s) > θ2 * norm(scp)
+          s .= scp
+        end
       end
-    else 
+    else  # when zero curvature occures
+      # we have to calcualte the scp, since we have encounter a negative curvature
       λmax, found_λ = opnorm(Jx)
       found_λ || error("operator norm computation failed")
-      if verbose > 0
-        cp_step_log = "ν_k"
-      end
+      cp_step_log = "ν_k"
       ν_k = θ1 / (λmax + σk)
-    end
-
-    scp .= -ν_k * ∇f
-
-    temp .= .-r
-    # Compute the step s.
-    solver.σ = σk
-    subsolver_solved, sub_stats, subiter =
-      subsolve!(ls_subsolver, solver, nlp, s, atol, n, m, max_time, subsolver_verbose)
-
-    if norm(s) > θ2 * norm(scp)
+      scp .= -ν_k * ∇f
       s .= scp
     end
 
@@ -417,9 +421,6 @@ function SolverCore.solve!(
       f = fck
       grad!(nlp, x, ∇f)
       set_objective!(stats, fck)
-      # if ls_subsolver isa QRMumpsSolver
-      #   jac_coord_residual!(nlp, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
-      # end
       unbounded = fck < fmin
       norm_∇fk = norm(∇f)
       if ρk >= η2
@@ -444,8 +445,7 @@ function SolverCore.solve!(
 
     σk = solver.σ
     subtol = solver.subtol
-    norm_∇fk = stats.dual_feas # if the user change it, they just change the stats.norm , they also have to change subtol
-    # σk = μk * norm_∇fk
+    norm_∇fk = stats.dual_feas
 
     optimal = norm_∇fk ≤ ϵ
     small_residual = 2 * √f ≤ ϵF
@@ -494,7 +494,7 @@ end
 # Dispatch for KrylovWorkspace
 function subsolve!(
   ls_subsolver::KrylovWorkspace,
-  R2NLS::R2NLSSolver,
+  R2NLS::R2SolverNLS,
   nlp,
   s,
   atol,
@@ -509,9 +509,9 @@ function subsolve!(
     R2NLS.temp,
     atol = atol,
     rtol = R2NLS.subtol,
-    λ = √(R2NLS.σ), #/ 2, # or sqrt(σk / 2),  λ ≥ 0 is a regularization parameter.
+    λ = √(R2NLS.σ),  # λ ≥ 0 is a regularization parameter.
     itmax = max(2 * (n + m), 50),
-    # timemax = max_time - R2NLSSolver.stats.elapsed_time,
+    # timemax = max_time - R2SolverNLS.stats.elapsed_time,
     verbose = subsolver_verbose,
   )
   s .= ls_subsolver.x
@@ -521,7 +521,7 @@ end
 # Dispatch for QRMumpsSolver
 function subsolve!(
   ls::QRMumpsSolver,
-  R2NLS::R2NLSSolver,
+  R2NLS::R2SolverNLS,
   nlp,
   s,
   atol,
@@ -535,7 +535,7 @@ function subsolve!(
   jac_coord_residual!(nlp, R2NLS.x, view(ls.val, 1:ls.nnzj))
 
   # 2. Update regularization parameter σ
-  sqrt_σ = sqrt(R2NLS.σ) # / 2 #TODO double check this 
+  sqrt_σ = sqrt(R2NLS.σ)
   @inbounds for i = 1:n
     ls.val[ls.nnzj + i] = sqrt_σ
   end
@@ -547,7 +547,10 @@ function subsolve!(
   qrm_update!(ls.spmat, ls.val)
 
   # 4. Solve the least-squares system
-  qrm_least_squares!(ls.spmat, ls.b_aug, s)
+  qrm_factorize!(ls.spmat, ls.spfct; transp='n')
+  qrm_apply!(ls.spfct, ls.b_aug; transp='t') 
+  qrm_solve!(ls.spfct, ls.b_aug, s; transp='n')
+  # qrm_least_squares!(ls.spmat, ls.b_aug, s)
   
   # 5. Return status. For a direct solver, we assume success.
   return true, "QRMumps", 1
