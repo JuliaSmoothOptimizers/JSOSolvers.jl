@@ -420,7 +420,7 @@ function SolverCore.solve!(
       x .= xt
       r .= rt
       f = fck
-      grad!(nlp, x, ∇f)
+      grad!(nlp, x, ∇f, r, recompute = false)
       set_objective!(stats, fck)
       unbounded = fck < fmin
       norm_∇fk = norm(∇f)
