@@ -8,7 +8,7 @@ using NLPModelsTest
 # this package
 using JSOSolvers
 
-include("test_utils.jl")
+include("test_Utilities.jl")
 
 @testset "Test small residual checks $solver" for solver in (:TrunkSolverNLS, :TronSolverNLS)
   nls = ADNLSModel(x -> [x[1] - 1; sin(x[2])], [-1.2; 1.0], 2)
