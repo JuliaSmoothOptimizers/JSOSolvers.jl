@@ -4,6 +4,7 @@ version = "0.14.0"
 
 [deps]
 Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
+GenericLinearAlgebra = "14197337-ba66-59df-a3e3-ca00e7dcff7a"
 Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LinearOperators = "5c8ed15e-5a4c-59e4-a42b-c7e8811fb125"
@@ -16,10 +17,12 @@ SolverCore = "ff4d7338-4cf1-434d-91df-b86cb86fb843"
 SolverParameters = "d076d87d-d1f9-4ea3-a44b-64b4cdd1e470"
 SolverTools = "b5612192-2639-5dc1-abfe-fbedd65fab29"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+TSVD = "9449cd9e-2762-5aa3-a617-5413e99d722e"
 
 [compat]
 Arpack = "0.5.4"
-Krylov = "0.10.0"
+GenericLinearAlgebra = "0.3.18"
+Krylov = "0.10.1"
 LinearOperators = "2.0"
 NLPModels = "0.21"
 NLPModelsModifiers = "0.7"
@@ -28,6 +31,7 @@ SolverCore = "0.3"
 SolverParameters = "0.1"
 SolverTools = "0.9"
 SparseArrays = "1.11.0"
+TSVD = "0.4.4"
 julia = "1.10"
 
 [extras]
