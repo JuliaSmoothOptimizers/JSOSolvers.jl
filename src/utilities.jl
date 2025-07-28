@@ -1,8 +1,8 @@
 import LinearAlgebra: opnorm       # bring the Base name into your namespace
 using GenericLinearAlgebra
 using TSVD
-export opnorm
 
+export opnorm
 # — Top‐level dispatch —
 function LinearAlgebra.opnorm(B; kwargs...)
   _opnorm(B, eltype(B); kwargs...)

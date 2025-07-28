@@ -294,7 +294,6 @@ function SolverCore.solve!(
   σk = 2^round(log2(norm_∇fk + 1)) / norm_∇fk
   ϵ = atol + rtol * norm_∇fk
   ϵF = Fatol + Frtol * 2 * √f
-  ν_k = T(0)
 
   # Preallocate xt.
   xt = solver.xt
@@ -316,9 +315,9 @@ function SolverCore.solve!(
     )
     @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk])
   end
-
+  cp_step_log = " "
   if verbose > 0 && mod(stats.iter, verbose) == 0
-    cp_step_log = " "
+    
     @info log_header(
       [:iter, :f, :dual, :σ, :ρ, :sub_iter, :dir, :cp_step_log, :sub_status],
       [Int, Float64, Float64, Float64, Float64, Int, String, String, String],
