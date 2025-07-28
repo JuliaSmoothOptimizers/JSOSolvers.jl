@@ -20,46 +20,53 @@ include("test_Utilities.jl")
 end
 
 @testset "Test iteration limit" begin
-  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk)
+  @testset "$name" for (name, solver) in [
+    ("trunk", trunk),
+    ("lbfgs", lbfgs),
+    ("tron", tron),
+    ("R2", R2),
+    # ("R2N", R2N),
+    ("R2N_exact", (nlp; kwargs...) -> R2N(LBFGSModel(nlp), subsolver_type = JSOSolvers.ShiftedLBFGSSolver; kwargs...)),
+    ("fomo", fomo),
+  ]
     f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
     nlp = ADNLPModel(f, [-1.2; 1.0])
-
-    stats = eval(fun)(nlp, max_iter = 1)
+    stats = eval(solver)(nlp, max_iter = 1)
+    stats = solver(nlp, max_iter = 1)
     @test stats.status == :max_iter
   end
 
-  @testset "$(name)-NLS" for (name, solver) in [
-    ("trunk", trunk),
-    ("tron", tron),
-    ("R2NLS", (nlp; kwargs...) -> R2NLS(nlp; kwargs...)),
-    ("R2NLS_CGLS", (nlp; kwargs...) -> R2NLS(nlp, subsolver = :cgls; kwargs...)),
-    ("R2NLS_LSQR", (nlp; kwargs...) -> R2NLS(nlp, subsolver = :lsqr; kwargs...)),
-    ("R2NLS_CRLS", (nlp; kwargs...) -> R2NLS(nlp, subsolver = :lsqr; kwargs...)),
-    ("R2NLS_LSMR", (nlp; kwargs...) -> R2NLS(nlp, subsolver = :lsmr; kwargs...)),
-    ("R2NLS_QRMumps", (nlp; kwargs...) -> R2NLS(nlp, subsolver = :qrmumps; kwargs...)),
-  ]
+
+  @testset "$(fun)-NLS" for fun in (tron, trunk)
     f(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
     nlp = ADNLSModel(f, [-1.2; 1.0], 2)
-
-    stats = eval(solver)(nlp, max_iter = 1)
+    stats = eval(fun)(nlp, max_iter = 1)
     @test stats.status == :max_iter
   end
 end
 
 @testset "Test unbounded below" begin
-  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk)
+  @testset "$name" for (name, solver) in [
+    ("trunk", trunk),
+    ("lbfgs", lbfgs),
+    ("tron", tron),
+    ("R2", R2),
+    # ("R2N", R2N),
+    ("R2N_exact", (nlp; kwargs...) -> R2N(LBFGSModel(nlp), subsolver_type = JSOSolvers.ShiftedLBFGSSolver; kwargs...)),
+    ("fomo", fomo),
+  ]
     T = Float64
     x0 = [T(0)]
     f(x) = -exp(x[1])
     nlp = ADNLPModel(f, x0)
-
-    stats = eval(fun)(nlp)
+    stats = solver(nlp)
     @test stats.status == :unbounded
     @test stats.objective < -one(T) / eps(T)
   end
 end
 
 include("restart.jl")
+include("test_edge_cases.jl")
 include("callback.jl")
 include("consistency.jl")
 include("test_solvers.jl")

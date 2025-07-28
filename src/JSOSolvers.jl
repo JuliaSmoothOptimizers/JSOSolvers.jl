@@ -42,12 +42,13 @@ function normM!(n, x, M, z)
 end
 
 # Utilities 
-include("Utilities.jl")
+include("utilities.jl")
 
 # Unconstrained solvers
 include("lbfgs.jl")
 include("trunk.jl")
 include("fomo.jl")
+include("R2N.jl")
 
 # Unconstrained solvers for NLS
 include("trunkls.jl")

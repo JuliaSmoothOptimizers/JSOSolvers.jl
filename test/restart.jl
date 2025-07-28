@@ -1,5 +1,6 @@
 @testset "Test restart with a different initial guess: $fun" for (fun, s) in (
   (:R2, :FoSolver),
+  (:R2N_exact, :R2NSolver),
   (:fomo, :FomoSolver),
   (:lbfgs, :LBFGSSolver),
   (:tron, :TronSolver),
@@ -9,8 +10,13 @@
   nlp = ADNLPModel(f, [-1.2; 1.0])
 
   stats = GenericExecutionStats(nlp)
-  solver = eval(s)(nlp)
-  stats = SolverCore.solve!(solver, nlp, stats)
+  if fun == :R2N_exact
+    nlp = LBFGSModel(nlp)
+    solver = eval(s)(nlp,subsolver_type = JSOSolvers.ShiftedLBFGSSolver)
+  else 
+    solver = eval(s)(nlp)
+  end
+ stats = SolverCore.solve!(solver, nlp, stats)
   @test stats.status == :first_order
   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)
 
@@ -63,6 +69,7 @@ end
 
 @testset "Test restart with a different problem: $fun" for (fun, s) in (
   (:R2, :FoSolver),
+  (:R2N_exact, :R2NSolver),
   (:fomo, :FomoSolver),
   (:lbfgs, :LBFGSSolver),
   (:tron, :TronSolver),
@@ -72,7 +79,12 @@ end
   nlp = ADNLPModel(f, [-1.2; 1.0])
 
   stats = GenericExecutionStats(nlp)
-  solver = eval(s)(nlp)
+  if fun == :R2N_exact
+    nlp = LBFGSModel(nlp)
+    solver = eval(s)(nlp,subsolver_type = JSOSolvers.ShiftedLBFGSSolver)
+  else 
+    solver = eval(s)(nlp) 
+  end
   stats = SolverCore.solve!(solver, nlp, stats)
   @test stats.status == :first_order
   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)

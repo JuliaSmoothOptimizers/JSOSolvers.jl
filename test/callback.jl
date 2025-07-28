@@ -36,6 +36,11 @@ using ADNLPModels, JSOSolvers, LinearAlgebra, Logging #, Plots
     fomo(nlp, callback = cb)
   end
   @test stats.iter == 8
+
+  stats = with_logger(NullLogger()) do
+    R2N(nlp, callback = cb)
+  end
+  @test stats.iter == 8
 end
 
 @testset "Test callback for NLS" begin

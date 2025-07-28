@@ -4,10 +4,11 @@ function tests()
   @testset "Testing NLP solvers" begin
     @testset "Unconstrained solvers" begin
       @testset "$name" for (name, solver) in [
-        # ("trunk+cg", (nlp; kwargs...) -> trunk(nlp, subsolver_type = CgSolver; kwargs...)), #TODO error 
+        ("trunk+cg", (nlp; kwargs...) -> trunk(nlp, subsolver = :cg; kwargs...)),
         ("lbfgs", lbfgs),
         ("tron", tron),
         ("R2", R2),
+        ("R2N_exact", (nlp; kwargs...) -> R2N(LBFGSModel(nlp), subsolver_type = JSOSolvers.ShiftedLBFGSSolver; kwargs...)),
         ("fomo_r2", fomo),
         ("fomo_tr", (nlp; kwargs...) -> fomo(nlp, step_backend = JSOSolvers.tr_step(); kwargs...)),
       ]
