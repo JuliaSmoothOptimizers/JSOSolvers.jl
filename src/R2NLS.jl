@@ -168,15 +168,21 @@ function R2SolverNLS(
   rt = V(undef, nequ)
   Jv = V(undef, nequ)
   Jtv = V(undef, nvar)
-  Jx = jac_op_residual!(nlp, x, Jv, Jtv)
+  # Jx = jac_op_residual!(nlp, x, Jv, Jtv) # todo jacobean when QRMumps is used jac_residual!(nlp, x, Jv, Jtv)
   Op = typeof(Jx)
   s = V(undef, nvar)
   scp = V(undef, nvar)
   σ = eps(T)^(1 / 5)
 
-  if subsolver == :qrmumps
+  if subsolver == :qrmumps #TODO do we need Jv anf Jtv for QRMumps?
+    #allocate Jv and Jtv zero length
+    # Jv = V(undef, 0)
+    # Jtv = V(undef, 0)
+    Jx = jac_residual!(nlp, x, Jv, Jtv)
+    #how do I Jx
     ls_subsolver = QRMumpsSolver(nlp)
   else
+    Jx = jac_op_residual!(nlp, x, Jv, Jtv)
     ls_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
   end
   Sub = typeof(ls_subsolver)
@@ -415,6 +421,8 @@ function SolverCore.solve!(
     # Update regularization parameters and Acceptance of the new candidate
     step_accepted = ρk >= η1
     if step_accepted
+      #TODO if QRMumps is used, we have to update Jx else implicitly for other solvers
+
       # update Jx implicitly
       x .= xt
       r .= rt

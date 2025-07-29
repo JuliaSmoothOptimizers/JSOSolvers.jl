@@ -353,6 +353,9 @@ function SolverCore.solve!(
           # elseif npc_handler == :sigma
           #   σk = max(σmin, γ2 * σk)
           #   continue ?
+          #  set_iter!(stats, stats.iter + 1)
+          # set_time!(stats, time() - start_time)
+          # do not do anything, just go 
           #   #TODO
         elseif npc_handler == :prev #Cr and cg will return the last iteration s
           s .= r2_subsolver.x
