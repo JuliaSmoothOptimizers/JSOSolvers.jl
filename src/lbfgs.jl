@@ -38,7 +38,7 @@ function LBFGSParameterSet(
   bk_max::Int = get(LBFGS_bk_max, nlp),
 ) where {T}
   LBFGSParameterSet(
-    Parameter(mem, IntegerRange(Int(5), Int(20))),
+    Parameter(mem, IntegerRange(Int(1), Int(100))),
     Parameter(τ₁, RealInterval(T(0), T(1), lower_open = true)),
     Parameter(bk_max, IntegerRange(Int(1), Int(100))),
   )
