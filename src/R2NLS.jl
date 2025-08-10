@@ -1,5 +1,7 @@
 export R2NLS, R2SolverNLS
 export QRMumpsSolver
+using SparseMatricesCOO
+
 
 using QRMumps, LinearAlgebra, SparseArrays
 
@@ -30,6 +32,8 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
   n::Int
   nnzj::Int
 
+  closed::Bool    # Avoid double-destroy
+
   function QRMumpsSolver(nlp::AbstractNLSModel{T}) where {T}
     # Safely initialize QRMumps library
     qrm_init()
@@ -59,7 +63,7 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
     # 5. Initialize QRMumps sparse matrix and factorization structures
     spmat = qrm_spmat_init(m + n, n, irn, jcn, val; sym = false)
     spfct = qrm_spfct_init(spmat)
-    qrm_analyse!(spmat, spfct; transp='n')
+    qrm_analyse!(spmat, spfct; transp = 'n')
 
     # 6. Pre-allocate the augmented right-hand-side vector
     b_aug = Vector{T}(undef, m+n)
@@ -67,9 +71,35 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
     # 7. Create the solver object and set a finalizer for safe cleanup.
     solver = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj)
 
+    # register a finalizer that calls close! (anonymous closure avoids ordering issues)
+    finalizer(solver) do s
+      try
+        close!(s)
+      catch
+        @warn "Error during finalization of QRMumpsSolver. Ensure all resources are properly released."
+      end
+    end
     return solver
   end
-  #TODO cleanup after last iteration
+
+  function close!(s::QRMumpsSolver)
+    if s.closed
+      return
+    end
+    s.closed = true
+    # best-effort; qrm_spfct_destroy! and qrm_spmat_destroy! documented functions. 
+    try
+      qrm_spfct_destroy!(s.spfct)
+    catch err
+      @warn "qrm_spfct_destroy! failed" err
+    end
+    try
+      qrm_spmat_destroy!(s.spmat)
+    catch err
+      @warn "qrm_spmat_destroy! failed" err
+    end
+    return nothing
+  end
 end
 
 const R2NLS_allowed_subsolvers = (:cgls, :crls, :lsqr, :lsmr, :qrmumps)
@@ -125,11 +155,24 @@ stats = solve!(solver, model)
 # output
 "Execution stats: first-order stationary"
 ```
+
+# Example with QRMumps subsolver and explicit cleanup
+```jldoctest
+using JSOSolvers, ADNLPModels
+F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
+model = ADNLSModel(F, [-1.2; 1.0], 2)
+solver = R2SolverNLS(model; subsolver = :qrmumps)
+stats = solve!(solver, model)
+close!(solver.ls_subsolver)   # Free QRMumps resources
+qrm_finalize()                # Shutdown QRMumps library globally
+# output
+"Execution stats: first-order stationary"
+```
 """
 mutable struct R2SolverNLS{
   T,
   V,
-  Op <: AbstractLinearOperator{T},
+  Op <: union{AbstractLinearOperator{T},SparseMatrixCOO{T,Int}},
   Sub <: Union{KrylovWorkspace{T, T, V}, QRMumpsSolver{T}},
 } <: AbstractOptimizationSolver
   x::V
@@ -168,24 +211,21 @@ function R2SolverNLS(
   rt = V(undef, nequ)
   Jv = V(undef, nequ)
   Jtv = V(undef, nvar)
-  # Jx = jac_op_residual!(nlp, x, Jv, Jtv) # todo jacobean when QRMumps is used jac_residual!(nlp, x, Jv, Jtv)
-  Op = typeof(Jx)
   s = V(undef, nvar)
   scp = V(undef, nvar)
   σ = eps(T)^(1 / 5)
-
-  if subsolver == :qrmumps #TODO do we need Jv anf Jtv for QRMumps?
-    #allocate Jv and Jtv zero length
-    # Jv = V(undef, 0)
-    # Jtv = V(undef, 0)
-    Jx = jac_residual!(nlp, x, Jv, Jtv)
-    #how do I Jx
-    ls_subsolver = QRMumpsSolver(nlp)
+  if subsolver == :qrmumps
+      Jv = V(undef, 0)
+      Jtv = V(undef, 0)
+      ls_subsolver = QRMumpsSolver(nlp)
+      Jx = SparseMatrixCOO(nequ, nvar, view(ls_subsolver.irn, 1:ls_subsolver.nnzj), view(ls_subsolver.jcn, 1:ls_subsolver.nnzj), view(ls_subsolver.val, 1:ls_subsolver.nnzj))
   else
-    Jx = jac_op_residual!(nlp, x, Jv, Jtv)
-    ls_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
+      Jx = jac_op_residual!(nlp, x, Jv, Jtv)
+      ls_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
   end
   Sub = typeof(ls_subsolver)
+  Op = typeof(Jx)
+
 
   subtol = one(T) # must be ≤ 1.0
   obj_vec = fill(typemin(T), non_mono_size)
@@ -287,7 +327,12 @@ function SolverCore.solve!(
   f0 = f
 
   # preallocate storage for products with Jx and Jx'
-  Jx = solver.Jx # jac_op_residual!(nlp, x, Jv, Jtv)
+  Jx = solver.Jx
+  if Jx isa SparseMatrixCOO
+    jac_coord_residual!(nlp, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
+    Jx.vals .= view(ls_subsolver.val, 1:ls_subsolver.nnzj)
+  end
+
   mul!(∇f, Jx', r)
 
   norm_∇fk = norm(∇f)
@@ -323,7 +368,6 @@ function SolverCore.solve!(
   end
   cp_step_log = " "
   if verbose > 0 && mod(stats.iter, verbose) == 0
-    
     @info log_header(
       [:iter, :f, :dual, :σ, :ρ, :sub_iter, :dir, :cp_step_log, :sub_status],
       [Int, Float64, Float64, Float64, Float64, Int, String, String, String],
@@ -382,7 +426,7 @@ function SolverCore.solve!(
       # Compute the step s.
       subsolver_solved, sub_stats, subiter =
         subsolve!(ls_subsolver, solver, nlp, s, atol, n, m, max_time, subsolver_verbose)
-      if scp_flag 
+      if scp_flag
         # Based on the flag, scp is calcualted
         scp .= -ν_k * ∇f
         if norm(s) > θ2 * norm(scp)
@@ -404,7 +448,7 @@ function SolverCore.solve!(
     mul!(temp, Jx, s)
     slope = dot(r, temp)
     curv = dot(temp, temp)
-    
+
     residual!(nlp, xt, rt)
     fck = obj(nlp, x, rt, recompute = false)
 
@@ -421,9 +465,11 @@ function SolverCore.solve!(
     # Update regularization parameters and Acceptance of the new candidate
     step_accepted = ρk >= η1
     if step_accepted
-      #TODO if QRMumps is used, we have to update Jx else implicitly for other solvers
-
-      # update Jx implicitly
+      if Jx isa SparseMatrixCOO # we need to update the values of Jx in QRMumpsSolver
+        jac_coord_residual!(nlp, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
+        Jx.vals .= view(ls_subsolver.val, 1:ls_subsolver.nnzj)
+      end
+      # update Jx implicitly for other solvers
       x .= xt
       r .= rt
       f = fck
@@ -540,7 +586,7 @@ function subsolve!(
 )
 
   # 1. Update Jacobian values at the current point x
-  jac_coord_residual!(nlp, R2NLS.x, view(ls.val, 1:ls.nnzj))
+  # jac_coord_residual!(nlp, R2NLS.x, view(ls.val, 1:ls.nnzj))
 
   # 2. Update regularization parameter σ
   sqrt_σ = sqrt(R2NLS.σ)
@@ -550,16 +596,15 @@ function subsolve!(
 
   # 3. Build the augmented right-hand side vector: b_aug = [-F(x); 0]
   ls.b_aug[1:m] .= R2NLS.temp # -F(x)
-  fill!(view(ls.b_aug,(m+1):(m+n)), zero(eltype(ls.b_aug))) # we have to do this for some reason #Applying all of its Householder (or Givens) transforms to the entire RHS vector b_aug—i.e. computing QTbQTb.
+  fill!(view(ls.b_aug, (m + 1):(m + n)), zero(eltype(ls.b_aug))) # we have to do this for some reason #Applying all of its Householder (or Givens) transforms to the entire RHS vector b_aug—i.e. computing QTbQTb.
   # Update spmat
   qrm_update!(ls.spmat, ls.val)
 
   # 4. Solve the least-squares system
-  qrm_factorize!(ls.spmat, ls.spfct; transp='n')
-  qrm_apply!(ls.spfct, ls.b_aug; transp='t') 
-  qrm_solve!(ls.spfct, ls.b_aug, s; transp='n')
-  # qrm_least_squares!(ls.spmat, ls.b_aug, s)
-  
+  qrm_factorize!(ls.spmat, ls.spfct; transp = 'n')
+  qrm_apply!(ls.spfct, ls.b_aug; transp = 't')
+  qrm_solve!(ls.spfct, ls.b_aug, s; transp = 'n')
+
   # 5. Return status. For a direct solver, we assume success.
   return true, "QRMumps", 1
 end
