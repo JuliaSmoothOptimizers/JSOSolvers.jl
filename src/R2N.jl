@@ -47,7 +47,7 @@ end
 const R2N_allowed_subsolvers = [:cg, :cr, :minres, :shifted_lbfgs]
 #TODO CgLanczosShiftSolver is not implemented yet for negative curvature problems
 
-const npc_handler_allowed = [:armijo, :sigma, :prev, :CP]
+const npc_handler_allowed = [:armijo, :sigma, :prev, :cp]
 
 """
     R2N(nlp; kwargs...)
@@ -76,7 +76,7 @@ See `JSOSolvers.R2N_allowed_subsolvers` for a list of available `SubSolver`.
   - `:armijo`: uses the Armijo rule to handle non-positive curvature.
   - `:sigma`: increase the regularization parameter σ.
   - `:prev`: if subsolver return after first iteration, increase the sigma, but if subsolver return after second iteration, set s_k = s_k^(t-1).
-  - `:CP`: set s_k to Cauchy point.
+  - `:cp`: set s_k to Cauchy point.
 See `JSOSolvers.npc_handler_allowed` for a list of available `npc_handler` strategies.
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -344,28 +344,54 @@ function SolverCore.solve!(
     ∇fk .*= -1
     # update the operator A with the current σk
     A.σ = σk
-    A.H = H #TODO not really need this ?
-    subsolve!(r2_subsolver, solver, s, zero(T), n, subsolver_verbose)
+    A.H = H
+    # solve for the step direction
+    subsolver_solved, sub_stats, subiter =
+      subsolve!(r2_subsolver, solver, s, zero(T), n, subsolver_verbose)
+
     if !(subsolver == :shifted_lbfgs) #not exact solver
       if r2_subsolver.stats.npcCount >= 1  #npc case
-        if npc_handler == :armij
-          #TODO
-          # elseif npc_handler == :sigma
-          #   σk = max(σmin, γ2 * σk)
-          #   continue ?
-          #  set_iter!(stats, stats.iter + 1)
-          # set_time!(stats, time() - start_time)
-          # do not do anything, just go 
-          #   #TODO
+        if npc_handler == :armijo
+          c = 1e-4
+          α = 1.0
+          increase_factor = 1.5
+          decrease_factor = 0.5
+          min_alpha = 1e-8
+          max_alpha = 1e2
+          dir = r2_subsolver.npc
+          f0 = stats.objective
+          grad_dir = dot(∇fk, dir)
+          # First, try α = 1
+          ck .= x .+ α * dir
+          fck = obj(nlp, ck)
+          if fck > f0 + c * α * grad_dir
+            # Backward tracking
+            while fck > f0 + c * α * grad_dir && α > min_alpha
+              α *= decrease_factor
+              ck .= x .+ α * dir
+              fck = obj(nlp, ck)
+            end
+          else
+            # Forward tracking
+            while true
+              α_new = α * increase_factor
+              ck .= x .+ α_new * dir
+              fck_new = obj(nlp, ck)
+              if fck_new > f0 + c * α_new * grad_dir || α_new > max_alpha
+                break
+              end
+              α = α_new
+              fck = fck_new
+            end
+          end
+          s .= α * dir
         elseif npc_handler == :prev #Cr and cg will return the last iteration s
           s .= r2_subsolver.x
-        elseif npc_handler == :CP
+        elseif npc_handler == :cp
           # Cauchy point
           scp .= ν_k * ∇fk # the ∇fk is already negative
           s .= scp
           scp_recal = false # we have already calculated the Cauchy point
-        else
-          error("Unknown npc_handler: $npc_handler")
         end
       end
     end
@@ -382,26 +408,30 @@ function SolverCore.solve!(
         s .= scp
       end
     end
-
-    slope = dot(s, ∇fk) # = -∇fkᵀ s because we flipped the sign of ∇fk
-    mul!(Hs, H, s)
-    curv = dot(s, Hs)
-
-    ΔTk = slope - curv / 2
-    ck .= x .+ s
-    fck = obj(nlp, ck)
-
-    if non_mono_size > 1  #non-monotone behaviour
-      k = mod(stats.iter, non_mono_size) + 1
-      solver.obj_vec[k] = stats.objective
-      fck_max = maximum(solver.obj_vec)
-      ρk = (fck_max - fck) / (fck_max - stats.objective + ΔTk)
+    if npc_handler == :sigma && r2_subsolver.stats.npcCount >= 1  # non-positive curvature case happen and the npc_handler is sigma
+      step_accepted = false
     else
-      ρk = (stats.objective - fck) / ΔTk
+      slope = dot(s, ∇fk) # = -∇fkᵀ s because we flipped the sign of ∇fk
+      mul!(Hs, H, s)
+      curv = dot(s, Hs)
+
+      ΔTk = slope - curv / 2
+      ck .= x .+ s
+      fck = obj(nlp, ck)
+
+      if non_mono_size > 1  #non-monotone behaviour
+        k = mod(stats.iter, non_mono_size) + 1
+        solver.obj_vec[k] = stats.objective
+        fck_max = maximum(solver.obj_vec)
+        ρk = (fck_max - fck) / (fck_max - stats.objective + ΔTk)
+      else
+        ρk = (stats.objective - fck) / ΔTk
+      end
+
+      # Update regularization parameters and Acceptance of the new candidate
+      step_accepted = ρk >= η1
     end
 
-    # Update regularization parameters and Acceptance of the new candidate
-    step_accepted = ρk >= η1
     if step_accepted
       x .= ck
       grad!(nlp, x, ∇fk)
@@ -421,7 +451,6 @@ function SolverCore.solve!(
       end
     else # η1 > ρk
       σk = max(σmin, γ2 * σk)
-
       ∇fk .*= -1
     end
 
@@ -498,6 +527,7 @@ function subsolve!(
     atol = atol,
     rtol = R2N.cgtol,
     verbose = subsolver_verbose,
+    linesearch = true,
   )
   s .= r2_subsolver.x
   return Krylov.issolved(r2_subsolver), r2_subsolver.stats.status, r2_subsolver.stats.niter
