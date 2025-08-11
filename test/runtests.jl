@@ -3,10 +3,40 @@ using Printf, LinearAlgebra, Logging, SparseArrays, Test
 
 # additional packages
 using ADNLPModels, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
-using NLPModelsTest
+using NLPModelsTest, SolverParameters
 
 # this package
 using JSOSolvers
+
+@testset "Test parameterset" begin
+  @testset "Test unconstrained parameters $paramset" for (paramset, fun) in (
+    (LBFGSParameterSet, lbfgs),
+    (TRONParameterSet, tron),
+    (TRUNKParameterSet, trunk),
+    (FOMOParameterSet, fomo),
+  )
+    nlp = BROWNDEN()
+    params = eval(paramset)(nlp)
+    args = Dict(
+      sym => SolverParameters.value(getfield(params, sym)) for sym in fieldnames(typeof(params))
+    )
+    stats = fun(nlp; args...)
+    @test stats.status == :first_order
+  end
+
+  @testset "Test unconstrained NLS parameters $paramset" for (paramset, fun) in (
+    (TRONLSParameterSet, tron),
+    (TRUNKLSParameterSet, trunk),
+  )
+    nls = MGH01()
+    params = eval(paramset)(nls)
+    args = Dict(
+      sym => SolverParameters.value(getfield(params, sym)) for sym in fieldnames(typeof(params))
+    )
+    stats = fun(nls; args...)
+    @test stats.status == :first_order
+  end
+end
 
 @testset "Test small residual checks $solver" for solver in (:TrunkSolverNLS, :TronSolverNLS)
   nls = ADNLSModel(x -> [x[1] - 1; sin(x[2])], [-1.2; 1.0], 2)

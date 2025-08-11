@@ -206,10 +206,19 @@ end
   ::Val{:GaussNewton},
   nlp::AbstractNLSModel;
   x::V = nlp.meta.x0,
+  bk_max::Int = get(TRUNKLS_bk_max, nlp),
+  monotone::Bool = get(TRUNKLS_monotone, nlp),
+  nm_itmax::Int = get(TRUNKLS_nm_itmax, nlp),
   subsolver::Symbol = :lsmr,
   kwargs...,
 ) where {V}
-  solver = TrunkSolverNLS(nlp; subsolver)
+  solver = TrunkSolverNLS(
+    nlp;
+    bk_max = bk_max,
+    monotone = monotone,
+    nm_itmax = nm_itmax,
+    subsolver = subsolver,
+  )
   return solve!(solver, nlp; x = x, kwargs...)
 end
 
