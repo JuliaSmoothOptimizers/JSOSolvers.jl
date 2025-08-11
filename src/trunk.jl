@@ -178,7 +178,13 @@ end
   subsolver::Symbol = :cg,
   kwargs...,
 ) where {V}
-  solver = TrunkSolver(nlp; bk_max = bk_max, monotone = monotone, nm_itmax = nm_itmax, subsolver = subsolver)
+  solver = TrunkSolver(
+    nlp;
+    bk_max = bk_max,
+    monotone = monotone,
+    nm_itmax = nm_itmax,
+    subsolver = subsolver,
+  )
   return solve!(solver, nlp; x = x, kwargs...)
 end
 

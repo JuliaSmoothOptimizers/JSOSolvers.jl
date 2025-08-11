@@ -9,35 +9,35 @@ using NLPModelsTest, SolverParameters
 using JSOSolvers
 
 @testset "Test parameterset" begin
-@testset "Test unconstrained parameters $paramset" for (paramset, fun) in (
-  (LBFGSParameterSet, lbfgs),
-  (TRONParameterSet, tron),
-  (TRONLSParameterSet, tron),
-  (TRUNKParameterSet, trunk),
-  (TRUNKLSParameterSet, trunk),
-  (FOMOParameterSet, fomo),
-)
-nlp = BROWNDEN()
-params = eval(paramset)(nlp)
-args = Dict(
-  sym => SolverParameters.value(getfield(params, sym)) for sym in fieldnames(typeof(params))
-)
-stats = fun(nlp; args...)
-@test stats.status == :first_order
-end
+  @testset "Test unconstrained parameters $paramset" for (paramset, fun) in (
+    (LBFGSParameterSet, lbfgs),
+    (TRONParameterSet, tron),
+    (TRONLSParameterSet, tron),
+    (TRUNKParameterSet, trunk),
+    (TRUNKLSParameterSet, trunk),
+    (FOMOParameterSet, fomo),
+  )
+    nlp = BROWNDEN()
+    params = eval(paramset)(nlp)
+    args = Dict(
+      sym => SolverParameters.value(getfield(params, sym)) for sym in fieldnames(typeof(params))
+    )
+    stats = fun(nlp; args...)
+    @test stats.status == :first_order
+  end
 
-@testset "Test unconstrained NLS parameters $paramset" for (paramset, fun) in (
-  (TRONLSParameterSet, tron),
-  (TRUNKLSParameterSet, trunk),
-)
-nls = MGH01()
-params = eval(paramset)(nls)
-args = Dict(
-  sym => SolverParameters.value(getfield(params, sym)) for sym in fieldnames(typeof(params))
-)
-stats = fun(nls; args...)
-@test stats.status == :first_order
-end
+  @testset "Test unconstrained NLS parameters $paramset" for (paramset, fun) in (
+    (TRONLSParameterSet, tron),
+    (TRUNKLSParameterSet, trunk),
+  )
+    nls = MGH01()
+    params = eval(paramset)(nls)
+    args = Dict(
+      sym => SolverParameters.value(getfield(params, sym)) for sym in fieldnames(typeof(params))
+    )
+    stats = fun(nls; args...)
+    @test stats.status == :first_order
+  end
 end
 
 @testset "Test small residual checks $solver" for solver in (:TrunkSolverNLS, :TronSolverNLS)
