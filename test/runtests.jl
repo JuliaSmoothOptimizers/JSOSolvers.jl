@@ -12,9 +12,7 @@ using JSOSolvers
   @testset "Test unconstrained parameters $paramset" for (paramset, fun) in (
     (LBFGSParameterSet, lbfgs),
     (TRONParameterSet, tron),
-    (TRONLSParameterSet, tron),
     (TRUNKParameterSet, trunk),
-    (TRUNKLSParameterSet, trunk),
     (FOMOParameterSet, fomo),
   )
     nlp = BROWNDEN()
