@@ -82,7 +82,7 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
     return solver
   end
 
-  function close!(s::QRMumpsSolver)
+  function close!(s::QRMumpsSolver) #TODO move to Finilizer 
     if s.closed
       return
     end
@@ -156,7 +156,7 @@ stats = solve!(solver, model)
 "Execution stats: first-order stationary"
 ```
 
-# Example with QRMumps subsolver and explicit cleanup
+# Example with QRMumps subsolver and explicit cleanup #TODO remove
 ```jldoctest
 using JSOSolvers, ADNLPModels
 F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
@@ -164,7 +164,7 @@ model = ADNLSModel(F, [-1.2; 1.0], 2)
 solver = R2SolverNLS(model; subsolver = :qrmumps)
 stats = solve!(solver, model)
 close!(solver.ls_subsolver)   # Free QRMumps resources
-qrm_finalize()                # Shutdown QRMumps library globally
+qrm_finalize()                # Shutdown QRMumps library globally  #TODO remove 
 # output
 "Execution stats: first-order stationary"
 ```
@@ -323,14 +323,15 @@ function SolverCore.solve!(
 
   σk = solver.σ
   residual!(nlp, x, r)
-  f, ∇f = objgrad!(nlp, x, ∇f, r, recompute = false)
+  # f, ∇f = objgrad!(nlp, x, ∇f, r, recompute = false) #TODO it is expensive for QRMumps  do this mul!(∇f, Jx', r)
+  f = obj(nlp, x, r, recompute = false) #TODO it is expensive for QRMumps  do this mul!(∇f, Jx', r)
   f0 = f
 
   # preallocate storage for products with Jx and Jx'
   Jx = solver.Jx
   if Jx isa SparseMatrixCOO
     jac_coord_residual!(nlp, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
-    Jx.vals .= view(ls_subsolver.val, 1:ls_subsolver.nnzj)
+    Jx.vals .= view(ls_subsolver.val, 1:ls_subsolver.nnzj) #TODO check if this is needed?
   end
 
   mul!(∇f, Jx', r)
@@ -473,7 +474,8 @@ function SolverCore.solve!(
       x .= xt
       r .= rt
       f = fck
-      grad!(nlp, x, ∇f, r, recompute = false)
+      # grad!(nlp, x, ∇f, r, recompute = false)
+      mul!(∇f, Jx', r) # ∇f = Jx' * r
       set_objective!(stats, fck)
       unbounded = fck < fmin
       norm_∇fk = norm(∇f)
