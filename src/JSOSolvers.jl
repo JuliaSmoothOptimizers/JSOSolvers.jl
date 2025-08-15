@@ -1,7 +1,7 @@
 module JSOSolvers
 
 # stdlib
-using LinearAlgebra, Logging, Printf
+using LinearAlgebra, Logging, Printf, Arpack, SparseArrays
 
 # JSO packages
 using Krylov,
@@ -9,6 +9,8 @@ using Krylov,
 
 import SolverCore.solve!
 export solve!
+
+include("utilities.jl")
 
 const Callback_docstring = "
 The callback is called at each iteration.
@@ -48,6 +50,8 @@ include("fomo.jl")
 
 # Unconstrained solvers for NLS
 include("trunkls.jl")
+include("R2NLS.jl")
+
 
 # List of keywords accepted by TRONTrustRegion
 const tron_keys = (
