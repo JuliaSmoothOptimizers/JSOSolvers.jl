@@ -318,7 +318,6 @@ function SolverCore.solve!(
 
   residual!(nlp, x, r)
   f = obj(nlp, x, r, recompute = false)
-  mul!(∇f, Jx', r)
   f0 = f
 
   mul!(∇f, Jx', r)
