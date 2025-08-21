@@ -69,30 +69,6 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
 
     # 7. Create the solver object and set a finalizer for safe cleanup.
     solver = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj)
-
-    # # register a finalizer that calls close! (TODO this caused  issues)
-    ## Running the restart.jl test in JSOSolvers.jl causes a crash in libdqrm.dll during finalization of a dqrm_spfct object. This appears to be a memory access violation when calling dqrm_spfct_destroy_c through QRMumps.jl.
-
-    # The fault occurs inside the finalizer when Julia's GC tries to clean up the object, suggesting a possible double free or invalid pointer referenc
-    # finalizer(solver) do s
-    #   try
-    #     if !s.closed
-    #       s.closed = true
-    #       try
-    #         qrm_spfct_destroy!(s.spfct)
-    #       catch err
-    #         @warn "qrm_spfct_destroy! failed" err
-    #       end
-    #       try
-    #         qrm_spmat_destroy!(s.spmat)
-    #       catch err
-    #         @warn "qrm_spmat_destroy! failed" err
-    #       end
-    #     end
-    #   catch
-    #     @warn "Error during finalization of QRMumpsSolver. Ensure all resources are properly released." err
-    #   end
-    # end
     return solver
   end
 end
@@ -206,7 +182,7 @@ function R2SolverNLS(
       ls_subsolver.irn[1:ls_subsolver.nnzj],
       ls_subsolver.jcn[1:ls_subsolver.nnzj],
       ls_subsolver.val[1:ls_subsolver.nnzj],
-    ) #For now till they fix the SparseMatrixCOO to accept pointers
+    )
   else
     Jx = jac_op_residual!(nlp, x, Jv, Jtv)
     ls_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)

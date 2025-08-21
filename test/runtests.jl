@@ -1,5 +1,5 @@
 # stdlib
-using Printf, LinearAlgebra, Logging, SparseArrays, Test, Arpack
+using Printf, LinearAlgebra, Logging, SparseArrays, Test
 
 # additional packages
 using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
@@ -77,9 +77,6 @@ end
     @test stats.objective < -one(T) / eps(T)
   end
 end
-
-
-include("test_Utilities.jl")
 
 include("restart.jl")
 include("callback.jl")

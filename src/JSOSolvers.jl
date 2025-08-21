@@ -1,7 +1,7 @@
 module JSOSolvers
 
 # stdlib
-using LinearAlgebra, Logging, Printf, Arpack, SparseArrays
+using LinearAlgebra, Logging, Printf, SparseArrays
 
 # JSO packages
 using Krylov,
@@ -10,7 +10,6 @@ using Krylov,
 import SolverCore.solve!
 export solve!
 
-include("utilities.jl")
 
 const Callback_docstring = "
 The callback is called at each iteration.
