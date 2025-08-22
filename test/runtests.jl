@@ -2,7 +2,7 @@
 using Printf, LinearAlgebra, Logging, SparseArrays, Test
 
 # additional packages
-using ADNLPModels, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
+using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
 using NLPModelsTest, SolverParameters
 
 # this package
@@ -56,7 +56,7 @@ end
     @test stats.status == :max_iter
   end
 
-  @testset "$(fun)-NLS" for fun in (tron, trunk)
+  @testset "$(fun)-NLS" for fun in (tron, trunk, R2NLS)
     f(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
     nlp = ADNLSModel(f, [-1.2; 1.0], 2)
 
