@@ -1,4 +1,75 @@
-export R2NLS, R2SolverNLS
+export R2NLS, R2SolverNLS, R2NLSParameterSet
+"""
+  R2NLSParameterSet([T=Float64]; η1, η2, θ1, θ2, γ1, γ2, γ3, δ1, σmin, non_mono_size)
+
+Parameter set for the R2NLS solver. Controls algorithmic tolerances and step acceptance.
+
+# Keyword Arguments
+- `η1 = eps(T)^(1/4)`: Step acceptance parameter.
+- `η2 = T(0.95)`: Step acceptance parameter.
+- `θ1 = T(0.5)`: Cauchy step parameter.
+- `θ2 = eps(T)^(-1)`: Cauchy step parameter.
+- `γ1 = T(1.5)`: Regularization update parameter.
+- `γ2 = T(2.5)`: Regularization update parameter.
+- `γ3 = T(0.5)`: Regularization update parameter.
+- `δ1 = T(0.5)`: Cauchy point calculation parameter.
+- `σmin = eps(T)`: Minimum step parameter.
+- `non_mono_size = 1`: Size of the non-monotone window.
+"""
+struct R2NLSParameterSet{T} <: AbstractParameterSet
+  η1::Parameter{T, RealInterval{T}}
+  η2::Parameter{T, RealInterval{T}}
+  θ1::Parameter{T, RealInterval{T}}
+  θ2::Parameter{T, RealInterval{T}}
+  γ1::Parameter{T, RealInterval{T}}
+  γ2::Parameter{T, RealInterval{T}}
+  γ3::Parameter{T, RealInterval{T}}
+  δ1::Parameter{T, RealInterval{T}}
+  σmin::Parameter{T, RealInterval{T}}
+  non_mono_size::Parameter{Int, IntegerRange{Int}}
+end
+
+# Default parameter values using nlp-dependent closures for type safety
+const R2NLS_η1 = DefaultParameter(nlp -> begin
+  T = eltype(nlp.meta.x0)
+  T(eps(T))^(T(1)/T(4))
+end, "eps(T)^(1/4)")
+const R2NLS_η2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.95), "T(0.95)")
+const R2NLS_θ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
+const R2NLS_θ2 = DefaultParameter(nlp -> inv(eps(eltype(nlp.meta.x0))), "eps(T)^(-1)")
+const R2NLS_γ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1.5), "T(1.5)")
+const R2NLS_γ2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(2.5), "T(2.5)")
+const R2NLS_γ3 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
+const R2NLS_δ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
+const R2NLS_σmin = DefaultParameter(nlp -> eps(eltype(nlp.meta.x0)), "eps(T)")
+const R2NLS_non_mono_size = DefaultParameter(1)
+
+function R2NLSParameterSet(
+  nlp::AbstractNLSModel;
+  η1::T = get(R2NLS_η1, nlp),
+  η2::T = get(R2NLS_η2, nlp),
+  θ1::T = get(R2NLS_θ1, nlp),
+  θ2::T = get(R2NLS_θ2, nlp),
+  γ1::T = get(R2NLS_γ1, nlp),
+  γ2::T = get(R2NLS_γ2, nlp),
+  γ3::T = get(R2NLS_γ3, nlp),
+  δ1::T = get(R2NLS_δ1, nlp),
+  σmin::T = get(R2NLS_σmin, nlp),
+  non_mono_size::Int = get(R2NLS_non_mono_size, nlp),
+) where {T}
+  R2NLSParameterSet{T}(
+    Parameter(η1, RealInterval(zero(T), one(T))),
+    Parameter(η2, RealInterval(zero(T), one(T))),
+    Parameter(θ1, RealInterval(zero(T), one(T))),
+    Parameter(θ2, RealInterval(one(T), T(Inf))),
+    Parameter(γ1, RealInterval(one(T), T(Inf))),
+    Parameter(γ2, RealInterval(one(T), T(Inf))),
+    Parameter(γ3, RealInterval(zero(T), one(T))),
+    Parameter(δ1, RealInterval(zero(T), one(T))),
+    Parameter(σmin, RealInterval(zero(T), T(Inf))),
+    Parameter(non_mono_size, IntegerRange(1, typemax(Int))),
+  )
+end
 export QRMumpsSolver
 using SparseMatricesCOO
 
@@ -76,25 +147,39 @@ end
 const R2NLS_allowed_subsolvers = (:cgls, :crls, :lsqr, :lsmr, :qrmumps)
 
 """
-    R2NLS(nlp; kwargs...)
-An inexact second-order quadratic regularization method designed specifically for nonlinear least-squares problems.
-The objective is to solve
-    min ½‖F(x)‖²
+  R2NLS(nlp; kwargs...)
+
+An inexact second-order quadratic regularization method designed specifically for nonlinear least-squares problems:
+
+  min ½‖F(x)‖²
+
 where `F: ℝⁿ → ℝᵐ` is a vector-valued function defining the least-squares residuals.
+
 For advanced usage, first create a `R2SolverNLS` to preallocate the necessary memory for the algorithm, and then call `solve!`:
-    solver = R2SolverNLS(nlp)
-    solve!(solver, nlp; kwargs...)
+
+  solver = R2SolverNLS(nlp)
+  solve!(solver, nlp; kwargs...)
+
 # Arguments
 - `nlp::AbstractNLSModel{T, V}` is the nonlinear least-squares model to solve. See `NLPModels.jl` for additional details.
 # Keyword Arguments
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance; the algorithm stops when ‖J(x)ᵀF(x)‖ ≤ atol + rtol * ‖J(x₀)ᵀF(x₀)‖.
-- `η1 =T(0.0001) eps(T)^(1/4)`, `η2 = T(0.95)`: step acceptance parameters.
-- `θ1 = T(0.5)`, `θ2 = eps(T)^-1`: Cauchy step parameters.
-- `γ1 = T(1.5)`, `γ2 = T(2.5)`, `γ3 = T(0.5)`: regularization update parameters.
-- `δ1 = T(0.5)`: used for Cauchy point calculate.
-- `σmin = eps(T)`: minimum step parameter for the R2NLS algorithm.
+- `params::R2NLSParameterSet = R2NLSParameterSet()`: algorithm parameters, see [`R2NLSParameterSet`](@ref).
+- `η1::T = $(R2NLS_η1)`: step acceptance parameter, see [`R2NLSParameterSet`](@ref).
+- `η2::T = $(R2NLS_η2)`: step acceptance parameter, see [`R2NLSParameterSet`](@ref).
+- `θ1::T = $(R2NLS_θ1)`: Cauchy step parameter, see [`R2NLSParameterSet`](@ref).
+- `θ2::T = $(R2NLS_θ2)`: Cauchy step parameter, see [`R2NLSParameterSet`](@ref).
+- `γ1::T = $(R2NLS_γ1)`: regularization update parameter, see [`R2NLSParameterSet`](@ref).
+- `γ2::T = $(R2NLS_γ2)`: regularization update parameter, see [`R2NLSParameterSet`](@ref).
+- `γ3::T = $(R2NLS_γ3)`: regularization update parameter, see [`R2NLSParameterSet`](@ref).
+- `δ1::T = $(R2NLS_δ1)`: Cauchy point calculation parameter, see [`R2NLSParameterSet`](@ref).
+- `σmin::T = $(R2NLS_σmin)`: minimum step parameter, see [`R2NLSParameterSet`](@ref).
+- `non_mono_size::Int = $(R2NLS_non_mono_size)`: size of the non-monotone window, see [`R2NLSParameterSet`](@ref).
+- `scp_flag::Bool = true`: if true, compare the norm of the calculated step with `θ2 * norm(scp)` each iteration, selecting the smaller step.
+- `subsolver::Symbol = :lsmr`: method used as subproblem solver, see `JSOSolvers.R2NLS_allowed_subsolvers` for a list.
+- `subsolver_verbose::Int = 0`: if > 0, display subsolver iteration details every `subsolver_verbose` iterations when a KrylovWorkspace type is selected.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum allowed time in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
@@ -106,8 +191,10 @@ For advanced usage, first create a `R2SolverNLS` to preallocate the necessary me
 
 # Output
 Returns a `GenericExecutionStats` object containing statistics and information about the optimization process (see `SolverCore.jl`).
+
 # Callback
 $(Callback_docstring)
+
 # Examples
 ```jldoctest
 using JSOSolvers, ADNLPModels
@@ -148,16 +235,39 @@ mutable struct R2SolverNLS{
   s::V
   scp::V
   σ::T
+  params::R2NLSParameterSet{T}
 end
 
 function R2SolverNLS(
   nlp::AbstractNLSModel{T, V};
-  non_mono_size = 1,
+  η1::T = get(R2NLS_η1, nlp),
+  η2::T = get(R2NLS_η2, nlp),
+  θ1::T = get(R2NLS_θ1, nlp),
+  θ2::T = get(R2NLS_θ2, nlp),
+  γ1::T = get(R2NLS_γ1, nlp),
+  γ2::T = get(R2NLS_γ2, nlp),
+  γ3::T = get(R2NLS_γ3, nlp),
+  δ1::T = get(R2NLS_δ1, nlp),
+  σmin::T = get(R2NLS_σmin, nlp),
+  non_mono_size::Int = get(R2NLS_non_mono_size, nlp),
   subsolver::Symbol = :lsmr,
 ) where {T, V}
+  params = R2NLSParameterSet(
+    nlp;
+    η1 = η1,
+    η2 = η2,
+    θ1 = θ1,
+    θ2 = θ2,
+    γ1 = γ1,
+    γ2 = γ2,
+    γ3 = γ3,
+    δ1 = δ1,
+    σmin = σmin,
+    non_mono_size = non_mono_size,
+  )
   subsolver in R2NLS_allowed_subsolvers ||
     error("subproblem solver must be one of $(R2NLS_allowed_subsolvers)")
-  non_mono_size >= 1 || error("non_mono_size must be greater than or equal to 1")
+  value(params.non_mono_size) >= 1 || error("non_mono_size must be greater than or equal to 1")
 
   nvar = nlp.meta.nvar
   nequ = nlp.nls_meta.nequ
@@ -191,7 +301,7 @@ function R2SolverNLS(
   Op = typeof(Jx)
 
   subtol = one(T) # must be ≤ 1.0
-  obj_vec = fill(typemin(T), non_mono_size)
+  obj_vec = fill(typemin(T), value(params.non_mono_size))
 
   return R2SolverNLS{T, V, Op, Sub}(
     x,
@@ -209,6 +319,7 @@ function R2SolverNLS(
     s,
     scp,
     σ,
+    params,
   )
 end
 
@@ -223,12 +334,34 @@ end
 
 @doc (@doc R2SolverNLS) function R2NLS(
   nlp::AbstractNLSModel{T, V};
+  η1::Real = get(R2NLS_η1, nlp),
+  η2::Real = get(R2NLS_η2, nlp),
+  θ1::Real = get(R2NLS_θ1, nlp),
+  θ2::Real = get(R2NLS_θ2, nlp),
+  γ1::Real = get(R2NLS_γ1, nlp),
+  γ2::Real = get(R2NLS_γ2, nlp),
+  γ3::Real = get(R2NLS_γ3, nlp),
+  δ1::Real = get(R2NLS_δ1, nlp),
+  σmin::Real = get(R2NLS_σmin, nlp),
+  non_mono_size::Int = get(R2NLS_non_mono_size, nlp),
   subsolver::Symbol = :lsmr,
-  non_mono_size = 1,
   kwargs...,
 ) where {T, V}
-  solver = R2SolverNLS(nlp; non_mono_size = non_mono_size, subsolver = subsolver)
-  return solve!(solver, nlp; non_mono_size = non_mono_size, kwargs...)
+  solver = R2SolverNLS(
+    nlp;
+    η1 = convert(T, η1),
+    η2 = convert(T, η2),
+    θ1 = convert(T, θ1),
+    θ2 = convert(T, θ2),
+    γ1 = convert(T, γ1),
+    γ2 = convert(T, γ2),
+    γ3 = convert(T, γ3),
+    δ1 = convert(T, δ1),
+    σmin = convert(T, σmin),
+    non_mono_size = non_mono_size,
+    subsolver = subsolver,
+  )
+  return solve!(solver, nlp; kwargs...)
 end
 
 function SolverCore.solve!(
@@ -241,22 +374,12 @@ function SolverCore.solve!(
   rtol::T = √eps(T),
   Fatol::T = zero(T),
   Frtol::T = zero(T),
-  η1 = eps(T)^(1 / 4),
-  η2 = T(0.95),
-  θ1 = T(0.5),
-  θ2 = eps(T)^(-1),
-  γ1 = T(1.5),
-  γ2 = T(2.5),
-  γ3 = T(0.5),
-  δ1 = T(0.5),
-  σmin = eps(T),
   max_time::Float64 = 30.0,
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   verbose::Int = 0,
   scp_flag::Bool = true,
   subsolver_verbose::Int = 0,
-  non_mono_size = 1,
 ) where {T, V}
   unconstrained(nlp) || error("R2NLS should only be called on unconstrained problems.")
   if !(nlp.meta.minimize)
@@ -264,6 +387,18 @@ function SolverCore.solve!(
   end
 
   reset!(stats)
+  params = solver.params
+  η1 = value(params.η1)
+  η2 = value(params.η2)
+  θ1 = value(params.θ1)
+  θ2 = value(params.θ2)
+  γ1 = value(params.γ1)
+  γ2 = value(params.γ2)
+  γ3 = value(params.γ3)
+  δ1 = value(params.δ1)
+  σmin = value(params.σmin)
+  non_mono_size = value(params.non_mono_size)
+
   @assert(η1 > 0 && η1 < 1)
   @assert(θ1 > 0 && θ1 < 1)
   @assert(θ2 > 1)
