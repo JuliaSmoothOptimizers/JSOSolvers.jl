@@ -371,7 +371,7 @@ function SolverCore.solve!(
       obj(nlp, x)
     end
 
-    ared, pred = aredpred!(tr, nlp, fc, fx, qs, x, s, slope)
+    ared, pred = aredpred!(tr, nlp, fc, fx, qs, x, s, slope; use_only_objgrad = use_only_objgrad)
     if pred ≥ 0
       stats.status = :neg_pred
       done = true
