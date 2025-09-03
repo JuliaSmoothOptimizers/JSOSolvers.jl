@@ -281,6 +281,7 @@ function SolverCore.solve!(
         max_time = max_time,
       ),
     )
+    set_solver_specific!(stats, :nprod, solver.H.nprod)
 
     callback(nlp, solver, stats)
 
