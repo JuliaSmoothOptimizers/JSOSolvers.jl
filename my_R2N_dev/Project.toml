@@ -1,0 +1,7 @@
+[deps]
+ADNLPModels = "54578032-b7ea-4c30-94aa-7cbd1cce6c9a"
+HSL = "34c5aeac-e683-54a6-a0e9-6e0fdc586c50"
+JSOSolvers = "10dff2fc-5484-5881-a0e0-c90441020f8a"
+NLPModels = "a4795742-8479-5a88-8948-cc11e1c8c1a6"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+SparseMatricesCOO = "fa32481b-f100-4b48-8dc8-c62f61b13870"

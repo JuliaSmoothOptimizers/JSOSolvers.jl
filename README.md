@@ -26,7 +26,8 @@ This package provides an implementation of four classic algorithms for unconstra
     > large scale optimization. *Mathematical Programming*, 45(1), 503-528.
     > DOI: [10.1007/BF01589116](https://doi.org/10.1007/BF01589116)
 
-    
+- `R2N`: An inexact second-order quadratic regularization method for unconstrained optimization (with shifted L-BFGS or shifted Hessian operator);
+
 - `R2`: a first-order quadratic regularization method for unconstrained optimization;
 
     > E. G. Birgin, J. L. Gardenghi, J. M. Martínez, S. A. Santos, Ph. L. Toint. (2017).
@@ -65,7 +66,7 @@ using JSOSolvers, ADNLPModels
 
 # Rosenbrock
 nlp = ADNLPModel(x -> 100 * (x[2] - x[1]^2)^2 + (x[1] - 1)^2, [-1.2; 1.0])
-stats = lbfgs(nlp) # or trunk, tron, R2
+stats = lbfgs(nlp) # or trunk, tron, R2, R2N
 ```
 
 ## How to cite

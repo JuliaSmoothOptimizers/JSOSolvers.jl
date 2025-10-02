@@ -1,6 +1,11 @@
 export R2NLS, R2SolverNLS, R2NLSParameterSet
+export QRMumpsSolver
+using SparseMatricesCOO
+
+using QRMumps, LinearAlgebra, SparseArrays
+
 """
-  R2NLSParameterSet([T=Float64]; η1, η2, θ1, θ2, γ1, γ2, γ3, δ1, σmin, non_mono_size)
+  R2NLSParameterSet([T=Float64]; η1, η2, θ1, θ2, γ1, γ2, γ3, δ1, σmin)
 
 Parameter set for the R2NLS solver. Controls algorithmic tolerances and step acceptance.
 
@@ -14,7 +19,6 @@ Parameter set for the R2NLS solver. Controls algorithmic tolerances and step acc
 - `γ3 = T(0.5)`: Regularization update parameter.
 - `δ1 = T(0.5)`: Cauchy point calculation parameter.
 - `σmin = eps(T)`: Minimum step parameter.
-- `non_mono_size = 1`: Size of the non-monotone window.
 """
 struct R2NLSParameterSet{T} <: AbstractParameterSet
   η1::Parameter{T, RealInterval{T}}
@@ -26,10 +30,9 @@ struct R2NLSParameterSet{T} <: AbstractParameterSet
   γ3::Parameter{T, RealInterval{T}}
   δ1::Parameter{T, RealInterval{T}}
   σmin::Parameter{T, RealInterval{T}}
-  non_mono_size::Parameter{Int, IntegerRange{Int}}
 end
 
-# Default parameter values using nlp-dependent closures for type safety
+# Default parameter values
 const R2NLS_η1 = DefaultParameter(nlp -> begin
   T = eltype(nlp.meta.x0)
   T(eps(T))^(T(1)/T(4))
@@ -42,7 +45,6 @@ const R2NLS_γ2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(2.5), "T(2.5)")
 const R2NLS_γ3 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
 const R2NLS_δ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
 const R2NLS_σmin = DefaultParameter(nlp -> eps(eltype(nlp.meta.x0)), "eps(T)")
-const R2NLS_non_mono_size = DefaultParameter(1)
 
 function R2NLSParameterSet(
   nlp::AbstractNLSModel;
@@ -55,7 +57,6 @@ function R2NLSParameterSet(
   γ3::T = get(R2NLS_γ3, nlp),
   δ1::T = get(R2NLS_δ1, nlp),
   σmin::T = get(R2NLS_σmin, nlp),
-  non_mono_size::Int = get(R2NLS_non_mono_size, nlp),
 ) where {T}
   R2NLSParameterSet{T}(
     Parameter(η1, RealInterval(zero(T), one(T))),
@@ -67,13 +68,8 @@ function R2NLSParameterSet(
     Parameter(γ3, RealInterval(zero(T), one(T))),
     Parameter(δ1, RealInterval(zero(T), one(T))),
     Parameter(σmin, RealInterval(zero(T), T(Inf))),
-    Parameter(non_mono_size, IntegerRange(1, typemax(Int))),
   )
 end
-export QRMumpsSolver
-using SparseMatricesCOO
-
-using QRMumps, LinearAlgebra, SparseArrays
 
 abstract type AbstractQRMumpsSolver end
 
@@ -176,7 +172,6 @@ For advanced usage, first create a `R2SolverNLS` to preallocate the necessary me
 - `γ3::T = $(R2NLS_γ3)`: regularization update parameter, see [`R2NLSParameterSet`](@ref).
 - `δ1::T = $(R2NLS_δ1)`: Cauchy point calculation parameter, see [`R2NLSParameterSet`](@ref).
 - `σmin::T = $(R2NLS_σmin)`: minimum step parameter, see [`R2NLSParameterSet`](@ref).
-- `non_mono_size::Int = $(R2NLS_non_mono_size)`: size of the non-monotone window, see [`R2NLSParameterSet`](@ref).
 - `scp_flag::Bool = true`: if true, compare the norm of the calculated step with `θ2 * norm(scp)` each iteration, selecting the smaller step.
 - `subsolver::Symbol = :lsmr`: method used as subproblem solver, see `JSOSolvers.R2NLS_allowed_subsolvers` for a list.
 - `subsolver_verbose::Int = 0`: if > 0, display subsolver iteration details every `subsolver_verbose` iterations when a KrylovWorkspace type is selected.
@@ -249,7 +244,7 @@ function R2SolverNLS(
   γ3::T = get(R2NLS_γ3, nlp),
   δ1::T = get(R2NLS_δ1, nlp),
   σmin::T = get(R2NLS_σmin, nlp),
-  non_mono_size::Int = get(R2NLS_non_mono_size, nlp),
+  non_mono_size::Int = 1,
   subsolver::Symbol = :lsmr,
 ) where {T, V}
   params = R2NLSParameterSet(
