@@ -71,8 +71,15 @@ Hx = SparseMatrixCOO(
       cols, #ls_subsolver.jcn[1:ls_subsolver.nnzj],
       vals, #ls_subsolver.val[1:ls_subsolver.nnzj],
     )
+ H = sparse(cols,rows,vals)
 
-    H = sparse(cols,rows,vals)
+#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### 
+#            TEsting to update the values of H
+new_vals = ones(nnzh+n).*10
+
+H.nzval .= new_vals
+#### #### #### #### #### #### #### #### #### #### #### #### #### #### #### #### 
+
 
 
 
