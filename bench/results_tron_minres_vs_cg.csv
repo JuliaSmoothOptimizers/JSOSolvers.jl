@@ -1,0 +1,5 @@
+prob,subsolver,elapsed,iter,status,objective,dual
+1,cg,68.995797,2,max_time,195.150087826,118.665
+1,minres,74.223810,2,max_time,237.635885566,129.697
+2,cg,182.949333,1,max_time,948.148566607,623.416
+2,minres,139.410956,1,max_time,1027.95775894,632.073
