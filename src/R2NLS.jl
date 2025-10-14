@@ -5,7 +5,7 @@ using SparseMatricesCOO
 using QRMumps, LinearAlgebra, SparseArrays
 
 """
-  R2NLSParameterSet([T=Float64]; η1, η2, θ1, θ2, γ1, γ2, γ3, δ1, σmin)
+  R2NLSParameterSet([T=Float64]; η1, η2, θ1, θ2, γ1, γ2, γ3, δ1, σmin, non_mono_size)
 
 Parameter set for the R2NLS solver. Controls algorithmic tolerances and step acceptance.
 
@@ -19,6 +19,7 @@ Parameter set for the R2NLS solver. Controls algorithmic tolerances and step acc
 - `γ3 = T(0.5)`: Regularization update parameter.
 - `δ1 = T(0.5)`: Cauchy point calculation parameter.
 - `σmin = eps(T)`: Minimum step parameter.
+- `non_mono_size = 1`: the size of the non-monotone behaviour. If > 1, the algorithm will use a non-monotone strategy to accept steps.
 """
 struct R2NLSParameterSet{T} <: AbstractParameterSet
   η1::Parameter{T, RealInterval{T}}
@@ -30,6 +31,7 @@ struct R2NLSParameterSet{T} <: AbstractParameterSet
   γ3::Parameter{T, RealInterval{T}}
   δ1::Parameter{T, RealInterval{T}}
   σmin::Parameter{T, RealInterval{T}}
+  non_mono_size::Parameter{T, RealInterval{T}}
 end
 
 # Default parameter values
@@ -45,6 +47,7 @@ const R2NLS_γ2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(2.5), "T(2.5)")
 const R2NLS_γ3 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
 const R2NLS_δ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
 const R2NLS_σmin = DefaultParameter(nlp -> eps(eltype(nlp.meta.x0)), "eps(T)")
+const R2NLS_non_mono_size = DefaultParameter(1)
 
 function R2NLSParameterSet(
   nlp::AbstractNLSModel;
@@ -57,6 +60,7 @@ function R2NLSParameterSet(
   γ3::T = get(R2NLS_γ3, nlp),
   δ1::T = get(R2NLS_δ1, nlp),
   σmin::T = get(R2NLS_σmin, nlp),
+  non_mono_size::T = get(R2NLS_non_mono_size, nlp)
 ) where {T}
   R2NLSParameterSet{T}(
     Parameter(η1, RealInterval(zero(T), one(T))),
@@ -68,6 +72,7 @@ function R2NLSParameterSet(
     Parameter(γ3, RealInterval(zero(T), one(T))),
     Parameter(δ1, RealInterval(zero(T), one(T))),
     Parameter(σmin, RealInterval(zero(T), T(Inf))),
+    Parameter(non_mono_size, RealInterval(one(T), T(Inf))),
   )
 end
 
@@ -172,6 +177,7 @@ For advanced usage, first create a `R2SolverNLS` to preallocate the necessary me
 - `γ3::T = $(R2NLS_γ3)`: regularization update parameter, see [`R2NLSParameterSet`](@ref).
 - `δ1::T = $(R2NLS_δ1)`: Cauchy point calculation parameter, see [`R2NLSParameterSet`](@ref).
 - `σmin::T = $(R2NLS_σmin)`: minimum step parameter, see [`R2NLSParameterSet`](@ref).
+- `non_mono_size::T = $(R2NLS_non_mono_size)`: the size of the non-monotone behaviour. If > 1, the algorithm will use a non-monotone strategy to accept steps.
 - `scp_flag::Bool = true`: if true, compare the norm of the calculated step with `θ2 * norm(scp)` each iteration, selecting the smaller step.
 - `subsolver::Symbol = :lsmr`: method used as subproblem solver, see `JSOSolvers.R2NLS_allowed_subsolvers` for a list.
 - `subsolver_verbose::Int = 0`: if > 0, display subsolver iteration details every `subsolver_verbose` iterations when a KrylovWorkspace type is selected.
@@ -244,7 +250,7 @@ function R2SolverNLS(
   γ3::T = get(R2NLS_γ3, nlp),
   δ1::T = get(R2NLS_δ1, nlp),
   σmin::T = get(R2NLS_σmin, nlp),
-  non_mono_size::Int = 1,
+  non_mono_size::Int = get(R2NLS_non_mono_size, nlp),
   subsolver::Symbol = :lsmr,
 ) where {T, V}
   params = R2NLSParameterSet(

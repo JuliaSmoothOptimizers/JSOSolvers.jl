@@ -1,6 +1,12 @@
 export R2N, R2NSolver, R2NParamaterSet
 export ShiftedLBFGSSolver
 
+using HSL_jll, SparseArrays
+using HSL
+function LIBHSL_isfunctional()
+  @ccall libhsl.LIBHSL_isfunctional()::Bool
+end
+
 
 """
     R2NParameterSet([T=Float64]; θ1, θ2, η1, η2, γ1, γ2, γ3, σmin)
@@ -15,7 +21,9 @@ Parameter set for the R2N solver. Controls algorithmic tolerances and step accep
 - `γ1 = T(1.5)`: Regularization update parameter (1 < γ1 ≤ γ2).
 - `γ2 = T(2.5)`: Regularization update parameter (γ1 ≤ γ2).
 - `γ3 = T(0.5)`: Regularization update parameter (0 < γ3 ≤ 1).
+- `δ1 = T(0.5)`: Cauchy point calculation parameter.
 - `σmin = eps(T)`: Minimum step parameter.
+- `non_mono_size = 1`: the size of the non-monotone behaviour. If > 1, the algorithm will use a non-monotone strategy to accept steps.
 """
 struct R2NParameterSet{T} <: AbstractParameterSet
   θ1::Parameter{T, RealInterval{T}}
@@ -25,7 +33,9 @@ struct R2NParameterSet{T} <: AbstractParameterSet
   γ1::Parameter{T, RealInterval{T}}
   γ2::Parameter{T, RealInterval{T}}
   γ3::Parameter{T, RealInterval{T}}
+  δ1::Parameter{T, RealInterval{T}}
   σmin::Parameter{T, RealInterval{T}}
+  non_mono_size::Parameter{T, RealInterval{T}}
 end
 
 # Default parameter values
@@ -39,10 +49,12 @@ const R2N_η2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.95), "T(0.95)")
 const R2N_γ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1.5), "T(1.5)")
 const R2N_γ2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(2.5), "T(2.5)")
 const R2N_γ3 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
+const R2N_δ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
 const R2N_σmin = DefaultParameter(nlp -> begin
   T = eltype(nlp.meta.x0)
   T(eps(T))
 end, "eps(T)")
+const R2N_non_mono_size = DefaultParameter(1)
 
 function R2NParameterSet(
   nlp::AbstractNLPModel;
@@ -53,7 +65,9 @@ function R2NParameterSet(
   γ1::T = get(R2N_γ1, nlp),
   γ2::T = get(R2N_γ2, nlp),
   γ3::T = get(R2N_γ3, nlp),
+  δ1::T = get(R2N_δ1, nlp),
   σmin::T = get(R2N_σmin, nlp),
+  non_mono_size::Int = get(R2N_non_mono_size, nlp)
 ) where {T}
   R2NParameterSet{T}(
     Parameter(θ1, RealInterval(zero(T), one(T))),
@@ -63,7 +77,9 @@ function R2NParameterSet(
     Parameter(γ1, RealInterval(one(T), T(Inf))),
     Parameter(γ2, RealInterval(one(T), T(Inf))),
     Parameter(γ3, RealInterval(zero(T), one(T))),
+    Parameter(δ1, RealInterval(zero(T), one(T))),
     Parameter(σmin, RealInterval(zero(T), T(Inf))),
+    Parameter(non_mono_size, RealInterval(one(T), T(Inf))),
   )
 end
 
@@ -145,7 +161,9 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `γ1::T = $(R2N_γ1)`: regularization update parameter, see [`R2NParameterSet`](@ref).
 - `γ2::T = $(R2N_γ2)`: regularization update parameter, see [`R2NParameterSet`](@ref).
 - `γ3::T = $(R2N_γ3)`: regularization update parameter, see [`R2NParameterSet`](@ref).
+- `δ1::T = $(R2N_δ1)`: Cauchy point calculation parameter, see [`R2NParameterSet`](@ref).
 - `σmin::T = $(R2N_σmin)`: minimum step parameter, see [`R2NParameterSet`](@ref).
+- `non_mono_size::Int = $(R2N_non_mono_size)`: the size of the non-monotone behaviour. If > 1, the algorithm will use a non-monotone strategy to accept steps.
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
@@ -190,71 +208,107 @@ stats = solve!(solver, nlp)
 mutable struct R2NSolver{
   T,
   V,
-  Op <: AbstractLinearOperator{T},
+  Op <: Union{AbstractLinearOperator{T}, SparseMatrixCSC{T, Int}},
   Sub <: Union{KrylovWorkspace{T, T, V}, ShiftedLBFGSSolver},
 } <: AbstractOptimizationSolver
   x::V
-  cx::V
+  xt::V
+  temp::V
   gx::V
   gn::V
-  σ::T
   H::Op
   Hs::V
   s::V
+  scp::V
   obj_vec::V # used for non-monotone
   r2_subsolver::Sub
   cgtol::T
+  σ::T
+  params::R2NParameterSet{T}
 end
 
 function R2NSolver(
   nlp::AbstractNLPModel{T, V};
-  non_mono_size = 1,
+  η1 = get(R2N_η1, nlp),
+  η2 = get(R2N_η2, nlp),
+  θ1 = get(R2N_θ1, nlp),
+  θ2 = get(R2N_θ2, nlp),
+  γ1 = get(R2N_γ1, nlp),
+  γ2 = get(R2N_γ2, nlp),
+  γ3 = get(R2N_γ3, nlp),
+  δ1 = get(R2N_δ1, nlp),
+  σmin = get(R2N_σmin, nlp),
+  non_mono_size = get(R2N_non_mono_size, nlp),
   subsolver::Symbol = :minres,
 ) where {T, V}
+  params = R2NParameterSet(
+    nlp;
+    η1 = η1,
+    η2 = η2,
+    θ1 = θ1,
+    θ2 = θ2,
+    γ1 = γ1,
+    γ2 = γ2,
+    γ3 = γ3,
+    δ1 = δ1,
+    σmin = σmin,
+    non_mono_size = non_mono_size,
+  )
   subsolver in R2N_allowed_subsolvers ||
     error("subproblem solver must be one of $(R2N_allowed_subsolvers)")
+  
+  value(params.non_mono_size) >= 1 || error("non_mono_size must be greater than or equal to 1")
 
   !(subsolver == :shifted_lbfgs) ||
     (nlp isa LBFGSModel) ||
     error("Unsupported subsolver type, ShiftedLBFGSSolver can only be used by LBFGSModel")
 
-  non_mono_size >= 1 || error("non_mono_size must be greater than or equal to 1")
-
+  
   nvar = nlp.meta.nvar
   x = V(undef, nvar)
-  cx = V(undef, nvar)
+  xt = V(undef, nvar)
+  temp = V(undef, nvar)
   gx = V(undef, nvar)
   gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
   Hs = V(undef, nvar)
-  H = isa(nlp, QuasiNewtonModel) ? nlp.op : hess_op!(nlp, x, Hs) #TODO 
-  opI = opEye(T, nvar)
+  if subsolver == :ma97  # check to see if they have the library
+    LIBHSL_isfunctional() || error("HSL library is not functional")
+    r2_subsolver = MA97Solver(nlp)
+    H = sparese(r2_subsolver.cols, r2_subsolver.rows, r2_subsolver.vals)
+  else  # not using ma971
+    # H = isa(nlp, QuasiNewtonModel) ? nlp.op : hess_op!(nlp, x, Hs) 
+    if subsolver == :shifted_lbfgs
+      H =  nlp.op
+      r2_subsolver = ShiftedLBFGSSolver()
+    else
+      H = hess_op!(nlp, x, Hs)
+      r2_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
+    end
+  end 
+
   Op = typeof(H)
-  Op2 = typeof(opI)
   σ = zero(T)
   s = V(undef, nvar)
+  scp = V(undef, nvar)
   cgtol = one(T)
   obj_vec = fill(typemin(T), non_mono_size)
-
-  if subsolver == :shifted_lbfgs
-    r2_subsolver = ShiftedLBFGSSolver()
-  else
-    r2_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
-  end
-
   Sub = typeof(r2_subsolver)
+
   return R2NSolver{T, V, Op, Op2, Sub}(
     x,
-    cx,
+    xt,
+    temp,
     gx,
     gn,
-    σ,
     H,
-    opI,
     Hs,
     s,
+    scp,
     obj_vec,
     r2_subsolver,
     cgtol,
+    σ,
+    params,
   )
 end
 
@@ -266,19 +320,40 @@ end
 function SolverCore.reset!(solver::R2NSolver{T}, nlp::AbstractNLPModel) where {T}
   fill!(solver.obj_vec, typemin(T))
   # @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
-  solver.H = isa(nlp, QuasiNewtonModel) ? nlp.op : hess_op!(nlp, solver.x, solver.Hs)
-
+  # solver.H = isa(nlp, QuasiNewtonModel) ? nlp.op : hess_op!(nlp, solver.x, solver.Hs)
   solver
 end
 
 @doc (@doc R2NSolver) function R2N(
   nlp::AbstractNLPModel{T, V};
+  η1::Real = get(R2NLS_η1, nlp),
+  η2::Real = get(R2NLS_η2, nlp),
+  θ1::Real = get(R2NLS_θ1, nlp),
+  θ2::Real = get(R2NLS_θ2, nlp),
+  γ1::Real = get(R2NLS_γ1, nlp),
+  γ2::Real = get(R2NLS_γ2, nlp),
+  γ3::Real = get(R2NLS_γ3, nlp),
+  δ1::Real = get(R2NLS_δ1, nlp),
+  σmin::Real = get(R2NLS_σmin, nlp),
+  non_mono_size::Int = get(R2NLS_non_mono_size, nlp),
   subsolver::Symbol = :minres,
-  non_mono_size = 1,
   kwargs...,
 ) where {T, V}
-  solver = R2NSolver(nlp; non_mono_size = non_mono_size, subsolver = subsolver)
-  return solve!(solver, nlp; non_mono_size = non_mono_size, kwargs...)
+  solver = R2NSolver(
+    nlp;
+    η1 = convert(T, η1),
+    η2 = convert(T, η2),
+    θ1 = convert(T, θ1),
+    θ2 = convert(T, θ2),
+    γ1 = convert(T, γ1),
+    γ2 = convert(T, γ2),
+    γ3 = convert(T, γ3),
+    δ1 = convert(T, δ1),
+    σmin = convert(T, σmin),
+    non_mono_size = non_mono_size,
+    subsolver = subsolver,
+  )
+  return solve!(solver, nlp; kwargs...)
 end
 
 function SolverCore.solve!(
@@ -289,30 +364,50 @@ function SolverCore.solve!(
   x::V = nlp.meta.x0,
   atol::T = √eps(T),
   rtol::T = √eps(T),
-  η1 = T(0.0001),
-  η2 = T(0.001),
-  λ = T(2),
-  σmin = zero(T),
   max_time::Float64 = 30.0,
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   verbose::Int = 0,
   subsolver_verbose::Int = 0,
-  non_mono_size = 1,
+  scp_flag::Bool = true, #TODO check
 ) where {T, V}
   unconstrained(nlp) || error("R2N should only be called on unconstrained problems.")
 
-  @assert(λ > 1)
   reset!(stats)
+  params = solver.params
+  η1 = value(params.η1)
+  η2 = value(params.η2)
+  θ1 = value(params.θ1)
+  θ2 = value(params.θ2)
+  γ1 = value(params.γ1)
+  γ2 = value(params.γ2)
+  γ3 = value(params.γ3)
+  δ1 = value(params.δ1)
+  σmin = value(params.σmin)
+  non_mono_size = value(params.non_mono_size)
+
+  @assert(η1 > 0 && η1 < 1)
+  @assert(θ1 > 0 && θ1 < 1)
+  @assert(θ2 > 1)
+  @assert(γ1 >= 1 && γ1 <= γ2 && γ3 <= 1)
+  @assert(δ1>0 && δ1<1)
+
   start_time = time()
   set_time!(stats, 0.0)
   n = nlp.meta.nvar
   x = solver.x .= x
-  ck = solver.cx
+  xt = solver.xt
   ∇fk = solver.gx # k-1
   ∇fn = solver.gn #current 
   s = solver.s
+  scp = solver.scp
+  temp = solver.temp
   H = solver.H
+  ##############################################################
+  if H isa SparseMatrixCSC
+  #TODO Allocation for MA97
+    
+  end
   Hs = solver.Hs
   σk = solver.σ
   cgtol = solver.cgtol
@@ -400,8 +495,8 @@ function SolverCore.solve!(
     curv = dot(s, Hs)
 
     ΔTk = slope - curv / 2
-    ck .= x .+ s
-    fck = obj(nlp, ck)
+    xt .= x .+ s
+    fck = obj(nlp, xt)
 
     if non_mono_size > 1  #non-monotone behaviour
       k = mod(stats.iter, non_mono_size) + 1
@@ -416,7 +511,7 @@ function SolverCore.solve!(
     step_accepted = ρk >= η1 && σk >= η2
     if step_accepted
       σk = max(σmin, σk / λ)
-      x .= ck
+      x .= xt
       grad!(nlp, x, ∇fk)
       if isa(nlp, QuasiNewtonModel)
         ∇fn .-= ∇fk
