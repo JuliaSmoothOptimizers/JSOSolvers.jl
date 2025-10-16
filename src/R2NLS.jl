@@ -188,7 +188,6 @@ For advanced usage, first create a `R2SolverNLS` to preallocate the necessary me
 - `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
 - `subsolver::Symbol = :lsmr`: method used as subproblem solver, see `JSOSolvers.R2N_allowed_subsolvers` for a list.
 - `subsolver_verbose::Int = 0`: if > 0, displays subsolver iteration details every `subsolver_verbose` iterations when a KrylovWorkspace type is selected.
-- `non_mono_size = 1`: the size of the non-monotone behaviour. If > 1, the algorithm will use a non-monotone strategy to accept steps.
 
 # Output
 Returns a `GenericExecutionStats` object containing statistics and information about the optimization process (see `SolverCore.jl`).
