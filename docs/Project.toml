@@ -7,6 +7,7 @@ JSOSolvers = "10dff2fc-5484-5881-a0e0-c90441020f8a"
 NLPModels = "a4795742-8479-5a88-8948-cc11e1c8c1a6"
 NLPModelsTest = "7998695d-6960-4d3a-85c4-e1bceb8cd856"
 OptimizationProblems = "5049e819-d29b-5fba-b941-0eee7e64c1c6"
+SolverCore = "ff4d7338-4cf1-434d-91df-b86cb86fb843"
 
 [compat]
 Documenter = "1.0"
