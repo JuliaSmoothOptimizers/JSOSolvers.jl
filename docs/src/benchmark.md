@@ -15,7 +15,7 @@ To test the implementation on bound-constrained problems, we use the package [CU
 using SolverBenchmark
 ```
 
-Let us select bound-constrained problems from CUTEst with a maximum of 100 variables or constraints. After removing problems with fixed variables, examples with a constant objective, and infeasibility residuals.
+Let us select bound-constrained problems from CUTEst with a maximum of 300 variables.
 
 ``` @example ex1
 nmax = 300
