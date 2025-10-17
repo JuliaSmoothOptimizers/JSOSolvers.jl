@@ -17,5 +17,6 @@ solver = TronSolver(nlp) # pre-allocate workspace
 SolverCore.solve!(solver, nlp, stats) # call tron in place
 JSOSolvers.reset!(solver)
 NLPModels.reset!(nlp) # reset counters
-@allocated SolverCore.solve!(solver, nlp, stats) == 0
+(@allocated SolverCore.solve!(solver, nlp, stats)) == 0
+
 ```
