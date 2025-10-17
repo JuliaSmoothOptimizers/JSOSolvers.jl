@@ -4,6 +4,7 @@ using SparseMatricesCOO
 
 using QRMumps, LinearAlgebra, SparseArrays
 
+#TODO prof Orban, the name should be R2SolverNLS or R2NSolverNLS
 """
   R2NLSParameterSet([T=Float64]; η1, η2, θ1, θ2, γ1, γ2, γ3, δ1, σmin, non_mono_size)
 
@@ -60,7 +61,7 @@ function R2NLSParameterSet(
   γ3::T = get(R2NLS_γ3, nlp),
   δ1::T = get(R2NLS_δ1, nlp),
   σmin::T = get(R2NLS_σmin, nlp),
-  non_mono_size::Int = get(R2NLS_non_mono_size, nlp)
+  non_mono_size::Int = get(R2NLS_non_mono_size, nlp),
 ) where {T}
   R2NLSParameterSet{T}(
     Parameter(η1, RealInterval(zero(T), one(T))),
@@ -185,9 +186,6 @@ For advanced usage, first create a `R2SolverNLS` to preallocate the necessary me
 - `max_time::Float64 = 30.0`: maximum allowed time in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `verbose::Int = 0`: if > 0, displays iteration details every `verbose` iterations.
-- `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
-- `subsolver::Symbol = :lsmr`: method used as subproblem solver, see `JSOSolvers.R2N_allowed_subsolvers` for a list.
-- `subsolver_verbose::Int = 0`: if > 0, displays subsolver iteration details every `subsolver_verbose` iterations when a KrylovWorkspace type is selected.
 
 # Output
 Returns a `GenericExecutionStats` object containing statistics and information about the optimization process (see `SolverCore.jl`).
@@ -506,7 +504,7 @@ function SolverCore.solve!(
   σk = solver.σ
 
   done = stats.status != :unknown
-  ν_k = one(T)
+  ν_k = one(T) # used for scp calculation
 
   while !done
 

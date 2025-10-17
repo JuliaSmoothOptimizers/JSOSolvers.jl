@@ -1,10 +1,48 @@
 export R2N, R2NSolver, R2NParamaterSet
-export ShiftedLBFGSSolver
+export ShiftedLBFGSSolver, MA97Solver
+export ShiftedOperator
 
+using LinearOperators, LinearAlgebra
 using HSL_jll, SparseArrays
 using HSL
 function LIBHSL_isfunctional()
   @ccall libhsl.LIBHSL_isfunctional()::Bool
+end
+
+#TODO move to LinearOperators
+# Define a new mutable operator for A = H + σI
+mutable struct ShiftedOperator{T, V, OpH <: AbstractLinearOperator{T}} <: AbstractLinearOperator{T}
+  H::OpH
+  σ::T
+  n::Int
+  symmetric::Bool
+  hermitian::Bool
+end
+
+# Constructor for the new operator
+function ShiftedOperator(H::OpH) where {T, OpH <: AbstractLinearOperator{T}}
+  return ShiftedOperator{T, Vector{T}, OpH}(H, zero(T), H.n, H.symmetric, H.hermitian)
+end
+
+# Define required properties for AbstractLinearOperator
+Base.size(A::ShiftedOperator) = (A.n, A.n)
+LinearAlgebra.isreal(A::ShiftedOperator{T}) where {T <: Real} = true
+LinearOperators.is_symmetric(A::ShiftedOperator) = A.symmetric
+LinearOperators.is_hermitian(A::ShiftedOperator) = A.hermitian
+
+# Define the core multiplication rules: y = (H + σI)x
+function LinearAlgebra.mul!(y::V, A::ShiftedOperator{T, V}, x::V) where {T, V}
+  # y = Hx + σx
+  mul!(y, A.H, x)
+  axpy!(A.σ, x, y) # y += A.σ * x
+  return y
+end
+
+function LinearAlgebra.mul!(y::V, A::ShiftedOperator{T, V}, x::V, α::Number, β::Number) where {T, V}
+  # y = α(Hx + σx) + βy
+  mul!(y, A.H, x, α, β) # y = α*Hx + β*y
+  axpy!(α * A.σ, x, y)  # y += α*A.σ*x
+  return y
 end
 
 """
@@ -106,38 +144,42 @@ mutable struct MA97Solver{T} <: AbstractMA97Solver
   function MA97Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
     n = nlp.meta.nvar
     nnzh = nlp.meta.nnzh
-
-    # 1. Allocate coordinate arrays for the full matrix B + σI
-    # Total non-zeros = non-zeros in Hessian (nnzh) + n diagonal entries for σI.
     total_nnz = nnzh + n
+
+    # 1. Build the coordinate structure of B + σI
     rows = Vector{Int32}(undef, total_nnz)
     cols = Vector{Int32}(undef, total_nnz)
-    vals = Vector{T}(undef, total_nnz)
-
-    # 2. Get the sparsity structure of the Hessian B
     hess_structure!(nlp, view(rows, 1:nnzh), view(cols, 1:nnzh))
-
-    # 3. Add the structure for the identity matrix σI
-    # These are n diagonal entries.
     for i = 1:n
       rows[nnzh + i] = i
       cols[nnzh + i] = i
     end
 
-    # 4. Create a temporary sparse matrix to initialize MA97
-    # We fill `vals` with ones just to create the pattern. The actual values
-    # will be updated at each iteration.
-    fill!(vals, one(T))
-    K = sparse(rows, cols, vals, n, n)
+    # 2. Create a temporary sparse matrix ONCE to establish the final sparsity pattern.
+    #    The values (ones) are just placeholders.
+    K_pattern = sparse(rows, cols, one(T), n, n)
 
-    # 5. Initialize the Ma97 object using the CSC format
-    ma97_obj = ma97_csc(K.n, Int32.(K.colptr), Int32.(K.rowval), K.nzval)
+    # 3. Initialize the Ma97 object using the final CSC pattern
+    ma97_obj = ma97_csc(
+      K_pattern.n,
+      Int32.(K_pattern.colptr),
+      Int32.(K_pattern.rowval),
+      K_pattern.nzval, # Pass initial values
+    )
+
+    # 4. Perform the expensive symbolic analysis here, only ONCE.
+    ma97_analyze!(ma97_obj)
+
+    # 5. Allocate a buffer for the values that will be updated in each iteration
+    vals = Vector{T}(undef, total_nnz)
 
     return new{T}(ma97_obj, rows, cols, vals, n, nnzh)
   end
 end
 
-const R2N_allowed_subsolvers = [:cg_lanczos_shift, :minres, :minres_qlp, :shifted_lbfgs, :ma97]
+const npc_handler_allowed = [:armijo, :sigma, :prev, :cp]
+
+const R2N_allowed_subsolvers = [:cg, :cr, :minres, :minres_qlp, :shifted_lbfgs, :ma97] #TODO Prof. Orban check if I can add more
 
 """
     R2N(nlp; kwargs...)
@@ -175,6 +217,13 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `subsolver::Symbol  = :shifted_lbfgs`: the subsolver to solve the shifted system. The `MinresSolver` which solves the shifted linear system exactly at each iteration. Using the exact solver is only possible if `nlp` is an `LBFGSModel`. See `JSOSolvers.R2N_allowed_subsolvers` for a list of available subsolvers.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
+- `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
+- `npc_handler::Symbol = :armijo`: the non_positive_curve handling strategy.
+  - `:armijo`: uses the Armijo rule to handle non-positive curvature.
+  - `:sigma`: increase the regularization parameter σ.
+  - `:prev`: if subsolver return after first iteration, increase the sigma, but if subsolver return after second iteration, set s_k = s_k^(t-1).
+  - `:cp`: set s_k to Cauchy point.
+See `JSOSolvers.npc_handler_allowed` for a list of available `npc_handler` strategies.
 
 All algorithmic parameters (θ1, θ2, η1, η2, γ1, γ2, γ3, σmin) can be set via the `params` keyword or individually as shown above. If both are provided, individual keywords take precedence.
 
@@ -210,21 +259,22 @@ stats = solve!(solver, nlp)
 mutable struct R2NSolver{
   T,
   V,
-  Op <: Union{AbstractLinearOperator{T}, AbstractMatrix{T}},
+  Op <: Union{AbstractLinearOperator{T}, AbstractMatrix{T}}, #TODO confirm with Prof. Orban
+  ShiftedOp <: Union{ShiftedOperator{T, V, Op}, Nothing}, # for cg and cr solvers
   Sub <: Union{KrylovWorkspace{T, T, V}, ShiftedLBFGSSolver, MA97Solver{T}},
 } <: AbstractOptimizationSolver
   x::V
   xt::V
-  temp::V
   gx::V
   gn::V
   H::Op
+  A::ShiftedOp
   Hs::V
   s::V
   scp::V
   obj_vec::V # used for non-monotone
   r2_subsolver::Sub
-  cgtol::T
+  subtol::T
   σ::T
   params::R2NParameterSet{T}
 end
@@ -268,10 +318,10 @@ function R2NSolver(
   nvar = nlp.meta.nvar
   x = V(undef, nvar)
   xt = V(undef, nvar)
-  temp = V(undef, nvar)
   gx = V(undef, nvar)
   gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
   Hs = V(undef, nvar)
+  A = nothing
 
   local H, r2_subsolver
   if subsolver == :ma97
@@ -289,38 +339,45 @@ function R2NSolver(
     else
       H = hess_op!(nlp, x, Hs)
       r2_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
+      if subsolver in (:cg, :cr)
+        A = ShiftedOperator(H)
+      end
     end
   end
 
   Op = typeof(H)
+  ShiftedOp = typeof(A)
   σ = zero(T)
   s = V(undef, nvar)
   scp = V(undef, nvar)
-  cgtol = one(T)
+  subtol = one(T)
   obj_vec = fill(typemin(T), non_mono_size)
   Sub = typeof(r2_subsolver)
 
-  return R2NSolver{T, V, Op, Sub}(
+  return R2NSolver{T, V, Op, ShiftedOp, Sub}(
     x,
     xt,
-    temp,
     gx,
     gn,
     H,
+    A,
     Hs,
     s,
     scp,
     obj_vec,
     r2_subsolver,
-    cgtol,
+    subtol,
     σ,
     params,
   )
 end
-
+#TODO Prof. Orban, check if I need to reset H in reset! function
 function SolverCore.reset!(solver::R2NSolver{T}) where {T}
   fill!(solver.obj_vec, typemin(T))
   reset!(solver.H)
+  if solver.r2_subsolver isa CgWorkspace || solver.r2_subsolver isa CrWorkspace
+    solver.A = ShiftedOperator(solver.H)
+  end
   solver
 end
 function SolverCore.reset!(solver::R2NSolver{T}, nlp::AbstractNLPModel) where {T}
@@ -375,9 +432,11 @@ function SolverCore.solve!(
   max_iter::Int = typemax(Int),
   verbose::Int = 0,
   subsolver_verbose::Int = 0,
-  scp_flag::Bool = true, #TODO check
+  npc_handler::Symbol = :armijo,
+  scp_flag::Bool = true,
 ) where {T, V}
   unconstrained(nlp) || error("R2N should only be called on unconstrained problems.")
+  npc_handler in npc_handler_allowed || error("npc_handler must be one of $(npc_handler_allowed)")
 
   reset!(stats)
   params = solver.params
@@ -408,11 +467,11 @@ function SolverCore.solve!(
   ∇fn = solver.gn #current 
   s = solver.s
   scp = solver.scp
-  temp = solver.temp
   H = solver.H
+  A = solver.A
   Hs = solver.Hs
   σk = solver.σ
-  cgtol = solver.cgtol
+  subtol = solver.subtol
   subsolver_solved = false
 
   set_iter!(stats, 0)
@@ -433,37 +492,30 @@ function SolverCore.solve!(
 
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
-#TODO HERE I Stop
   if optimal
-    @info("Optimal point found at initial point")
+    @info "Optimal point found at initial point"
     @info log_header(
-      [:iter, :f, :grad_norm, :sigma, :rho, :dir],
-      [Int, Float64, Float64, Float64, Float64, String],
-      hdr_override = Dict(
-        :f => "f(x)",
-        :grad_norm => "‖∇f‖",
-        :sigma => "σ",
-        :rho => "ρ",
-        :dir => "DIR",
-      ),
+      [:iter, :f, :dual, :σ, :ρ],
+      [Int, Float64, Float64, Float64, Float64],
+      hdr_override = Dict(:f => "f(x)", :dual => "‖∇f‖"),
     )
-
-    # Define and log the row information with corresponding data values
-    @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk, ""])
+    @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk])
   end
+  cp_step_log = " "
   if verbose > 0 && mod(stats.iter, verbose) == 0
     @info log_header(
-      [:iter, :f, :grad_norm, :sigma, :rho, :dir],
-      [Int, Float64, Float64, Float64, Float64, String],
+      [:iter, :f, :dual, :σ, :ρ, :sub_iter, :dir, :cp_step_log, :sub_status],
+      [Int, Float64, Float64, Float64, Float64, Int, String, String, String],
       hdr_override = Dict(
         :f => "f(x)",
-        :grad_norm => "‖∇f‖",
-        :sigma => "σ",
-        :rho => "ρ",
-        :dir => "DIR",
+        :dual => "‖∇f‖",
+        :sub_iter => "subiter",
+        :dir => "dir",
+        :cp_step_log => "cp step",
+        :sub_status => "status",
       ),
     )
-    @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk, ""])
+    @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk, 0, " ", " ", " "])
   end
 
   set_status!(
@@ -480,15 +532,49 @@ function SolverCore.solve!(
     ),
   )
 
+  # subtol initialization for subsolver 
+  subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * subtol))
+  solver.σ = σk
+  solver.subtol = subtol
+
   callback(nlp, solver, stats)
+  subtol = solver.subtol
+  σk = solver.σ
 
   done = stats.status != :unknown
-  cgtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * cgtol))
+
+  ν_k = one(T) # used for scp calculation
+  γ_k = zero(T)
+  scp_recal = true
 
   while !done
-    ∇fk .*= -1
+    scp_recal = true # Recalculate the Cauchy point if needed
 
-    subsolver_solved = subsolve!(solver.r2_subsolver, solver, nlp, s, zero(T), n,subsolver_verbose)
+    # Compute the Cauchy step.
+    # Note that we use buffer values Hs to avoid reallocating memory.
+    mul!(Hs, H, ∇fk) #TODO check for HSL
+    curv = dot(∇fk, Hs)
+    slope = σk * norm_∇fk^2 # slope= σ * ||∇f||^2 
+    γ_k = (curv + slope) / norm_∇fk^2
+    if γ_k < 0
+      cp_step_log = "Cauchy step"
+      ν_k = 2*(1-δ1) / (γ_k)
+    else
+      # we have to calcualte the scp, since we have encounter a negative curvature
+      λmax, found_λ = opnorm(H)
+      cp_step_log = "ν_k"
+      ν_k = θ1 / (λmax + σk)
+    end
+
+    # Solving for step direction s_k
+    ∇fk .*= -1
+    if solver.r2_subsolver isa CgWorkspace || solver.r2_subsolver isa CrWorkspace
+      # Update the shift in the operator
+      solver.A.σ = σk
+      solver.H = H
+    end
+    subsolver_solved, sub_stats, subiter, npcCount =
+      subsolve!(solver.r2_subsolver, solver, nlp, s, zero(T), n, subsolver_verbose)
 
     if !subsolver_solved
       @warn("Subsolver failed to solve the system")
@@ -497,80 +583,144 @@ function SolverCore.solve!(
       break
     end
 
-    slope = dot(s, ∇fk) # = -∇fkᵀ s because we flipped the sign of ∇fk
-    # Correctly compute curvature s' * B * s
-    #TODO Prof Orban, check if this is correct
-    if solver.r2_subsolver isa MA97Solver
+    if !(subsolver == :shifted_lbfgs) && !(subsolver == :ma97) #not exact solver and not ma97
+      if r2_subsolver.stats.npcCount >= 1  #npc case
+        if npc_handler == :armijo #TODO check this logic with Prof. Orban
+          c = one(T) * 1e-4 #TODO do I want user to set this value?
+          α = one(T) * 1.0
+          increase_factor = one(T) * 1.5
+          decrease_factor = one(T) * 0.5
+          min_alpha = one(T) * 1e-8
+          max_alpha = one(T) * 1e2
+          dir = r2_subsolver.npc
+          f0 = stats.objective
+          grad_dir = dot(∇fk, dir)
+          # First, try α = 1
+          xt .= x .+ α * dir
+          fck = obj(nlp, xt)
+          if fck > f0 + c * α * grad_dir
+            # Backward tracking
+            while fck > f0 + c * α * grad_dir && α > min_alpha
+              α *= decrease_factor
+              xt .= x .+ α * dir
+              fck = obj(nlp, xt)
+            end
+          else
+            # Forward tracking
+            while true
+              α_new = α * increase_factor
+              xt .= x .+ α_new * dir
+              fck_new = obj(nlp, xt)
+              if fck_new > f0 + c * α_new * grad_dir || α_new > max_alpha
+                break
+              end
+              α = α_new
+              fck = fck_new
+            end
+          end
+          s .= α * dir
+        elseif npc_handler == :prev #Cr and cg will return the last iteration s
+          s .= r2_subsolver.x
+        elseif npc_handler == :cp
+          # Cauchy point
+          scp .= ν_k * ∇fk # the ∇fk is already negative
+          s .= scp
+          scp_recal = false # we don't need to recalculate the scp later
+        end
+      end
+    end
+
+    if scp_flag && scp_recal # if the case was cp, then s = scp already
+      # Based on the flag, scp is calcualted
+      scp .= ν_k * ∇fk # the ∇fk is already negative
+      if norm(s) > θ2 * norm(scp)
+        s .= scp
+      end
+    end
+    if npc_handler == :sigma && r2_subsolver.stats.npcCount >= 1  # non-positive curvature case happen and the npc_handler is sigma
+      step_accepted = false
+    else
+      # Correctly compute curvature s' * B * s
+      #TODO Prof Orban, check if this is correct
+      if solver.r2_subsolver isa MA97Solver
         hprod!(nlp, x, s, Hs) # Use exact Hessian-vector product
-    else
+      else
         mul!(Hs, H, s) # Use linear operator
-    end
-    
-    curv = dot(s, Hs)
-
-    ΔTk = slope - curv / 2
-    xt .= x .+ s
-    fck = obj(nlp, xt)
-
-    if non_mono_size > 1  #non-monotone behaviour
-      k = mod(stats.iter, non_mono_size) + 1
-      solver.obj_vec[k] = stats.objective
-      fck_max = maximum(solver.obj_vec)
-      ρk = (fck_max - fck) / (fck_max - stats.objective + ΔTk)
-    else
-      # Avoid division by zero/negative. If ΔTk <= 0, the model is bad.
-      ρk = (ΔTk > 10 * eps(T)) ? (stats.objective - fck) / ΔTk : -one(T)
-    end
-
-    # Update regularization parameters and Acceptance of the new candidate
-    step_accepted = ρk >= η1
-    if step_accepted
-      x .= xt
-      grad!(nlp, x, ∇fk)
-      if isa(nlp, QuasiNewtonModel)
-        ∇fn .-= ∇fk
-        ∇fn .*= -1  # = ∇f(xₖ₊₁) - ∇f(xₖ)
-        push!(nlp, s, ∇fn)
-        ∇fn .= ∇fk
       end
-      set_objective!(stats, fck)
-      unbounded = fck < fmin
-      norm_∇fk = norm(∇fk)
-      if ρk >= η2
-        σk = max(σmin, γ3 * σk)
-      else # η1 ≤ ρk < η2
-        σk = min(σmin, γ1 * σk)
+
+      curv = dot(s, Hs)
+      slope = dot(s, ∇fk) # = -∇fkᵀ s because we flipped the sign of ∇fk
+
+      ΔTk = slope - curv / 2
+      xt .= x .+ s
+      fck = obj(nlp, xt)
+
+      if non_mono_size > 1  #non-monotone behaviour
+        k = mod(stats.iter, non_mono_size) + 1
+        solver.obj_vec[k] = stats.objective
+        fck_max = maximum(solver.obj_vec)
+        ρk = (fck_max - fck) / (fck_max - stats.objective + ΔTk) #TODO Prof. Orban check if this is correct the denominator   
+      else
+        # Avoid division by zero/negative. If ΔTk <= 0, the model is bad.
+        ρk = (ΔTk > 10 * eps(T)) ? (stats.objective - fck) / ΔTk : -one(T)
       end
-    else # η1 > ρk
-      σk = max(σmin, γ2 * σk)
-      ∇fk .*= -1
+
+      # Update regularization parameters and Acceptance of the new candidate
+      step_accepted = ρk >= η1
+      if step_accepted
+        x .= xt
+        grad!(nlp, x, ∇fk)
+        if isa(nlp, QuasiNewtonModel)
+          ∇fn .-= ∇fk
+          ∇fn .*= -1  # = ∇f(xₖ₊₁) - ∇f(xₖ)
+          push!(nlp, s, ∇fn)
+          ∇fn .= ∇fk
+        end
+        set_objective!(stats, fck)
+        unbounded = fck < fmin
+        norm_∇fk = norm(∇fk)
+        if ρk >= η2
+          σk = max(σmin, γ3 * σk)
+        else # η1 ≤ ρk < η2
+          σk = min(σmin, γ1 * σk)
+        end
+      else # η1 > ρk
+        σk = max(σmin, γ2 * σk)
+        ∇fk .*= -1
+      end
     end
 
     set_iter!(stats, stats.iter + 1)
     set_time!(stats, time() - start_time)
 
-    cgtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * cgtol))
+    subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * subtol))
     set_dual_residual!(stats, norm_∇fk)
 
     solver.σ = σk
-    solver.cgtol = cgtol
+    solver.subtol = subtol
 
     callback(nlp, solver, stats)
 
-    norm_∇fk = stats.dual_feas # if the user change it, they just change the stats.norm , they also have to change cgtol
+    norm_∇fk = stats.dual_feas # if the user change it, they just change the stats.norm , they also have to change subtol
     σk = solver.σ
-    cgtol = solver.cgtol
+    subtol = solver.subtol
     optimal = norm_∇fk ≤ ϵ
+
     if verbose > 0 && mod(stats.iter, verbose) == 0
+      dir_stat = step_accepted ? "↘" : "↗"
       @info log_row([
-        stats.iter,            # Current iteration number
-        stats.objective,       # Objective function value
-        norm_∇fk,              # Gradient norm
-        σk,                    # Sigma value
-        ρk,                    # Rho value
-        step_accepted ? "↘" : "↗", # Step acceptance status
+        stats.iter,
+        stats.objective,
+        norm_∇fk,
+        σk,
+        ρk,
+        subiter,
+        cp_step_log,
+        dir_stat,
+        sub_stats,
       ])
     end
+
     if stats.status == :user
       done = true
     else
@@ -612,16 +762,46 @@ function subsolve!(
     λ = R2N.σ,
     itmax = max(2 * n, 50),
     atol = atol,
-    rtol = R2N.cgtol,
+    rtol = R2N.subtol,
     verbose = subsolver_verbose,
   )
   s .= r2_subsolver.x
-  return Krylov.issolved(r2_subsolver), r2_subsolver.stats.status, r2_subsolver.stats.niter
+  return Krylov.issolved(r2_subsolver),
+  r2_subsolver.stats.status,
+  r2_subsolver.stats.niter,
+  r2_subsolver.stats.npcCount
 end
 
-# Dispatch for KrylovWorkspace
+# Dispatch for subsolvers KrylovWorkspace: cg and cr
 function subsolve!(
-  r2_subsolver::CgLanczosShiftSolver,
+  r2_subsolver::KrylovWorkspace{T, T, V},
+  R2N::R2NSolver,
+  nlp::AbstractNLPModel,
+  s,
+  atol,
+  n,
+  subsolver_verbose,
+) where {T, V}
+  krylov_solve!(
+    r2_subsolver,
+    R2N.A, # Use the ShiftedOperator A
+    R2N.gx,
+    itmax = max(2 * n, 50),
+    atol = atol,
+    rtol = R2N.subtol,
+    verbose = subsolver_verbose,
+    linesearch = true,
+  )
+  s .= r2_subsolver.x
+  return Krylov.issolved(r2_subsolver),
+  r2_subsolver.stats.status,
+  r2_subsolver.stats.niter,
+  r2_subsolver.stats.npcCount
+end
+
+# Dispatch for MinresSolver
+function subsolve!(
+  r2_subsolver::Union{MinresWorkspace, MinresQlpWorkspace},
   R2N::R2NSolver,
   nlp::AbstractNLPModel,
   s,
@@ -633,15 +813,18 @@ function subsolve!(
     r2_subsolver,
     R2N.H,
     R2N.gx,
-    R2N.opI * R2N.σ,  #shift vector σ * I
     λ = R2N.σ,
     itmax = max(2 * n, 50),
     atol = atol,
-    rtol = R2N.cgtol,
+    rtol = R2N.subtol,
     verbose = subsolver_verbose,
+    linesearch = true,
   )
   s .= r2_subsolver.x
-  return issolved(r2_subsolver), r2_subsolver.stats.status, r2_subsolver.stats.niter
+  return Krylov.issolved(r2_subsolver),
+  r2_subsolver.stats.status,
+  r2_subsolver.stats.niter,
+  r2_subsolver.stats.npcCount
 end
 
 # Dispatch for ShiftedLBFGSSolver
@@ -658,7 +841,7 @@ function subsolve!(
   H = R2N.H
   σ = R2N.σ
   solve_shifted_system!(s, H, ∇f_neg, σ)
-  return true, :first_order, 1
+  return true, :first_order, 1, 0
 end
 
 # Dispatch for MA97Solver
@@ -693,20 +876,19 @@ function subsolve!(
   K = sparse(r2_subsolver.rows, r2_subsolver.cols, r2_subsolver.vals, n, n)
 
   # 4. Copy the new numerical values into the MA97 object
-  copyto!(r2_subsolver.ma97_obj.nzval, K.data.nzval)
+  copyto!(r2_subsolver.ma97_obj.nzval, K.nzval)
 
   # 5. Factorize the matrix
   #TODO Prof Orban, do I need this?
-  ma97_factorize!(r2_subsolver.ma97_obj)
+  ma97_factorize!(r2_subsolver.ma97_obj) # I think we only need to do this once
 
   if r2_subsolver.ma97_obj.info.flag != 0
     @warn("MA97 factorization failed with flag = $(r2_subsolver.ma97_obj.info.flag)")
-    return false # Indicate failure
+    return false, :err, 1, 0 # Indicate failure
   end
 
   # 6. Solve the system (B + σI)s = g, where g = -∇f
-  s .= g
-  ma97_solve!(r2_subsolver.ma97_obj, s) # Solves in-place
+  s = ma97_solve(r2_subsolver.ma97_obj, s) # Solves in-place
 
-  return true # Indicate success
+  return true, :first_order, 1, 0
 end
