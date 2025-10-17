@@ -5,6 +5,7 @@ Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 ExaModels = "1037b233-b668-4ce9-9b63-f9f681f55dd2"
 JSOSolvers = "10dff2fc-5484-5881-a0e0-c90441020f8a"
 NLPModels = "a4795742-8479-5a88-8948-cc11e1c8c1a6"
+NLPModelsTest = "7998695d-6960-4d3a-85c4-e1bceb8cd856"
 OptimizationProblems = "5049e819-d29b-5fba-b941-0eee7e64c1c6"
 
 [compat]
