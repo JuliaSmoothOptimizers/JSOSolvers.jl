@@ -223,12 +223,19 @@ end
   kwargs...,
 ) where {T, V}
   dict = Dict(kwargs)
-  subsolver_keys = intersect(keys(dict), tron_keys)
-  subsolver_kwargs = Dict(k => dict[k] for k in subsolver_keys)
-  solver = TronSolver(nlp; μ₀ = μ₀, μ₁ = μ₁, σ = σ, subsolver_kwargs...)
-  for k in subsolver_keys
-    pop!(dict, k)
+
+  # Extract subsolver if provided (default :cg) and ensure it is consumed here
+  subsolver = haskey(dict, :subsolver) ? dict[:subsolver] : :cg
+  if haskey(dict, :subsolver)
+    pop!(dict, :subsolver)
   end
+
+  # Construct solver with chosen subsolver. We intentionally do not forward
+  # additional TRON trust-region kwargs here to keep the call simple; the
+  # TronSolver constructor will use defaults for those parameters.
+  solver = TronSolver(nlp; μ₀ = μ₀, μ₁ = μ₁, σ = σ, subsolver = subsolver)
+
+  # Remaining dict contains kwargs meant for solve! (we removed :subsolver)
   return solve!(solver, nlp; x = x, dict...)
 end
 
@@ -583,6 +590,47 @@ function cauchy!(
 end
 
 """
+    run_krylov_subsolver!(workspace, A, b; radius, rtol, atol, timemax, verbose)
+
+Small compatibility wrapper around Krylov.jl's `krylov_solve!` to handle
+workspaces that don't accept the `radius` keyword (e.g. Minres). We first
+attempt to call with `radius`, and on a MethodError we retry without it.
+"""
+function run_krylov_subsolver!(workspace, A, b; radius=nothing, rtol, atol, timemax, verbose)
+  # Try calling with `radius` first (covers CG-like workspaces).
+  if radius !== nothing
+    try
+      return krylov_solve!(workspace, A, b; radius = radius, rtol = rtol, atol = atol, timemax = timemax, verbose = verbose)
+    catch e
+      # If the failure is due to an unsupported keyword (MethodError), fall
+      # back to calling with a callback that enforces the trust-region by
+      # inspecting the Krylov workspace's current solution `x` at each
+      # iteration. Any other error is rethrown.
+      if isa(e, MethodError)
+        # Krylov callbacks receive the workspace and should return `true`
+        # to request termination. We build a closure that captures `radius`.
+        function tr_callback(cb_workspace)
+          # Some workspaces store the current iterate in `x`.
+          if !hasfield(typeof(cb_workspace), :x)
+            # If workspace has no `x` field, don't stop via callback.
+            return false
+          end
+          xcur = getfield(cb_workspace, :x)
+          # Stop when the norm of the current solution reaches the radius.
+          return norm(xcur) >= radius
+        end
+
+        return krylov_solve!(workspace, A, b; rtol = rtol, atol = atol, timemax = timemax, verbose = verbose, callback = tr_callback)
+      else
+        rethrow(e)
+      end
+    end
+  else
+    return krylov_solve!(workspace, A, b; rtol = rtol, atol = atol, timemax = timemax, verbose = verbose)
+  end
+end
+
+"""
 
     projected_newton!(solver, x, H, g, Δ, cgtol, ℓ, u, s, Hs; max_time = Inf, max_cgiter = 50, subsolver_verbose = 0)
 
@@ -639,10 +687,12 @@ function projected_newton!(
       cg_op_diag[i] = ifix[i] ? 0 : 1 # implictly changes cg_op and so ZHZ
     end
 
-    cg!(
+    # Use a compatibility wrapper so workspaces with differing keyword
+    # signatures (MINRES doesn't accept `radius`) are handled gracefully.
+    run_krylov_subsolver!(
       cg_solver,
       ZHZ,
-      cgs_rhs,
+      cgs_rhs;
       radius = Δ,
       rtol = cgtol,
       atol = zero(T),
