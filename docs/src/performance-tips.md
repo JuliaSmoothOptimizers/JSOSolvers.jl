@@ -8,7 +8,8 @@ In-place methods limit memory allocations and deallocations, which are particula
 
 ```@example
 using NLPModels, NLPModelsTest
-nlp = HS6() # test problem from NLPModelsTest with allocation free evaluations
+nlp = BROWNDEN() # test problem from NLPModelsTest with allocation free evaluations
+
 using SolverCore
 stats = GenericExecutionStats(nlp) # pre-allocate output structure
 using JSOSolvers
