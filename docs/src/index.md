@@ -23,3 +23,7 @@ where `nlp` is an AbstractNLPModel or some specialization, such as an `AbstractN
 - `stats` is a `SolverTools.GenericExecutionStats` with the output of the solver.
 
 See the full list of [Solvers](@ref).
+
+## Tutorials
+
+Beyond this repository's documentation, you can also find a list of tutorials on [JuliaSmoothOptimizers Tutorials](https://jso.dev/tutorials) by selecting the tag `JSOSolvers.jl`.
