@@ -9,7 +9,7 @@ makedocs(
     assets = ["assets/style.css"],
   ),
   sitename = "JSOSolvers.jl",
-  pages = ["index.md", "solvers.md", "benchmark.md", "internal.md", "reference.md"],
+  pages = ["index.md", "solvers.md", "benchmark.md", "floating-point-systems.md", "performance-tips.md", "internal.md", "reference.md"],
 )
 
 deploydocs(
