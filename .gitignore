@@ -3,3 +3,4 @@ docs/Manifest.toml
 */.DS_Store
 .DS_Store
 Manifest.toml
+!paper/Manifest.toml
