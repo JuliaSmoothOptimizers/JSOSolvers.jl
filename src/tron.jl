@@ -596,7 +596,7 @@ Small compatibility wrapper around Krylov.jl's `krylov_solve!` to handle
 workspaces that don't accept the `radius` keyword (e.g. Minres). We first
 attempt to call with `radius`, and on a MethodError we retry without it.
 """
-function run_krylov_subsolver!(workspace, A, b; radius=nothing, rtol, atol, timemax, verbose)
+function run_krylov_subsolver!(workspace, A, b; radius=nothing, rtol=1e-6, atol=0.0, timemax=Inf, verbose=0)
   # Try calling with `radius` first (covers CG-like workspaces).
   if radius !== nothing
     try
