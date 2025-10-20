@@ -616,8 +616,8 @@ function run_krylov_subsolver!(workspace, A, b; radius=nothing, rtol, atol, time
             return false
           end
           xcur = getfield(cb_workspace, :x)
-          # Stop when the norm of the current solution reaches the radius.
-          return norm(xcur) >= radius
+          # Stop when the squared norm of the current solution reaches the squared radius (avoids sqrt).
+          return norm(xcur)^2 >= radius^2
         end
 
         return krylov_solve!(workspace, A, b; rtol = rtol, atol = atol, timemax = timemax, verbose = verbose, callback = tr_callback)
