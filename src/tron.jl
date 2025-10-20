@@ -612,8 +612,7 @@ function run_krylov_subsolver!(workspace, A, b; radius=nothing, rtol=1e-6, atol=
         function tr_callback(cb_workspace)
           # Some workspaces store the current iterate in `x`.
           if !hasfield(typeof(cb_workspace), :x)
-            # If workspace has no `x` field, don't stop via callback.
-            return false
+            error("Krylov workspace of type $(typeof(cb_workspace)) does not have an `x` field. Trust-region constraint cannot be enforced. Please use a compatible workspace type.")
           end
           xcur = getfield(cb_workspace, :x)
           # Stop when the squared norm of the current solution reaches the squared radius (avoids sqrt).
