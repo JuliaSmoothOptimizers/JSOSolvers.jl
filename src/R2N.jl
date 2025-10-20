@@ -3,11 +3,9 @@ export ShiftedLBFGSSolver, MA97Solver
 export ShiftedOperator
 
 using LinearOperators, LinearAlgebra
-using HSL_jll, SparseArrays
+using SparseArrays
 using HSL
-function LIBHSL_isfunctional()
-  @ccall libhsl.LIBHSL_isfunctional()::Bool
-end
+
 
 #TODO move to LinearOperators
 # Define a new mutable operator for A = H + σI
@@ -21,29 +19,36 @@ end
 
 # Constructor for the new operator
 function ShiftedOperator(H::OpH) where {T, OpH <: AbstractLinearOperator{T}}
-  return ShiftedOperator{T, Vector{T}, OpH}(H, zero(T), H.n, H.symmetric, H.hermitian)
+  return ShiftedOperator{T, Vector{T}, OpH}(H, zero(T), size(H, 1), H.symmetric, H.hermitian)
 end
 
 # Define required properties for AbstractLinearOperator
 Base.size(A::ShiftedOperator) = (A.n, A.n)
 LinearAlgebra.isreal(A::ShiftedOperator{T}) where {T <: Real} = true
-LinearOperators.is_symmetric(A::ShiftedOperator) = A.symmetric
-LinearOperators.is_hermitian(A::ShiftedOperator) = A.hermitian
+LinearOperators.issymmetric(A::ShiftedOperator) = A.symmetric
+LinearOperators.ishermitian(A::ShiftedOperator) = A.hermitian
+
 
 # Define the core multiplication rules: y = (H + σI)x
-function LinearAlgebra.mul!(y::V, A::ShiftedOperator{T, V}, x::V) where {T, V}
-  # y = Hx + σx
-  mul!(y, A.H, x)
-  axpy!(A.σ, x, y) # y += A.σ * x
-  return y
+function LinearAlgebra.mul!(y::AbstractVecOrMat, A::ShiftedOperator{T, V, OpH}, x::AbstractVecOrMat{T}) where {T, V, OpH}
+    mul!(y, A.H, x)
+    LinearAlgebra.axpy!(A.σ, x, y)
+    return y
 end
 
-function LinearAlgebra.mul!(y::V, A::ShiftedOperator{T, V}, x::V, α::Number, β::Number) where {T, V}
-  # y = α(Hx + σx) + βy
-  mul!(y, A.H, x, α, β) # y = α*Hx + β*y
-  axpy!(α * A.σ, x, y)  # y += α*A.σ*x
-  return y
-end
+# function LinearAlgebra.mul!(y::V, A::ShiftedOperator{T, V}, x::V) where {T, V}
+#   # y = Hx + σx
+#   mul!(y, A.H, x)
+#   axpy!(A.σ, x, y) # y += A.σ * x
+#   return y
+# end
+
+# function LinearAlgebra.mul!(y::V, A::ShiftedOperator{T, V}, x::V, α::Number, β::Number) where {T, V}
+#   # y = α(Hx + σx) + βy
+#   mul!(y, A.H, x, α, β) # y = α*Hx + β*y
+#   axpy!(α * A.σ, x, y)  # y += α*A.σ*x
+#   return y
+# end
 
 """
     R2NParameterSet([T=Float64]; θ1, θ2, η1, η2, γ1, γ2, γ3, σmin, non_mono_size)
@@ -215,7 +220,7 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `subsolver::Symbol  = :shifted_lbfgs`: the subsolver to solve the shifted system. The `MinresSolver` which solves the shifted linear system exactly at each iteration. Using the exact solver is only possible if `nlp` is an `LBFGSModel`. See `JSOSolvers.R2N_allowed_subsolvers` for a list of available subsolvers.
+- `subsolver::Symbol  = :shifted_lbfgs`: the subsolver to solve the shifted system. The `MinresWorkspace` which solves the shifted linear system exactly at each iteration. Using the exact solver is only possible if `nlp` is an `LBFGSModel`. See `JSOSolvers.R2N_allowed_subsolvers` for a list of available subsolvers.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
 - `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
 - `npc_handler::Symbol = :armijo`: the non_positive_curve handling strategy.
@@ -233,7 +238,7 @@ The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 # Callback
 $(Callback_docstring)
 
-# Examples
+# Examples #TODO
 ```jldoctest
 using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> sum(x.^2), ones(3))
@@ -338,7 +343,7 @@ function R2NSolver(
       r2_subsolver = ShiftedLBFGSSolver()
     else
       H = hess_op!(nlp, x, Hs)
-      r2_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
+      r2_subsolver = krylov_workspace(Val(subsolver),nvar, nvar, V)
       if subsolver in (:cg, :cr)
         A = ShiftedOperator(H)
       end
@@ -471,6 +476,7 @@ function SolverCore.solve!(
   A = solver.A
   Hs = solver.Hs
   σk = solver.σ
+  
   subtol = solver.subtol
   subsolver_solved = false
 
@@ -536,6 +542,7 @@ function SolverCore.solve!(
   subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * subtol))
   solver.σ = σk
   solver.subtol = subtol
+  r2_subsolver = solver.r2_subsolver
 
   callback(nlp, solver, stats)
   subtol = solver.subtol
@@ -568,13 +575,13 @@ function SolverCore.solve!(
 
     # Solving for step direction s_k
     ∇fk .*= -1
-    if solver.r2_subsolver isa CgWorkspace || solver.r2_subsolver isa CrWorkspace
+    if r2_subsolver isa CgWorkspace || r2_subsolver isa CrWorkspace
       # Update the shift in the operator
       solver.A.σ = σk
       solver.H = H
     end
     subsolver_solved, sub_stats, subiter, npcCount =
-      subsolve!(solver.r2_subsolver, solver, nlp, s, zero(T), n, subsolver_verbose)
+      subsolve!(r2_subsolver, solver, nlp, s, zero(T), n, subsolver_verbose)
 
     if !subsolver_solved
       @warn("Subsolver failed to solve the system")
@@ -582,8 +589,7 @@ function SolverCore.solve!(
       # but for now, we'll stop.
       break
     end
-
-    if !(subsolver == :shifted_lbfgs) && !(subsolver == :ma97) #not exact solver and not ma97
+    if !(r2_subsolver isa ShiftedLBFGSSolver) && !(r2_subsolver isa MA97Solver)
       if r2_subsolver.stats.npcCount >= 1  #npc case
         if npc_handler == :armijo #TODO check this logic with Prof. Orban
           c = one(T) * 1e-4 #TODO do I want user to set this value?
@@ -592,7 +598,7 @@ function SolverCore.solve!(
           decrease_factor = one(T) * 0.5
           min_alpha = one(T) * 1e-8
           max_alpha = one(T) * 1e2
-          dir = r2_subsolver.npc
+          dir = r2_subsolver.npc_dir
           f0 = stats.objective
           grad_dir = dot(∇fk, dir)
           # First, try α = 1
@@ -745,32 +751,6 @@ function SolverCore.solve!(
   return stats
 end
 
-# Dispatch for MinresSolver
-function subsolve!(
-  r2_subsolver::MinresSolver,
-  R2N::R2NSolver,
-  nlp::AbstractNLPModel,
-  s,
-  atol,
-  n,
-  subsolver_verbose,
-)
-  krylov_solve!(
-    r2_subsolver,
-    R2N.H,
-    R2N.gx,
-    λ = R2N.σ,
-    itmax = max(2 * n, 50),
-    atol = atol,
-    rtol = R2N.subtol,
-    verbose = subsolver_verbose,
-  )
-  s .= r2_subsolver.x
-  return Krylov.issolved(r2_subsolver),
-  r2_subsolver.stats.status,
-  r2_subsolver.stats.niter,
-  r2_subsolver.stats.npcCount
-end
 
 # Dispatch for subsolvers KrylovWorkspace: cg and cr
 function subsolve!(
@@ -799,16 +779,16 @@ function subsolve!(
   r2_subsolver.stats.npcCount
 end
 
-# Dispatch for MinresSolver
+# Dispatch for MinresWorkspace and MinresQlpWorkspace
 function subsolve!(
-  r2_subsolver::Union{MinresWorkspace, MinresQlpWorkspace},
+  r2_subsolver::Union{MinresWorkspace{T,V}, MinresQlpWorkspace{T,V}},
   R2N::R2NSolver,
   nlp::AbstractNLPModel,
   s,
   atol,
   n,
   subsolver_verbose,
-)
+) where {T, V}
   krylov_solve!(
     r2_subsolver,
     R2N.H,
@@ -853,7 +833,7 @@ function subsolve!(
   atol,
   n,
   subsolver_verbose,
-)
+) where {T}
 
   # Unpack for clarity
   g = R2N.gx # Note: R2N main loop has g = -∇f
