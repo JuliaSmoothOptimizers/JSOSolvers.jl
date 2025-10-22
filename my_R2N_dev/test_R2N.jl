@@ -1,5 +1,6 @@
 using Revise
 using JSOSolvers
+using HSL
 using NLPModels, ADNLPModels
 using SparseArrays, LinearAlgebra
 using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
@@ -74,18 +75,18 @@ for (name, mySolver) in [
 end
 
 # testing MA97
-# if LIBHSL_isfunctional() #TODO
-#   f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
-#   nlp = ADNLPModel(f, [-1.2; 1.0])
+if LIBHSL_isfunctional() #TODO
+  f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
+  nlp = ADNLPModel(f, [-1.2; 1.0])
 
-#   stats = GenericExecutionStats(nlp)
+  stats = GenericExecutionStats(nlp)
 
-#   solver = R2NSolver(nlp, subsolver = :ma97)
-#   stats = SolverCore.solve!(solver, nlp, stats)
-#   @test stats.status == :first_order
-#   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)
-# else
-#   @warn("HSL library is not functional. Skipping MA97 tests.")
-# end
+  solver = R2NSolver(nlp, subsolver = :ma97)
+  stats = SolverCore.solve!(solver, nlp, stats, verbose = 1, max_iter = 50)
+  println("The status is: ", stats.status == :first_order)
+  println("The solution is approximately: ", isapprox(stats.solution, [1.0; 1.0], atol = 1e-6))
+else
+  @warn("HSL library is not functional. Skipping MA97 tests.")
+end
 
 # testing different -ve handling strategies with Krylov solvers 

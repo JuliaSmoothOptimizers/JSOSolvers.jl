@@ -6,7 +6,6 @@ using LinearOperators, LinearAlgebra
 using SparseArrays
 using HSL
 
-
 #TODO move to LinearOperators
 # Define a new mutable operator for A = H + σI
 mutable struct ShiftedOperator{T, V, OpH <: AbstractLinearOperator{T}} <: AbstractLinearOperator{T}
@@ -28,12 +27,15 @@ LinearAlgebra.isreal(A::ShiftedOperator{T}) where {T <: Real} = true
 LinearOperators.issymmetric(A::ShiftedOperator) = A.symmetric
 LinearOperators.ishermitian(A::ShiftedOperator) = A.hermitian
 
-
 # Define the core multiplication rules: y = (H + σI)x
-function LinearAlgebra.mul!(y::AbstractVecOrMat, A::ShiftedOperator{T, V, OpH}, x::AbstractVecOrMat{T}) where {T, V, OpH}
-    mul!(y, A.H, x)
-    LinearAlgebra.axpy!(A.σ, x, y)
-    return y
+function LinearAlgebra.mul!(
+  y::AbstractVecOrMat,
+  A::ShiftedOperator{T, V, OpH},
+  x::AbstractVecOrMat{T},
+) where {T, V, OpH}
+  mul!(y, A.H, x)
+  LinearAlgebra.axpy!(A.σ, x, y)
+  return y
 end
 
 # function LinearAlgebra.mul!(y::V, A::ShiftedOperator{T, V}, x::V) where {T, V}
@@ -173,7 +175,7 @@ mutable struct MA97Solver{T} <: AbstractMA97Solver
     )
 
     # 4. Perform the expensive symbolic analysis here, only ONCE.
-    ma97_analyze!(ma97_obj)
+    # ma97_analyze!(ma97_obj)
 
     # 5. Allocate a buffer for the values that will be updated in each iteration
     vals = Vector{T}(undef, total_nnz)
@@ -343,7 +345,7 @@ function R2NSolver(
       r2_subsolver = ShiftedLBFGSSolver()
     else
       H = hess_op!(nlp, x, Hs)
-      r2_subsolver = krylov_workspace(Val(subsolver),nvar, nvar, V)
+      r2_subsolver = krylov_workspace(Val(subsolver), nvar, nvar, V)
       if subsolver in (:cg, :cr)
         A = ShiftedOperator(H)
       end
@@ -476,7 +478,7 @@ function SolverCore.solve!(
   A = solver.A
   Hs = solver.Hs
   σk = solver.σ
-  
+
   subtol = solver.subtol
   subsolver_solved = false
 
@@ -559,7 +561,12 @@ function SolverCore.solve!(
 
     # Compute the Cauchy step.
     # Note that we use buffer values Hs to avoid reallocating memory.
-    mul!(Hs, H, ∇fk) #TODO check for HSL
+    # mul!(Hs, H, ∇fk) #TODO check for HSL
+    if r2_subsolver isa MA97Solver
+      hprod!(nlp, x, ∇fk, Hs) # Use exact Hessian-vector product
+    else
+      mul!(Hs, H, ∇fk) # Use linear operator
+    end
     curv = dot(∇fk, Hs)
     slope = σk * norm_∇fk^2 # slope= σ * ||∇f||^2 
     γ_k = (curv + slope) / norm_∇fk^2
@@ -751,7 +758,6 @@ function SolverCore.solve!(
   return stats
 end
 
-
 # Dispatch for subsolvers KrylovWorkspace: cg and cr
 function subsolve!(
   r2_subsolver::KrylovWorkspace{T, T, V},
@@ -781,7 +787,7 @@ end
 
 # Dispatch for MinresWorkspace and MinresQlpWorkspace
 function subsolve!(
-  r2_subsolver::Union{MinresWorkspace{T,V}, MinresQlpWorkspace{T,V}},
+  r2_subsolver::Union{MinresWorkspace{T, V}, MinresQlpWorkspace{T, V}},
   R2N::R2NSolver,
   nlp::AbstractNLPModel,
   s,
@@ -853,22 +859,27 @@ function subsolve!(
   # 3. Create the sparse matrix K = B + σI in CSC format.
   # The `sparse` function sums up duplicate entries, which is exactly
   # what we need for the diagonal.
-  K = sparse(r2_subsolver.rows, r2_subsolver.cols, r2_subsolver.vals, n, n)
+  #TODO with Prof. Orban, check if this is efficient
+  # K = sparse(r2_subsolver.rows, r2_subsolver.cols, r2_subsolver.vals, n, n)
+  
 
   # 4. Copy the new numerical values into the MA97 object
   copyto!(r2_subsolver.ma97_obj.nzval, K.nzval)
 
   # 5. Factorize the matrix
-  #TODO Prof Orban, do I need this?
-  ma97_factorize!(r2_subsolver.ma97_obj) # I think we only need to do this once
+  #TODO Prof Orban, do I need this?# I think we only need to do this once
 
+  ma97_factorize!(r2_subsolver.ma97_obj) 
   if r2_subsolver.ma97_obj.info.flag != 0
     @warn("MA97 factorization failed with flag = $(r2_subsolver.ma97_obj.info.flag)")
     return false, :err, 1, 0 # Indicate failure
   end
 
   # 6. Solve the system (B + σI)s = g, where g = -∇f
-  s = ma97_solve(r2_subsolver.ma97_obj, s) # Solves in-place
+  # s = ma97_solve(r2_subsolver.ma97_obj, g) # Solves in-place
+  # 6. Solve the system (B + σI)s = g, where g = -∇f
+  s .= g  # Copy the right-hand-side (g) into the solution buffer (s) #TODO confirm with Prof. Orban
+  ma97_solve!(r2_subsolver.ma97_obj, s) # Solve in-place, overwriting s
 
   return true, :first_order, 1, 0
 end
