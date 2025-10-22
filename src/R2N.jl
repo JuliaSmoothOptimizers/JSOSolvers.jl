@@ -8,7 +8,7 @@ using HSL
 
 #TODO move to LinearOperators
 # Define a new mutable operator for A = H + σI
-mutable struct ShiftedOperator{T, V, OpH <: AbstractLinearOperator{T}} <: AbstractLinearOperator{T}
+mutable struct ShiftedOperator{T, V, OpH <: Union{AbstractLinearOperator{T}, AbstractMatrix{T}}} <: AbstractLinearOperator{T}
   H::OpH
   σ::T
   n::Int
@@ -16,9 +16,10 @@ mutable struct ShiftedOperator{T, V, OpH <: AbstractLinearOperator{T}} <: Abstra
   hermitian::Bool
 end
 
-# Constructor for the new operator
-function ShiftedOperator(H::OpH) where {T, OpH <: AbstractLinearOperator{T}}
-  return ShiftedOperator{T, Vector{T}, OpH}(H, zero(T), size(H, 1), H.symmetric, H.hermitian)
+function ShiftedOperator(H::OpH) where {T, OpH <: Union{AbstractLinearOperator{T}, AbstractMatrix{T}}}
+  is_sym = isa(H, AbstractLinearOperator) ? H.symmetric : issymmetric(H)
+  is_herm = isa(H, AbstractLinearOperator) ? H.hermitian : ishermitian(H)
+  return ShiftedOperator{T, Vector{T}, OpH}(H, zero(T), size(H, 1), is_sym, is_herm)
 end
 
 # Define required properties for AbstractLinearOperator
@@ -134,54 +135,99 @@ mutable struct ShiftedLBFGSSolver <: AbstractShiftedLBFGSSolver #TODO Ask what I
 end
 
 abstract type AbstractMA97Solver end
-
 mutable struct MA97Solver{T} <: AbstractMA97Solver
-  # HSL MA97 factorization object
-  ma97_obj::Ma97{T}
+    # HSL MA97 factorization object
+    ma97_obj::Ma97{T}
 
-  # Sparse coordinate representation for (B + σI)
-  rows::Vector{Int32} # MA97 prefers Int32
-  cols::Vector{Int32}
-  vals::Vector{T}
+    # Buffer for Hessian values from hess_coord!
+    hess_vals_buffer::Vector{T}
 
-  # Keep track of sizes
-  n::Int
-  nnzh::Int # Non-zeros in the Hessian B
+    # Mappers from (row, col) to index in ma97_obj.nzval
+    # Maps k-th entry from hess_coord! to nzval index
+    hess_mapper::Vector{Int}
+    # Maps i-th diagonal entry to nzval index
+    diag_mapper::Vector{Int}
 
-  function MA97Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
-    n = nlp.meta.nvar
-    nnzh = nlp.meta.nnzh
-    total_nnz = nnzh + n
+    # Keep track of sizes
+    n::Int
+    nnzh::Int # Non-zeros in the Hessian B
 
-    # 1. Build the coordinate structure of B + σI
-    rows = Vector{Int32}(undef, total_nnz)
-    cols = Vector{Int32}(undef, total_nnz)
-    hess_structure!(nlp, view(rows, 1:nnzh), view(cols, 1:nnzh))
-    for i = 1:n
-      rows[nnzh + i] = i
-      cols[nnzh + i] = i
+    function MA97Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
+        n = nlp.meta.nvar
+        nnzh = nlp.meta.nnzh
+        total_nnz_coord = nnzh + n # Max number of coordinates
+
+        # 1. Build the coordinate structure of B + σI
+        rows = Vector{Int32}(undef, total_nnz_coord)
+        cols = Vector{Int32}(undef, total_nnz_coord)
+        
+        # Get Hessian structure (lower triangle)
+        hess_structure!(nlp, view(rows, 1:nnzh), view(cols, 1:nnzh))
+        hess_rows_view = view(rows, 1:nnzh)
+        hess_cols_view = view(cols, 1:nnzh)
+
+        # Add diagonal structure
+        diag_rows_view = view(rows, (nnzh + 1):total_nnz_coord)
+        diag_cols_view = view(cols, (nnzh + 1):total_nnz_coord)
+        @inbounds for i = 1:n
+            diag_rows_view[i] = i
+            diag_cols_view[i] = i
+        end
+
+        # 2. Create the sparse matrix ONCE to establish the final CSC pattern.
+        # This sums duplicates (e.g., Hessian diagonals + σI diagonals)
+        K_pattern = sparse(rows, cols, one(T), n, n)
+
+        # 3. Initialize the Ma97 object using the final CSC pattern
+        # ma97_obj.nzval will be a reference to K_pattern.nzval
+        ma97_obj = ma97_csc(
+            K_pattern.n,
+            Int32.(K_pattern.colptr), # MA97 requires Cint (Int32)
+            Int32.(K_pattern.rowval), # MA97 requires Cint (Int32)
+            K_pattern.nzval,         # Share this buffer
+        )
+        
+        # 4. Allocate mappers and buffers
+        hess_vals_buffer = Vector{T}(undef, nnzh)
+        hess_mapper = Vector{Int}(undef, nnzh)
+        diag_mapper = Vector{Int}(undef, n)
+
+        # 5. Build the mappers
+        # We need to find where each (r, c) coordinate from our original
+        # list ended up in the final CSC K_pattern.nzval array.
+
+        # Helper function to find (r, c) in CSC structure
+        # Returns the index in nzval
+        function find_csc_index(K, r, c)
+            @inbounds for idx = K.colptr[c] : (K.colptr[c+1] - 1)
+                if K.rowval[idx] == r
+                    return idx
+                end
+            end
+            # This should not happen if (r, c) is in the pattern
+            throw(ErrorException("MA97Solver: Could not find ($r, $c) in sparse pattern.")) 
+        end
+
+        # Build Hessian mapper
+        @inbounds for k = 1:nnzh
+            hess_mapper[k] = find_csc_index(K_pattern, hess_rows_view[k], hess_cols_view[k])
+        end
+
+        # Build diagonal mapper
+        @inbounds for i = 1:n
+            diag_mapper[i] = find_csc_index(K_pattern, i, i)
+        end
+        
+        # 6. Instantiate the solver
+        return new{T}(
+            ma97_obj,
+            hess_vals_buffer,
+            hess_mapper,
+            diag_mapper,
+            n,
+            nnzh,
+        )
     end
-
-    # 2. Create a temporary sparse matrix ONCE to establish the final sparsity pattern.
-    #    The values (ones) are just placeholders.
-    K_pattern = sparse(rows, cols, one(T), n, n)
-
-    # 3. Initialize the Ma97 object using the final CSC pattern
-    ma97_obj = ma97_csc(
-      K_pattern.n,
-      Int32.(K_pattern.colptr),
-      Int32.(K_pattern.rowval),
-      K_pattern.nzval, # Pass initial values
-    )
-
-    # 4. Perform the expensive symbolic analysis here, only ONCE.
-    # ma97_analyze!(ma97_obj)
-
-    # 5. Allocate a buffer for the values that will be updated in each iteration
-    vals = Vector{T}(undef, total_nnz)
-
-    return new{T}(ma97_obj, rows, cols, vals, n, nnzh)
-  end
 end
 
 const npc_handler_allowed = [:armijo, :sigma, :prev, :cp]
@@ -575,7 +621,13 @@ function SolverCore.solve!(
       ν_k = 2*(1-δ1) / (γ_k)
     else
       # we have to calcualte the scp, since we have encounter a negative curvature
-      λmax, found_λ = opnorm(H)
+      if H isa AbstractLinearOperator
+        λmax, found_λ = opnorm(H) # This uses iterative methods (p=2)
+      else
+        # H is a SparseMatrixCSC (MA97 case), use p=Inf as suggested by the error
+        λmax = opnorm(H, Inf) 
+        found_λ = true # We assume the Inf-norm was found
+      end
       cp_step_log = "ν_k"
       ν_k = θ1 / (λmax + σk)
     end
@@ -832,54 +884,59 @@ end
 
 # Dispatch for MA97Solver
 function subsolve!(
-  r2_subsolver::MA97Solver{T},
-  R2N::R2NSolver,
-  nlp::AbstractNLPModel,
-  s,
-  atol,
-  n,
-  subsolver_verbose,
+    r2_subsolver::MA97Solver{T},
+    R2N::R2NSolver,
+    nlp::AbstractNLPModel,
+    s, # This is the output buffer for the solution
+    atol,
+    n,
+    subsolver_verbose,
 ) where {T}
 
-  # Unpack for clarity
-  g = R2N.gx # Note: R2N main loop has g = -∇f
-  σ = R2N.σ
-  n = r2_subsolver.n
-  nnzh = r2_subsolver.nnzh
+    # Unpack for clarity
+    g = R2N.gx # Note: R2N main loop has g = -∇f
+    σ = R2N.σ
+    
+    # Get direct access to the Ma97 value buffer
+    nzval = r2_subsolver.ma97_obj.nzval
+    
+    # Get buffers and mappers
+    hess_vals = r2_subsolver.hess_vals_buffer
+    hess_map = r2_subsolver.hess_mapper
+    diag_map = r2_subsolver.diag_mapper
+    nnzh = r2_subsolver.nnzh
+    n_diag = r2_subsolver.n
 
-  # 1. Update the Hessian part of the values array
-  hess_coord!(nlp, R2N.x, view(r2_subsolver.vals, 1:nnzh))
+    # 1. Zero out the numerical values buffer
+    # This is critical as we are "adding" values to it.
+    fill!(nzval, zero(T))
 
-  # 2. Update the shift part of the values array
-  # The last 'n' entries correspond to the diagonal for σI
-  @inbounds for i = 1:n
-    r2_subsolver.vals[nnzh + i] = σ
-  end
+    # 2. Update the Hessian part of the values array
+    hess_coord!(nlp, R2N.x, hess_vals)
 
-  # 3. Create the sparse matrix K = B + σI in CSC format.
-  # The `sparse` function sums up duplicate entries, which is exactly
-  # what we need for the diagonal.
-  #TODO with Prof. Orban, check if this is efficient
-  # K = sparse(r2_subsolver.rows, r2_subsolver.cols, r2_subsolver.vals, n, n)
-  
+    # 3. Add Hessian values to nzval using the mapper
+    @inbounds for k = 1:nnzh
+        nzval[hess_map[k]] += hess_vals[k]
+    end
 
-  # 4. Copy the new numerical values into the MA97 object
-  copyto!(r2_subsolver.ma97_obj.nzval, K.nzval)
+    # 4. Add the shift part of the values array using the mapper
+    # We use += because the diagonal entry in nzval is shared
+    # by the Hessian and the shift.
+    @inbounds for i = 1:n_diag
+        nzval[diag_map[i]] += σ
+    end
 
-  # 5. Factorize the matrix
-  #TODO Prof Orban, do I need this?# I think we only need to do this once
+    # 5. Factorize the matrix with the new numerical values
+    ma97_factorize!(r2_subsolver.ma97_obj)
 
-  ma97_factorize!(r2_subsolver.ma97_obj) 
-  if r2_subsolver.ma97_obj.info.flag != 0
-    @warn("MA97 factorization failed with flag = $(r2_subsolver.ma97_obj.info.flag)")
-    return false, :err, 1, 0 # Indicate failure
-  end
+    if r2_subsolver.ma97_obj.info.flag != 0
+        @warn("MA97 factorization failed with flag = $(r2_subsolver.ma97_obj.info.flag)")
+        return false, :err, 1, 0 # Indicate failure
+    end
 
-  # 6. Solve the system (B + σI)s = g, where g = -∇f
-  # s = ma97_solve(r2_subsolver.ma97_obj, g) # Solves in-place
-  # 6. Solve the system (B + σI)s = g, where g = -∇f
-  s .= g  # Copy the right-hand-side (g) into the solution buffer (s) #TODO confirm with Prof. Orban
-  ma97_solve!(r2_subsolver.ma97_obj, s) # Solve in-place, overwriting s
+    # 6. Solve the system (B + σI)s = g, where g = -∇f
+    s .= g # Copy right-hand-side into solution buffer
+    ma97_solve!(r2_subsolver.ma97_obj, s) # Solve in-place
 
-  return true, :first_order, 1, 0
+    return true, :first_order, 1, 0
 end
