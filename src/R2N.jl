@@ -39,19 +39,6 @@ function LinearAlgebra.mul!(
   return y
 end
 
-# function LinearAlgebra.mul!(y::V, A::ShiftedOperator{T, V}, x::V) where {T, V}
-#   # y = Hx + σx
-#   mul!(y, A.H, x)
-#   axpy!(A.σ, x, y) # y += A.σ * x
-#   return y
-# end
-
-# function LinearAlgebra.mul!(y::V, A::ShiftedOperator{T, V}, x::V, α::Number, β::Number) where {T, V}
-#   # y = α(Hx + σx) + βy
-#   mul!(y, A.H, x, α, β) # y = α*Hx + β*y
-#   axpy!(α * A.σ, x, y)  # y += α*A.σ*x
-#   return y
-# end
 
 """
     R2NParameterSet([T=Float64]; θ1, θ2, η1, η2, γ1, γ2, γ3, σmin, non_mono_size)
@@ -616,8 +603,8 @@ function SolverCore.solve!(
     curv = dot(∇fk, Hs)
     slope = σk * norm_∇fk^2 # slope= σ * ||∇f||^2 
     γ_k = (curv + slope) / norm_∇fk^2
-    if γ_k < 0
-      cp_step_log = "Cauchy step"
+    if γ_k > 0
+      cp_step_log = "α_k"
       ν_k = 2*(1-δ1) / (γ_k)
     else
       # we have to calcualte the scp, since we have encounter a negative curvature
