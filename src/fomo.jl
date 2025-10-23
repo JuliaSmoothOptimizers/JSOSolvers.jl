@@ -30,7 +30,7 @@ const FOMO_step_backend = DefaultParameter(nlp -> r2_step(), "r2_step()")
 This structure designed for `fomo` regroups the following parameters:
   - `η1`, `η2`: step acceptance parameters.
   - `γ1`, `γ2`: regularization update parameters.
-  - `γ3` : momentum factor βmax update parameter in case of unsuccessful iteration.
+  - `γ3` : momentum factor βktilde update parameter in case of unsuccessful iteration.
   - `αmax`: maximum step parameter for fomo algorithm.
   - `β ∈ [0,1)`: target decay rate for the momentum.
   - `θ1`: momentum contribution parameter for convergence condition (1).
@@ -110,14 +110,14 @@ A First-Order with MOmentum (FOMO) model-based method for unconstrained optimiza
 # Algorithm description
 
 The step is computed along
-d = - (1-βmax) .* ∇f(xk) - βmax .* mk
+d = - (1-βktilde) .* ∇f(xk) - βktilde .* mk
 with mk the memory of past gradients (initialized at 0), and updated at each successful iteration as
-mk .= ∇f(xk) .* (1 - βmax) .+ mk .* βmax
-and βmax ∈ [0,β] chosen as to ensure d is gradient-related, i.e., the following 2 conditions are satisfied:
-(1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk ≥ θ1 * ‖∇f(xk)‖² (1)
-‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) *. ∇f(xk) + βmax .* mk‖       (2)
+mk .= ∇f(xk) .* (1 - βktilde) .+ mk .* βktilde
+and βktilde ∈ [0,β] chosen as to ensure d is gradient-related, i.e., the following 2 conditions are satisfied:
+(1-βktilde) .* ∇f(xk) + βktilde .* ∇f(xk)ᵀmk ≥ θ1 * ‖∇f(xk)‖² (1)
+‖∇f(xk)‖ ≥ θ2 * ‖(1-βktilde) *. ∇f(xk) + βktilde .* mk‖       (2)
 In the nonmonotone case, (1) rewrites
-(1-βmax) .* ∇f(xk) + βmax .* ∇f(xk)ᵀmk + (fm - fk)/μk ≥ θ1 * ‖∇f(xk)‖²,
+(1-βktilde) .* ∇f(xk) + βktilde .* ∇f(xk)ᵀmk + (fm - fk)/μk ≥ θ1 * ‖∇f(xk)‖²,
 with fm the largest objective value over the last M successful iterations, and fk = f(xk).
 
 # Advanced usage
@@ -140,7 +140,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `η1 = $(FOMO_η1)`, `η2 = $(FOMO_η2)`: step acceptance parameters.
 - `γ1 = $(FOMO_γ1)`, `γ2 = $(FOMO_γ2)`: regularization update parameters.
-- `γ3 = $(FOMO_γ3)` : momentum factor βmax update parameter in case of unsuccessful iteration.
+- `γ3 = $(FOMO_γ3)` : momentum factor βktilde update parameter in case of unsuccessful iteration.
 - `αmax = $(FOMO_αmax)`: maximum step parameter for fomo algorithm.
 - `max_eval::Int = -1`: maximum number of objective evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
@@ -206,7 +206,6 @@ mutable struct FomoSolver{T, V} <: AbstractFirstOrderSolver
   c::V
   m::V
   d::V
-  p::V
   o::V
   α::T
   params::FOMOParameterSet{T}
@@ -219,9 +218,8 @@ function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int = get(FOMO_M, nlp), kwar
   c = similar(nlp.meta.x0)
   m = fill!(similar(nlp.meta.x0), 0)
   d = fill!(similar(nlp.meta.x0), 0)
-  p = similar(nlp.meta.x0)
   o = fill!(Vector{T}(undef, M), -Inf)
-  return FomoSolver{T, V}(x, g, c, m, d, p, o, T(0), params)
+  return FomoSolver{T, V}(x, g, c, m, d, o, T(0), params)
 end
 
 @doc (@doc FomoSolver) function fomo(
@@ -253,7 +251,7 @@ end
     M = M,
     step_backend = step_backend,
   )
-  solver_specific = Dict(:avgβmax => T(0.0))
+  solver_specific = Dict(:avgβktilde => T(0.0))
   stats = GenericExecutionStats(nlp; solver_specific = solver_specific)
   return solve!(solver, nlp, stats; kwargs...)
 end
@@ -449,7 +447,6 @@ function SolverCore.solve!(
   c = solver.c
   momentum = use_momentum ? solver.m : nothing # not used if no momentum
   d = use_momentum ? solver.d : solver.g # g = d if no momentum
-  p = use_momentum ? solver.p : nothing # not used if no momentum
   set_iter!(stats, 0)
   f0 = obj(nlp, x)
   set_objective!(stats, f0)
@@ -489,7 +486,7 @@ function SolverCore.solve!(
         infoline =
           @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ' '
       else
-        @info @sprintf "%5s  %9s  %7s  %7s  %7s  %7s " "iter" "f" "‖∇f‖" step_param_name "ρk" "βmax"
+        @info @sprintf "%5s  %9s  %7s  %7s  %7s  %7s " "iter" "f" "‖∇f‖" step_param_name "ρk" "βktilde"
         infoline =
           @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ' ' 0
       end
@@ -516,9 +513,9 @@ function SolverCore.solve!(
 
   d .= ∇fk
   norm_d = norm_∇fk
-  βmax = T(0)
+  βktilde = T(0)
   ρk = T(0)
-  avgβmax = T(0)
+  avgβktilde = T(0)
   siter::Int = 0
   oneT = T(1)
   mdot∇f = T(0) # dot(momentum,∇fk)
@@ -526,7 +523,7 @@ function SolverCore.solve!(
     μk = step_mult(solver.α, norm_d, step_backend)
     c .= x .- μk .* d
     step_underflow = x == c # step addition underfow on every dimensions, should happen before solver.α == 0
-    ΔTk = ((oneT - βmax) * norm_∇fk^2 + βmax * mdot∇f) * μk # = dot(d,∇fk) * μk with momentum, ‖∇fk‖²μk without momentum
+    ΔTk = (- norm_∇fk^2 + βktilde * mdot∇f) * μk # = dot(d,∇fk) * μk with momentum, ‖∇fk‖²μk without momentum
     fck = obj(nlp, c)
     unbounded = fck < fmin
     ρk = (max_obj_mem - fck) / (max_obj_mem - stats.objective + ΔTk)
@@ -536,17 +533,14 @@ function SolverCore.solve!(
     elseif ρk < η1
       solver.α = solver.α * γ1
       if use_momentum
-        βmax *= γ3
-        d .= ∇fk .* (oneT - βmax) .+ momentum .* βmax
+        βktilde *= γ3
+        d .= -∇fk .+ βktilde .* momentum
       end
     end
 
     # Acceptance of the new candidate
     if ρk >= η1
       x .= c
-      if use_momentum
-        momentum .= ∇fk .* (oneT - β) .+ momentum .* β
-      end
       set_objective!(stats, fck)
       mem_ind = (mem_ind + 1) % M
       obj_mem[mem_ind + 1] = stats.objective
@@ -556,11 +550,11 @@ function SolverCore.solve!(
       norm_∇fk = norm(∇fk)
       if use_momentum
         mdot∇f = dot(momentum, ∇fk)
-        p .= momentum .- ∇fk
-        βmax = find_beta(p, mdot∇f, norm_∇fk, μk, stats.objective, max_obj_mem, β, θ1, θ2)
-        d .= ∇fk .* (oneT - βmax) .+ momentum .* βmax
+        momentum .= d
+        βktilde = find_beta_tilde(p, mdot∇f, norm_∇fk, μk, stats.objective, max_obj_mem, β, θ1, θ2)
+        d .=  - ∇fk .+ βktilde .* momentum
         norm_d = norm(d)
-        avgβmax += βmax
+        avgβktilde += βktilde
         siter += 1
       end
     end
@@ -578,7 +572,7 @@ function SolverCore.solve!(
           @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ρk
       else
         infoline =
-          @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ρk βmax
+          @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ρk βktilde
       end
     end
 
@@ -604,38 +598,36 @@ function SolverCore.solve!(
     done = stats.status != :unknown
   end
   if use_momentum
-    avgβmax /= siter
-    set_solver_specific!(stats, :avgβmax, avgβmax)
+    avgβktilde /= siter
+    set_solver_specific!(stats, :avgβktilde, avgβktilde)
   end
   set_solution!(stats, x)
   return stats
 end
 
 """
-    find_beta(m, mdot∇f, norm_∇f, μk, fk, max_obj_mem, β, θ1, θ2)
+    find_beta_tilde(m, mdot∇f, norm_∇f, μk, fk, max_obj_mem, βktilde, θ1, θ2)
 
-Compute βmax which saturates the contribution of the momentum term to the gradient.
-`βmax` is computed such that the two gradient-related conditions (first one is relaxed in the nonmonotone case) are ensured: 
-1. (1-βmax) * ‖∇f(xk)‖² + βmax * ∇f(xk)ᵀm + (max_obj_mem - fk)/μk ≥ θ1 * ‖∇f(xk)‖²
-2. ‖∇f(xk)‖ ≥ θ2 * ‖(1-βmax) * ∇f(xk) .+ βmax .* m‖
-with `m` the momentum term and `mdot∇f = ∇f(xk)ᵀm`, `fk` the model at s=0, `max_obj_mem` the largest objective value over the last M successful iterations.
+Compute βktilde which saturates the contribution of the momentum term to the gradient.
+`βktilde` is computed such that the two gradient-related conditions (first one is relaxed in the nonmonotone case) are ensured: 
+1. dᵀ∇f(xk) - (max_obj_mem - fk)/μk ≤ - θ1 * ‖∇f(xk)‖²
+2. ‖d‖ ≤ θ2 ‖∇f(xk)‖ 
+In the non monotone case, it is also necessary to ensure (necessarily satisfied in the monotone case)
+3.  ‖d‖ ≥ θ1 ‖∇f(xk)‖
+with `d` = -∇f(xk) + βktilde `m` the step direction, `fk` the model at s=0, `max_obj_mem` the largest objective value over the last M successful iterations.
 """
-function find_beta(
-  p::V,
+function find_beta_tilde(
   mdot∇f::T,
   norm_∇f::T,
+  norm_m::T,
   μk::T,
   fk::T,
   max_obj_mem::T,
-  β::T,
+  βktilde::T,
   θ1::T,
   θ2::T,
 ) where {T, V}
-  n1 = norm_∇f^2 - mdot∇f
-  n2 = norm(p)
-  β1 = n1 > 0 ? ((1 - θ1) * norm_∇f^2 - (fk - max_obj_mem) / μk) / n1 : β
-  β2 = n2 != 0 ? (1 - θ2) * norm_∇f / n2 : β
-  return min(β, min(β1, β2))
+  
 end
 
 """
