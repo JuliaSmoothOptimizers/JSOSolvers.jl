@@ -218,7 +218,7 @@ function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int = get(FOMO_M, nlp), kwar
   c = similar(nlp.meta.x0)
   m = fill!(similar(nlp.meta.x0), 0)
   o = fill!(Vector{T}(undef, M), -Inf)
-  return FomoSolver{T, V}(x, g, c, m, d, o, T(0), params)
+  return FomoSolver{T, V}(x, g, c, m, o, T(0), params)
 end
 
 @doc (@doc FomoSolver) function fomo(
