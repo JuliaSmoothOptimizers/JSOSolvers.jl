@@ -217,7 +217,6 @@ function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int = get(FOMO_M, nlp), kwar
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
   m = fill!(similar(nlp.meta.x0), 0)
-  d = fill!(similar(nlp.meta.x0), 0)
   o = fill!(Vector{T}(undef, M), -Inf)
   return FomoSolver{T, V}(x, g, c, m, d, o, T(0), params)
 end
@@ -446,7 +445,6 @@ function SolverCore.solve!(
   ∇fk = solver.g
   c = solver.c
   momentum = use_momentum ? solver.m : nothing # not used if no momentum
-  d = use_momentum ? solver.d : solver.g # g = d if no momentum
   set_iter!(stats, 0)
   f0 = obj(nlp, x)
   set_objective!(stats, f0)
@@ -511,17 +509,14 @@ function SolverCore.solve!(
 
   done = stats.status != :unknown
 
-  d .= ∇fk
-  norm_d = norm_∇fk
   βktilde = T(0)
   ρk = T(0)
   avgβktilde = T(0)
   siter::Int = 0
-  oneT = T(1)
   mdot∇f = T(0) # dot(momentum,∇fk)
   while !done
     μk = step_mult(solver.α, norm_d, step_backend)
-    c .= x .- μk .* d
+    c .= x .+ μk .* (-∇fk .+ m)
     step_underflow = x == c # step addition underfow on every dimensions, should happen before solver.α == 0
     ΔTk = (- norm_∇fk^2 + βktilde * mdot∇f) * μk # = dot(d,∇fk) * μk with momentum, ‖∇fk‖²μk without momentum
     fck = obj(nlp, c)
@@ -534,7 +529,6 @@ function SolverCore.solve!(
       solver.α = solver.α * γ1
       if use_momentum
         βktilde *= γ3
-        d .= -∇fk .+ βktilde .* momentum
       end
     end
 
@@ -546,14 +540,15 @@ function SolverCore.solve!(
       obj_mem[mem_ind + 1] = stats.objective
       max_obj_mem = maximum(obj_mem)
 
+      if use_momentum
+        momentum .= -∇fk .+ βktilde .* momentum
+        norm_m = norm(m)
+      end
       grad!(nlp, x, ∇fk)
       norm_∇fk = norm(∇fk)
       if use_momentum
         mdot∇f = dot(momentum, ∇fk)
-        momentum .= d
-        βktilde = find_beta_tilde(p, mdot∇f, norm_∇fk, μk, stats.objective, max_obj_mem, β, θ1, θ2)
-        d .=  - ∇fk .+ βktilde .* momentum
-        norm_d = norm(d)
+        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, β, θ1, θ2)
         avgβktilde += βktilde
         siter += 1
       end
@@ -608,13 +603,15 @@ end
 """
     find_beta_tilde(m, mdot∇f, norm_∇f, μk, fk, max_obj_mem, βktilde, θ1, θ2)
 
-Compute βktilde which saturates the contribution of the momentum term to the gradient.
 `βktilde` is computed such that the two gradient-related conditions (first one is relaxed in the nonmonotone case) are ensured: 
-1. dᵀ∇f(xk) - (max_obj_mem - fk)/μk ≤ - θ1 * ‖∇f(xk)‖²
+1. dᵀ∇f(xk) - (max_obj_mem - fk)/μk ≤ - θ1 * ‖∇f(xk)‖² 
 2. ‖d‖ ≤ θ2 ‖∇f(xk)‖ 
 In the non monotone case, it is also necessary to ensure (necessarily satisfied in the monotone case)
 3.  ‖d‖ ≥ θ1 ‖∇f(xk)‖
 with `d` = -∇f(xk) + βktilde `m` the step direction, `fk` the model at s=0, `max_obj_mem` the largest objective value over the last M successful iterations.
+
+The set satisfying 1 and 2 is an interval, βktilde is chosen as the projection of βk onto that interval.
+The set satisfied 1, 2 and 3 is either an interval or the union of two interval, one of them containing 0. If βktilde does not belong to the set, it is chosen as the projection onto the interval containing 0. 
 """
 function find_beta_tilde(
   mdot∇f::T,
@@ -623,11 +620,39 @@ function find_beta_tilde(
   μk::T,
   fk::T,
   max_obj_mem::T,
-  βktilde::T,
+  βk::T,
   θ1::T,
   θ2::T,
 ) where {T, V}
+  # Condition 1: βktilde <= β1 if mdot∇f > 0, βktilde <= β1 if mdot∇f < 0, no condition if  mdot∇f == 0
+  βktilde = βk
+  β1 = ((1-θ1)*norm_∇f^2 + (max_obj_mem-fk)/μk)/mdot∇f 
+  if mdot∇f>0
+    βktilde = min(β1,βktilde)
+  elseif mdot∇fk<0
+    βktilde = max(β1,βktilde)
+  end
   
+  # Condition 2: βktilde ∈ [r21,r22], r21 and r22 are roots of  P(βktilde) = (1-θ2^2)norm_∇f -2βktilde mdot∇f + βktilde^2 norm_m. 
+  # Roots are necessarily real and r21 ≤ 0 ≤ r22
+  Δ2 = 4*(mdot∇f^2- (1-θ2^2)*(norm_∇f*norm_m)^2)
+  r21 = (mdot∇f-sqrt(Δ2))/((1-θ2^2)*norm_∇f^2)
+  r22 = (mdot∇f+sqrt(Δ2))/((1-θ2^2)*norm_∇f^2)
+  βktilde = max(r21,βktilde)
+  βktilde = min(r22,βktilde)
+
+  # Condition 3: βktilde ∉ [r31,r32], r31 and r32 are roots of  Q(βktilde) = (1-θ1^2)norm_∇f -2βktilde mdot∇f + βktilde^2 norm_m
+  # roots are not necessarily real. If complex condition does not apply. If real, they both have the same sign.
+  r31 = 0
+  r32 = 0
+  Δ3= 4*(mdot∇f^2- (1-θ1^2)*(norm_∇f*norm_m)^2)
+  if Δ3>0
+    r31 = (mdot∇f-sqrt(Δ3))/((1-θ1^2)*norm_∇f^2)
+    r32 = (mdot∇f+sqrt(Δ3))/((1-θ1^2)*norm_∇f^2)
+  end
+  if βktilde >r31 && βktilde < r32
+    βktilde = sign(r31)*min(abs(r31),abs(r32))
+  end
 end
 
 """
