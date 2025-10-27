@@ -1,13 +1,6 @@
-# Benchmark TRON subsolver: CG vs MINRES
-# Usage: julia --project=. bench/bench_tron_minres_vs_cg.jl
-
 using Pkg, LinearAlgebra, Printf, Dates
-Pkg.activate(joinpath(@__DIR__, ".."))
-
-
 using JSOSolvers, Random, ADNLPModels
 
-# Build a logistic-like smooth convex objective as an ADNLPModel
 function make_logistic(n, m; rng = Random.GLOBAL_RNG)
   A = randn(rng, m, n)
   xtrue = randn(rng, n)
@@ -47,7 +40,6 @@ function main()
     end
   end
 
-  # Print summary
   println("prob,subsolver,elapsed,iter,status,objective,dual")
   for r in results
     @printf("%d,%s,%.6f,%d,%s,%.12g,%.6g\n", r[:prob], string(r[:subsolver]), r[:elapsed], r[:iter], string(r[:status]), r[:objective], r[:dual])

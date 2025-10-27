@@ -4,8 +4,8 @@ This benchmark compares `tron(..., subsolver = :cg)` with `tron(..., subsolver =
 
 ## Requirements
 
-- Julia 1.10 (as in Project.toml)
-- From the package root, run `julia --project=.` to use the package environment. Ensure Krylov.jl is available in the environment (Project.toml pins Krylov = "0.10.0").
+- Julia 1.10
+- From the package root, run `julia --project=.` to use the package environment. Ensure Krylov.jl is available in the environment.
 
 ## Run
 

@@ -231,11 +231,9 @@ end
   end
 
   # Construct solver with chosen subsolver. We intentionally do not forward
-  # additional TRON trust-region kwargs here to keep the call simple; the
-  # TronSolver constructor will use defaults for those parameters.
+  # additional TRON trust-region kwargs here to keep the call simple.
   solver = TronSolver(nlp; μ₀ = μ₀, μ₁ = μ₁, σ = σ, subsolver = subsolver)
 
-  # Remaining dict contains kwargs meant for solve! (we removed :subsolver)
   return solve!(solver, nlp; x = x, dict...)
 end
 
@@ -596,23 +594,15 @@ Small compatibility wrapper around Krylov.jl's `krylov_solve!` to handle
 workspaces that don't accept the `radius` keyword (e.g. Minres). We first
 attempt to call with `radius`, and on a MethodError we retry without it.
 """
-function run_krylov_subsolver!(workspace, A, b; radius=nothing, rtol=1e-6, atol=0.0, timemax=Inf, verbose=0)
-  # Try calling with `radius` first (covers CG-like workspaces).
+function run_krylov_subsolver!(workspace, A, b; radius=nothing, rtol, atol, timemax, verbose)
   if radius !== nothing
     try
       return krylov_solve!(workspace, A, b; radius = radius, rtol = rtol, atol = atol, timemax = timemax, verbose = verbose)
     catch e
-      # If the failure is due to an unsupported keyword (MethodError), fall
-      # back to calling with a callback that enforces the trust-region by
-      # inspecting the Krylov workspace's current solution `x` at each
-      # iteration. Any other error is rethrown.
       if isa(e, MethodError)
-        # Krylov callbacks receive the workspace and should return `true`
-        # to request termination. We build a closure that captures `radius`.
         function tr_callback(cb_workspace)
-          # Some workspaces store the current iterate in `x`.
           if !hasfield(typeof(cb_workspace), :x)
-            error("Krylov workspace of type $(typeof(cb_workspace)) does not have an `x` field. Trust-region constraint cannot be enforced. Please use a compatible workspace type.")
+            return false
           end
           xcur = getfield(cb_workspace, :x)
           # Stop when the squared norm of the current solution reaches the squared radius (avoids sqrt).
