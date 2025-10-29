@@ -1,4 +1,4 @@
-export R2N, R2NSolver, R2NParamaterSet
+export R2N, R2NSolver, R2NParameterSet
 export ShiftedLBFGSSolver, MA97Solver
 export ShiftedOperator
 
