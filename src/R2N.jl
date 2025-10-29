@@ -47,7 +47,7 @@ Parameter set for the R2N solver. Controls algorithmic tolerances and step accep
 
 # Keyword Arguments
 - `θ1 = T(0.5)`: Cauchy step parameter (0 < θ1 < 1).
-- `θ2 = T(2.0)`: Cauchy step parameter (θ2 > 1).
+- `θ2 = eps(T)^(-1)`: Cauchy step parameter.
 - `η1 = eps(T)^(1/4)`: Step acceptance parameter (0 < η1 ≤ η2 < 1).
 - `η2 = T(0.95)`: Step acceptance parameter (0 < η1 ≤ η2 < 1).
 - `γ1 = T(1.5)`: Regularization update parameter (1 < γ1 ≤ γ2).
@@ -72,7 +72,7 @@ end
 
 # Default parameter values
 const R2N_θ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
-const R2N_θ2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(2.0), "T(2.0)")
+const R2N_θ2 = DefaultParameter(nlp -> inv(eps(eltype(nlp.meta.x0))), "eps(T)^(-1)")
 const R2N_η1 = DefaultParameter(nlp -> begin
   T = eltype(nlp.meta.x0)
   T(eps(T))^(T(1) / T(4))
@@ -429,16 +429,16 @@ end
 
 @doc (@doc R2NSolver) function R2N(
   nlp::AbstractNLPModel{T, V};
-  η1::Real = get(R2NLS_η1, nlp),
-  η2::Real = get(R2NLS_η2, nlp),
-  θ1::Real = get(R2NLS_θ1, nlp),
-  θ2::Real = get(R2NLS_θ2, nlp),
-  γ1::Real = get(R2NLS_γ1, nlp),
-  γ2::Real = get(R2NLS_γ2, nlp),
-  γ3::Real = get(R2NLS_γ3, nlp),
-  δ1::Real = get(R2NLS_δ1, nlp),
-  σmin::Real = get(R2NLS_σmin, nlp),
-  non_mono_size::Int = get(R2NLS_non_mono_size, nlp),
+  η1::Real = get(R2N_η1, nlp),
+  η2::Real = get(R2N_η2, nlp),
+  θ1::Real = get(R2N_θ1, nlp),
+  θ2::Real = get(R2N_θ2, nlp),
+  γ1::Real = get(R2N_γ1, nlp),
+  γ2::Real = get(R2N_γ2, nlp),
+  γ3::Real = get(R2N_γ3, nlp),
+  δ1::Real = get(R2N_δ1, nlp),
+  σmin::Real = get(R2N_σmin, nlp),
+  non_mono_size::Int = get(R2N_non_mono_size, nlp),
   subsolver::Symbol = :minres,
   kwargs...,
 ) where {T, V}
@@ -490,6 +490,7 @@ function SolverCore.solve!(
   δ1 = value(params.δ1)
   σmin = value(params.σmin)
   non_mono_size = value(params.non_mono_size)
+
 
   @assert(η1 > 0 && η1 < 1)
   @assert(θ1 > 0 && θ1 < 1)
