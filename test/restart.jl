@@ -11,7 +11,7 @@
   nlp = ADNLPModel(f, [-1.2; 1.0])
   if fun == :R2N_exact
     nlp = LBFGSModel(nlp)
-    solver = eval(s)(nlp,subsolver_type = JSOSolvers.ShiftedLBFGSSolver)
+    solver = eval(s)(nlp,subsolver= :shifted_lbfgs)
   else 
     solver = eval(s)(nlp)
   end
@@ -81,7 +81,7 @@ end
   nlp = ADNLPModel(f, [-1.2; 1.0])
   if fun == :R2N_exact
     nlp = LBFGSModel(nlp)
-    solver = eval(s)(nlp,subsolver_type = JSOSolvers.ShiftedLBFGSSolver)
+    solver = eval(s)(nlp,subsolver= :shifted_lbfgs)
   else 
     solver = eval(s)(nlp) 
   end

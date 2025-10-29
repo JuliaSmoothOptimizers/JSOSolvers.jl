@@ -76,7 +76,7 @@ end
     (
       "R2N_exact",
       (nlp; kwargs...) ->
-        R2N(LBFGSModel(nlp), subsolver_type = JSOSolvers.ShiftedLBFGSSolver; kwargs...),
+        R2N(LBFGSModel(nlp), subsolver= :shifted_lbfgs; kwargs...),
     ),
     ("fomo", fomo),
   ]

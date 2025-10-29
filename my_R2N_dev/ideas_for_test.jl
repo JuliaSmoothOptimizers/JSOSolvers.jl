@@ -43,10 +43,10 @@ end
   nlp = ADNLPModel(f, [-1.2; 1.0])
 
   @test_throws ErrorException begin
-    R2NSolver(nlp; subsolver_type = ShiftedLBFGSSolver)
+    R2NSolver(nlp; subsolver= :shifted_lbfgs)
   end
   @test_throws ErrorException begin
-    R2N(nlp; subsolver_type = ShiftedLBFGSSolver)
+    R2N(nlp; subsolver= :shifted_lbfgs)
   end
 end
 
