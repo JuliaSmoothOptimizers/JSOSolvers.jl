@@ -14,6 +14,7 @@ using JSOSolvers
     (TRONParameterSet, tron),
     (TRUNKParameterSet, trunk),
     (FOMOParameterSet, fomo),
+    (R2NParameterSet, R2N),
   )
     nlp = BROWNDEN()
     params = eval(paramset)(nlp)
@@ -48,7 +49,7 @@ end
 end
 
 @testset "Test iteration limit" begin
-  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk)
+  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk, R2N)
     f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
     nlp = ADNLPModel(f, [-1.2; 1.0])
 
@@ -66,13 +67,24 @@ end
 end
 
 @testset "Test unbounded below" begin
-  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk)
+  @testset "$name" for (name, solver) in [
+    ("trunk", trunk),
+    ("lbfgs", lbfgs),
+    ("tron", tron),
+    ("R2", R2),
+    # ("R2N", R2N),
+    (
+      "R2N_exact",
+      (nlp; kwargs...) ->
+        R2N(LBFGSModel(nlp), subsolver_type = JSOSolvers.ShiftedLBFGSSolver; kwargs...),
+    ),
+    ("fomo", fomo),
+  ]
     T = Float64
     x0 = [T(0)]
     f(x) = -exp(x[1])
     nlp = ADNLPModel(f, x0)
-
-    stats = eval(fun)(nlp)
+    stats = solver(nlp)
     @test stats.status == :unbounded
     @test stats.objective < -one(T) / eps(T)
   end

@@ -10,34 +10,58 @@ function consistency()
   @testset "Consistency" begin
     args = Pair{Symbol, Number}[:atol => 1e-6, :rtol => 1e-6, :max_eval => 20000, :max_time => 60.0]
 
-    @testset "NLP with $mtd" for mtd in [trunk, lbfgs, tron, R2, fomo]
+    @testset "NLP with $mtd" for (mtd, solver) in [
+      ("trunk", trunk),
+      ("lbfgs", lbfgs),
+      ("tron", tron),
+      ("R2", R2),
+      ("R2N", R2N),
+      (
+        "R2N_exact",
+        (nlp; kwargs...) ->
+          R2N(LBFGSModel(nlp), subsolver_type = JSOSolvers.ShiftedLBFGSSolver; kwargs...),
+      ),
+      ("fomo", fomo),
+    ]
       with_logger(NullLogger()) do
-        NLPModels.reset!(unlp)
-        stats = mtd(unlp; args...)
+        reset!(unlp)
+        stats = solver(unlp; args...)
         @test stats isa GenericExecutionStats
         @test stats.status == :first_order
-        NLPModels.reset!(unlp)
-        stats = mtd(unlp; max_eval = 1)
+        reset!(unlp)
+        stats = solver(unlp; max_eval = 1)
         @test stats.status == :max_eval
         slow_nlp = ADNLPModel(x -> begin
           sleep(0.1)
           f(x)
         end, unlp.meta.x0)
-        stats = mtd(slow_nlp; max_time = 0.0)
+        stats = solver(slow_nlp; max_time = 0.0)
         @test stats.status == :max_time
       end
     end
 
-    @testset "Quasi-Newton NLP with $mtd" for mtd in [trunk, lbfgs, tron, R2, fomo]
+    @testset "Quasi-Newton NLP with $mtd" for (mtd, solver) in [
+      ("trunk", trunk),
+      ("lbfgs", lbfgs),
+      ("tron", tron),
+      ("R2", R2),
+      ("R2N", R2N),
+      (
+        "R2N_exact",
+        (nlp; kwargs...) ->
+          R2N(LBFGSModel(nlp), subsolver_type = JSOSolvers.ShiftedLBFGSSolver; kwargs...),
+      ),
+      ("fomo", fomo),
+    ]
       with_logger(NullLogger()) do
-        NLPModels.reset!(qnlp)
-        stats = mtd(qnlp; args...)
+        reset!(qnlp)
+        stats = solver(qnlp; args...)
         @test stats isa GenericExecutionStats
         @test stats.status == :first_order
       end
     end
 
-@testset "NLS with $mtd" for (mtd, solver) in [
+    @testset "NLS with $mtd" for (mtd, solver) in [
       ("trunk", trunk),
       ("R2NLS", (unls; kwargs...) -> R2NLS(unls; kwargs...)),
       ("R2NLS_CGLS", (unls; kwargs...) -> R2NLS(unls, subsolver = :cgls; kwargs...)),
