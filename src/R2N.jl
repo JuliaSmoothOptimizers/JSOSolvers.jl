@@ -1,5 +1,5 @@
 export R2N, R2NSolver, R2NParameterSet
-export ShiftedLBFGSSolver, MA97Solver
+export ShiftedLBFGSSolver, HSLDirectSolver
 export ShiftedOperator
 
 using LinearOperators, LinearAlgebra
@@ -121,105 +121,55 @@ mutable struct ShiftedLBFGSSolver <: AbstractShiftedLBFGSSolver #TODO Ask what I
   # Shifted LBFGS-specific fields
 end
 
-abstract type AbstractMA97Solver end
-mutable struct MA97Solver{T} <: AbstractMA97Solver
-    # HSL MA97 factorization object
-    ma97_obj::Ma97{T}
+abstract type AbstractMASolver end
 
-    # Buffer for Hessian values from hess_coord!
-    hess_vals_buffer::Vector{T}
-
-    # Mappers from (row, col) to index in ma97_obj.nzval
-    # Maps k-th entry from hess_coord! to nzval index
-    hess_mapper::Vector{Int}
-    # Maps i-th diagonal entry to nzval index
-    diag_mapper::Vector{Int}
-
-    # Keep track of sizes
+"""
+HSLDirectSolver: Generic wrapper for HSL direct solvers (e.g., MA97, MA57).
+- hsl_obj: The HSL solver object (e.g., Ma97 or Ma57)
+- rows, cols, vals: COO format for the Hessian + shift
+- n: problem size
+- nnzh: number of Hessian nonzeros
+"""
+mutable struct HSLDirectSolver{T, S} <: AbstractMASolver
+    hsl_obj::S
+    rows::Vector{Int}
+    cols::Vector{Int}
+    vals::Vector{T}
     n::Int
-    nnzh::Int # Non-zeros in the Hessian B
-
-    function MA97Solver(nlp::AbstractNLPModel{T, V}) where {T, V}
-        n = nlp.meta.nvar
-        nnzh = nlp.meta.nnzh
-        total_nnz_coord = nnzh + n # Max number of coordinates
-
-        # 1. Build the coordinate structure of B + σI
-        rows = Vector{Int32}(undef, total_nnz_coord)
-        cols = Vector{Int32}(undef, total_nnz_coord)
-        
-        # Get Hessian structure (lower triangle)
-        hess_structure!(nlp, view(rows, 1:nnzh), view(cols, 1:nnzh))
-        hess_rows_view = view(rows, 1:nnzh)
-        hess_cols_view = view(cols, 1:nnzh)
-
-        # Add diagonal structure
-        diag_rows_view = view(rows, (nnzh + 1):total_nnz_coord)
-        diag_cols_view = view(cols, (nnzh + 1):total_nnz_coord)
-        @inbounds for i = 1:n
-            diag_rows_view[i] = i
-            diag_cols_view[i] = i
-        end
-
-        # 2. Create the sparse matrix ONCE to establish the final CSC pattern.
-        # This sums duplicates (e.g., Hessian diagonals + σI diagonals)
-        K_pattern = sparse(rows, cols, one(T), n, n)
-
-        # 3. Initialize the Ma97 object using the final CSC pattern
-        # ma97_obj.nzval will be a reference to K_pattern.nzval
-        ma97_obj = ma97_csc(
-            K_pattern.n,
-            Int32.(K_pattern.colptr), # MA97 requires Cint (Int32)
-            Int32.(K_pattern.rowval), # MA97 requires Cint (Int32)
-            K_pattern.nzval,         # Share this buffer
-        )
-        
-        # 4. Allocate mappers and buffers
-        hess_vals_buffer = Vector{T}(undef, nnzh)
-        hess_mapper = Vector{Int}(undef, nnzh)
-        diag_mapper = Vector{Int}(undef, n)
-
-        # 5. Build the mappers
-        # We need to find where each (r, c) coordinate from our original
-        # list ended up in the final CSC K_pattern.nzval array.
-
-        # Helper function to find (r, c) in CSC structure
-        # Returns the index in nzval
-        function find_csc_index(K, r, c)
-            @inbounds for idx = K.colptr[c] : (K.colptr[c+1] - 1)
-                if K.rowval[idx] == r
-                    return idx
-                end
-            end
-            # This should not happen if (r, c) is in the pattern
-            throw(ErrorException("MA97Solver: Could not find ($r, $c) in sparse pattern.")) 
-        end
-
-        # Build Hessian mapper
-        @inbounds for k = 1:nnzh
-            hess_mapper[k] = find_csc_index(K_pattern, hess_rows_view[k], hess_cols_view[k])
-        end
-
-        # Build diagonal mapper
-        @inbounds for i = 1:n
-            diag_mapper[i] = find_csc_index(K_pattern, i, i)
-        end
-        
-        # 6. Instantiate the solver
-        return new{T}(
-            ma97_obj,
-            hess_vals_buffer,
-            hess_mapper,
-            diag_mapper,
-            n,
-            nnzh,
-        )
-    end
+    nnzh::Int
 end
+
+"""
+    HSLDirectSolver(nlp, hsl_constructor)
+
+Constructs an HSLDirectSolver for the given NLP model and HSL solver constructor (e.g., ma97_coord or ma57_coord).
+"""
+function HSLDirectSolver(nlp::AbstractNLPModel{T, V}, hsl_constructor) where {T, V}
+    n = nlp.meta.nvar
+    nnzh = nlp.meta.nnzh
+    total_nnz = nnzh + n
+
+    rows = Vector{Int}(undef, total_nnz)
+    cols = Vector{Int}(undef, total_nnz)
+    vals = zeros(T, total_nnz)
+
+    hess_structure!(nlp, view(rows, 1:nnzh), view(cols, 1:nnzh))
+    hess_coord!(nlp, nlp.meta.x0, view(vals, 1:nnzh))
+
+    @inbounds for i = 1:n
+        rows[nnzh + i] = i
+        cols[nnzh + i] = i
+        vals[nnzh + i] = one(T)
+    end
+
+    hsl_obj = hsl_constructor(n, cols, rows, vals)
+    return HSLDirectSolver{T, typeof(hsl_obj)}(hsl_obj, rows, cols, vals, n, nnzh)
+end
+
 
 const npc_handler_allowed = [:armijo, :sigma, :prev, :cp]
 
-const R2N_allowed_subsolvers = [:cg, :cr, :minres, :minres_qlp, :shifted_lbfgs, :ma97] #TODO Prof. Orban check if I can add more
+const R2N_allowed_subsolvers = [:cg, :cr, :minres, :minres_qlp, :shifted_lbfgs, :ma97, :ma57] #TODO Prof. Orban check if I can add more
 
 """
     R2N(nlp; kwargs...)
@@ -301,7 +251,7 @@ mutable struct R2NSolver{
   V,
   Op <: Union{AbstractLinearOperator{T}, AbstractMatrix{T}}, #TODO confirm with Prof. Orban
   ShiftedOp <: Union{ShiftedOperator{T, V, Op}, Nothing}, # for cg and cr solvers
-  Sub <: Union{KrylovWorkspace{T, T, V}, ShiftedLBFGSSolver, MA97Solver{T}},
+  Sub <: Union{KrylovWorkspace{T, T, V}, ShiftedLBFGSSolver, HSLDirectSolver{T, S} where S},
 } <: AbstractOptimizationSolver
   x::V
   xt::V
@@ -366,9 +316,11 @@ function R2NSolver(
   local H, r2_subsolver
   if subsolver == :ma97
     LIBHSL_isfunctional() || error("HSL library is not functional")
-    r2_subsolver = MA97Solver(nlp)
-    # H is not used as an operator, so we use a placeholder.
-    # The matrix is assembled inside subsolve!
+    r2_subsolver = HSLDirectSolver(nlp, ma97_coord)
+    H = spzeros(T, nvar, nvar)
+  elseif subsolver == :ma57
+    LIBHSL_isfunctional() || error("HSL library is not functional")
+    r2_subsolver = HSLDirectSolver(nlp, ma57_coord)
     H = spzeros(T, nvar, nvar)
 
   else  # not using ma971
@@ -596,8 +548,8 @@ function SolverCore.solve!(
     # Compute the Cauchy step.
     # Note that we use buffer values Hs to avoid reallocating memory.
     # mul!(Hs, H, ∇fk) #TODO check for HSL
-    if r2_subsolver isa MA97Solver
-      hprod!(nlp, x, ∇fk, Hs) # Use exact Hessian-vector product
+    if r2_subsolver isa HSLDirectSolver
+      coo_sym_prod!(r2_subsolver.rows, r2_subsolver.cols, r2_subsolver.vals, ∇fk, Hs)
     else
       mul!(Hs, H, ∇fk) # Use linear operator
     end
@@ -636,7 +588,7 @@ function SolverCore.solve!(
       # but for now, we'll stop.
       break
     end
-    if !(r2_subsolver isa ShiftedLBFGSSolver) && !(r2_subsolver isa MA97Solver)
+    if !(r2_subsolver isa ShiftedLBFGSSolver) && !(r2_subsolver isa HSLDirectSolver)
       if r2_subsolver.stats.npcCount >= 1  #npc case
         if npc_handler == :armijo #TODO check this logic with Prof. Orban
           c = one(T) * 1e-4 #TODO do I want user to set this value?
@@ -695,8 +647,8 @@ function SolverCore.solve!(
     else
       # Correctly compute curvature s' * B * s
       #TODO Prof Orban, check if this is correct
-      if solver.r2_subsolver isa MA97Solver
-        hprod!(nlp, x, s, Hs) # Use exact Hessian-vector product
+      if solver.r2_subsolver isa HSLDirectSolver
+        coo_sym_prod!(solver.r2_subsolver.rows, solver.r2_subsolver.cols, solver.r2_subsolver.vals, s, Hs)
       else
         mul!(Hs, H, s) # Use linear operator
       end
@@ -736,6 +688,10 @@ function SolverCore.solve!(
           σk = max(σmin, γ3 * σk)
         else # η1 ≤ ρk < η2
           σk = min(σmin, γ1 * σk)
+        end
+        # we need to update H if we use Ma97 or ma57
+        if solver.r2_subsolver isa HSLDirectSolver
+           hess_coord!(nlp, x, view(solver.r2_subsolver.vals, 1:solver.r2_subsolver.nnzh))
         end
       else # η1 > ρk
         σk = max(σmin, γ2 * σk)
@@ -870,61 +826,49 @@ function subsolve!(
   return true, :first_order, 1, 0
 end
 
-# Dispatch for MA97Solver
+# Dispatch for HSLDirectSolver
+"""
+    subsolve!(r2_subsolver::HSLDirectSolver, ...)
+
+Solves the shifted system using the selected HSL direct solver (MA97 or MA57).
+"""
 function subsolve!(
-    r2_subsolver::MA97Solver{T},
+    r2_subsolver::HSLDirectSolver{T, S},
     R2N::R2NSolver,
     nlp::AbstractNLPModel,
-    s, # This is the output buffer for the solution
+    s,
     atol,
     n,
     subsolver_verbose,
-) where {T}
+) where {T, S}
 
-    # Unpack for clarity
-    g = R2N.gx # Note: R2N main loop has g = -∇f
+    g = R2N.gx
     σ = R2N.σ
-    
-    # Get direct access to the Ma97 value buffer
-    nzval = r2_subsolver.ma97_obj.nzval
-    
-    # Get buffers and mappers
-    hess_vals = r2_subsolver.hess_vals_buffer
-    hess_map = r2_subsolver.hess_mapper
-    diag_map = r2_subsolver.diag_mapper
-    nnzh = r2_subsolver.nnzh
-    n_diag = r2_subsolver.n
 
-    # 1. Zero out the numerical values buffer
-    # This is critical as we are "adding" values to it.
-    fill!(nzval, zero(T))
-
-    # 2. Update the Hessian part of the values array
-    hess_coord!(nlp, R2N.x, hess_vals)
-
-    # 3. Add Hessian values to nzval using the mapper
-    @inbounds for k = 1:nnzh
-        nzval[hess_map[k]] += hess_vals[k]
+    @inbounds for i = 1:n
+        r2_subsolver.vals[r2_subsolver.nnzh + i] = σ
     end
 
-    # 4. Add the shift part of the values array using the mapper
-    # We use += because the diagonal entry in nzval is shared
-    # by the Hessian and the shift.
-    @inbounds for i = 1:n_diag
-        nzval[diag_map[i]] += σ
+    # Dispatch to correct factorization/solve based on S
+    if S <: Ma97{T}
+        ma97_factorize!(r2_subsolver.hsl_obj)
+        if r2_subsolver.hsl_obj.info.flag != 0
+            @warn("MA97 factorization failed with flag = $(r2_subsolver.hsl_obj.info.flag)")
+            return false, :err, 1, 0
+        end
+        s .= g
+        ma97_solve!(r2_subsolver.hsl_obj, s)
+    elseif S <: Ma57{T}
+        ma57_factorize!(r2_subsolver.hsl_obj)
+        if r2_subsolver.hsl_obj.info.flag != 0
+            @warn("MA57 factorization failed with flag = $(r2_subsolver.hsl_obj.info.flag)")
+            return false, :err, 1, 0
+        end
+        s .= g
+        ma57_solve!(r2_subsolver.hsl_obj, s)
+    else
+        error("Unknown HSL solver type")
     end
-
-    # 5. Factorize the matrix with the new numerical values
-    ma97_factorize!(r2_subsolver.ma97_obj)
-
-    if r2_subsolver.ma97_obj.info.flag != 0
-        @warn("MA97 factorization failed with flag = $(r2_subsolver.ma97_obj.info.flag)")
-        return false, :err, 1, 0 # Indicate failure
-    end
-
-    # 6. Solve the system (B + σI)s = g, where g = -∇f
-    s .= g # Copy right-hand-side into solution buffer
-    ma97_solve!(r2_subsolver.ma97_obj, s) # Solve in-place
 
     return true, :first_order, 1, 0
 end
