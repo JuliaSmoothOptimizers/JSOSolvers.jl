@@ -456,9 +456,11 @@ function SolverCore.solve!(
   obj_mem[mem_ind + 1] = stats.objective
   max_obj_mem = stats.objective
 
+  oneT = T(1)
+
   grad!(nlp, x, g)
   norm_∇fk = norm(g)
-  d .= -g
+  d .= -g ./ (oneT - β)
   norm_d = norm_∇fk
   set_dual_residual!(stats, norm_∇fk)
 
@@ -514,14 +516,14 @@ function SolverCore.solve!(
 
   done = stats.status != :unknown
 
-  βktilde = T(0)
+  βktilde = β
   ρk = T(0)
   avgβktilde = T(0)
   siter::Int = 0
   mdot∇f = T(0) # dot(momentum,∇fk)
   norm_m = T(0)
   while !done
-    μk = step_mult(solver.α, norm_d, step_backend)
+    μk = step_mult(solver.α, norm_d, step_backend)*(oneT-βktilde)
     c .= x .+ μk .* d
     step_underflow = x == c # step addition underfow on every dimensions, should happen before solver.α == 0
     ΔTk =  (norm_∇fk^2 + βktilde* mdot∇f) * μk # = dot(d,d) * μk with momentum, ‖∇fk‖²μk without momentum
