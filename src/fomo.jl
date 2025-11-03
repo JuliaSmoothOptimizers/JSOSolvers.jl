@@ -20,7 +20,7 @@ const FOMO_αmax =
 const FOMO_β = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(9 // 10), "T(9/10)")
 const FOMO_θ1 = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1 // 10), "T(1/10)")
 const FOMO_θ2 =
-  DefaultParameter((nlp::AbstractNLPModel) -> eps(eltype(nlp.meta.x0))^(1 // 3), "eps(T)^(1/3)")
+  DefaultParameter((nlp::AbstractNLPModel) -> 1 / eps(eltype(nlp.meta.x0))^(1 // 3), "1/eps(T)^(1/3)")
 const FOMO_M = DefaultParameter(1)
 const FOMO_step_backend = DefaultParameter(nlp -> r2_step(), "r2_step()")
 
@@ -96,7 +96,7 @@ function FOMOParameterSet(
     Parameter(αmax, RealInterval(T(1), T(Inf), upper_open = true)),
     Parameter(β, RealInterval(T(0), T(1), upper_open = true)),
     Parameter(θ1, RealInterval(T(0), T(1))),
-    Parameter(θ2, RealInterval(T(0), T(1), upper_open = true)),
+    Parameter(θ2, RealInterval(T(1), T(Inf), upper_open = true)),
     Parameter(M, IntegerRange(Int(1), typemax(Int))),
     Parameter(step_backend, CategoricalSet{Union{tr_step, r2_step}}([r2_step(); tr_step()])),
   )
@@ -204,8 +204,8 @@ mutable struct FomoSolver{T, V} <: AbstractFirstOrderSolver
   x::V
   g::V
   c::V
-  m::V
   d::V
+  m::V
   o::V
   α::T
   params::FOMOParameterSet{T}
@@ -216,9 +216,10 @@ function FomoSolver(nlp::AbstractNLPModel{T, V}; M::Int = get(FOMO_M, nlp), kwar
   x = similar(nlp.meta.x0)
   g = similar(nlp.meta.x0)
   c = similar(nlp.meta.x0)
+  d = similar(nlp.meta.x0)
   m = fill!(similar(nlp.meta.x0), 0)
   o = fill!(Vector{T}(undef, M), -Inf)
-  return FomoSolver{T, V}(x, g, c, m, o, T(0), params)
+  return FomoSolver{T, V}(x, g, c, d, m, o, T(0), params)
 end
 
 @doc (@doc FomoSolver) function fomo(
@@ -442,8 +443,9 @@ function SolverCore.solve!(
   set_time!(stats, 0.0)
 
   x = solver.x .= x
-  ∇fk = solver.g
   c = solver.c
+  g = solver.g # step direction, is -∇f if no momentum
+  d = use_momentum ? solver.d : solver.g # not used if no momentum
   momentum = use_momentum ? solver.m : nothing # not used if no momentum
   set_iter!(stats, 0)
   f0 = obj(nlp, x)
@@ -454,11 +456,14 @@ function SolverCore.solve!(
   obj_mem[mem_ind + 1] = stats.objective
   max_obj_mem = stats.objective
 
-  grad!(nlp, x, ∇fk)
-  norm_∇fk = norm(∇fk)
+  grad!(nlp, x, g)
+  norm_∇fk = norm(g)
+  d .= -g
+  norm_d = norm_∇fk
   set_dual_residual!(stats, norm_∇fk)
 
   solver.α = init_alpha(norm_∇fk, step_backend)
+
 
   # Stopping criterion: 
   fmin = min(-one(T), f0) / eps(T)
@@ -514,11 +519,12 @@ function SolverCore.solve!(
   avgβktilde = T(0)
   siter::Int = 0
   mdot∇f = T(0) # dot(momentum,∇fk)
+  norm_m = T(0)
   while !done
     μk = step_mult(solver.α, norm_d, step_backend)
-    c .= x .+ μk .* (-∇fk .+ m)
+    c .= x .+ μk .* d
     step_underflow = x == c # step addition underfow on every dimensions, should happen before solver.α == 0
-    ΔTk = (- norm_∇fk^2 + βktilde * mdot∇f) * μk # = dot(d,∇fk) * μk with momentum, ‖∇fk‖²μk without momentum
+    ΔTk =  norm_d^2 * μk # = dot(d,d) * μk with momentum, ‖∇fk‖²μk without momentum
     fck = obj(nlp, c)
     unbounded = fck < fmin
     ρk = (max_obj_mem - fck) / (max_obj_mem - stats.objective + ΔTk)
@@ -529,6 +535,9 @@ function SolverCore.solve!(
       solver.α = solver.α * γ1
       if use_momentum
         βktilde *= γ3
+        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, βktilde, θ1, θ2)
+        d .= -g .+ βktilde*momentum # d = -∇fk + γ3*momentumm, avoid storing gradient
+        norm_d = norm(d) # TODO only needed in TR context, not in R2, 
       end
     end
 
@@ -541,16 +550,21 @@ function SolverCore.solve!(
       max_obj_mem = maximum(obj_mem)
 
       if use_momentum
-        momentum .= -∇fk .+ βktilde .* momentum
-        norm_m = norm(m)
+        momentum .= -g .+ β*momentum
+        norm_m = norm(momentum)
       end
-      grad!(nlp, x, ∇fk)
-      norm_∇fk = norm(∇fk)
+      grad!(nlp, x, g)
+      norm_∇fk = norm(g)
+      d .= -g
       if use_momentum
-        mdot∇f = dot(momentum, ∇fk)
+        mdot∇f = dot(momentum, d)
         βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, β, θ1, θ2)
+        d .+=  βktilde*momentum
+        norm_d = norm(d)
         avgβktilde += βktilde
         siter += 1
+      else
+        norm_d = norm_∇fk
       end
     end
 
@@ -567,7 +581,7 @@ function SolverCore.solve!(
           @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ρk
       else
         infoline =
-          @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ρk βktilde
+          @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ρk βktilde norm_m
       end
     end
 
@@ -623,29 +637,30 @@ function find_beta_tilde(
   βk::T,
   θ1::T,
   θ2::T,
-) where {T, V}
+) where {T}
   # Condition 1: βktilde <= β1 if mdot∇f > 0, βktilde <= β1 if mdot∇f < 0, no condition if  mdot∇f == 0
   βktilde = βk
   β1 = ((1-θ1)*norm_∇f^2 + (max_obj_mem-fk)/μk)/mdot∇f 
   if mdot∇f>0
     βktilde = min(β1,βktilde)
-  elseif mdot∇fk<0
+  elseif mdot∇f<0
     βktilde = max(β1,βktilde)
   end
   
   # Condition 2: βktilde ∈ [r21,r22], r21 and r22 are roots of  P(βktilde) = (1-θ2^2)norm_∇f -2βktilde mdot∇f + βktilde^2 norm_m. 
   # Roots are necessarily real and r21 ≤ 0 ≤ r22
-  Δ2 = 4*(mdot∇f^2- (1-θ2^2)*(norm_∇f*norm_m)^2)
-  r21 = (mdot∇f-sqrt(Δ2))/((1-θ2^2)*norm_∇f^2)
-  r22 = (mdot∇f+sqrt(Δ2))/((1-θ2^2)*norm_∇f^2)
-  βktilde = max(r21,βktilde)
-  βktilde = min(r22,βktilde)
-
+  if norm_m ≠ 0
+    Δ2 = (mdot∇f^2- (1-θ2^2)*(norm_∇f*norm_m)^2)
+    r21 = (mdot∇f-sqrt(Δ2))/norm_m
+    r22 = (mdot∇f+sqrt(Δ2))/norm_m
+    βktilde = max(r21,βktilde)
+    βktilde = min(r22,βktilde)
+  end
   # Condition 3: βktilde ∉ [r31,r32], r31 and r32 are roots of  Q(βktilde) = (1-θ1^2)norm_∇f -2βktilde mdot∇f + βktilde^2 norm_m
   # roots are not necessarily real. If complex condition does not apply. If real, they both have the same sign.
   r31 = 0
   r32 = 0
-  Δ3= 4*(mdot∇f^2- (1-θ1^2)*(norm_∇f*norm_m)^2)
+  Δ3= (mdot∇f^2- (1-θ1^2)*(norm_∇f*norm_m)^2)
   if Δ3>0
     r31 = (mdot∇f-sqrt(Δ3))/((1-θ1^2)*norm_∇f^2)
     r32 = (mdot∇f+sqrt(Δ3))/((1-θ1^2)*norm_∇f^2)
@@ -653,6 +668,7 @@ function find_beta_tilde(
   if βktilde >r31 && βktilde < r32
     βktilde = sign(r31)*min(abs(r31),abs(r32))
   end
+  βktilde
 end
 
 """
