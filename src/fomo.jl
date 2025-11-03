@@ -524,7 +524,7 @@ function SolverCore.solve!(
     μk = step_mult(solver.α, norm_d, step_backend)
     c .= x .+ μk .* d
     step_underflow = x == c # step addition underfow on every dimensions, should happen before solver.α == 0
-    ΔTk =  norm_d^2 * μk # = dot(d,d) * μk with momentum, ‖∇fk‖²μk without momentum
+    ΔTk =  (norm_∇fk^2 + βktilde* mdot∇f) * μk # = dot(d,d) * μk with momentum, ‖∇fk‖²μk without momentum
     fck = obj(nlp, c)
     unbounded = fck < fmin
     ρk = (max_obj_mem - fck) / (max_obj_mem - stats.objective + ΔTk)
