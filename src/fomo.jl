@@ -1,11 +1,17 @@
 export fomo, FomoSolver, FOMOParameterSet, FoSolver, fo, R2, TR
-export tr_step, r2_step
+export tr_step, r2_step, ia_momentum, nesterov_HB, cg_PR, cg_FR
 
 abstract type AbstractFirstOrderSolver <: AbstractOptimizationSolver end
 
 abstract type AbstractFOMethod end
 struct tr_step <: AbstractFOMethod end
 struct r2_step <: AbstractFOMethod end
+
+abstract type AbstractMomentumMethod end
+struct ia_momentum <: AbstractMomentumMethod end
+struct nesterov_HB <: AbstractMomentumMethod end
+struct cg_PR <: AbstractMomentumMethod end
+struct cg_FR <: AbstractMomentumMethod end
 
 # Default algorithm parameter values
 const FOMO_η1 =
@@ -23,6 +29,7 @@ const FOMO_θ2 =
   DefaultParameter((nlp::AbstractNLPModel) -> 1 / eps(eltype(nlp.meta.x0))^(1 // 3), "1/eps(T)^(1/3)")
 const FOMO_M = DefaultParameter(1)
 const FOMO_step_backend = DefaultParameter(nlp -> r2_step(), "r2_step()")
+const FOMO_momentum_backend = DefaultParameter(nlp -> ia_momentum(), "ia_momentum()")
 
 """
     FOMOParameterSet{T} <: AbstractParameterSet
@@ -37,6 +44,7 @@ This structure designed for `fomo` regroups the following parameters:
   - `θ2`: momentum contribution parameter for convergence condition (2). 
   - `M` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
   - `step_backend`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
+  - `momentum_backend`: momentum mode for βₖ. Options are `ia_momentum()`, `nesterov_HB()`, `cg_PR()` for Polak-Ribière, `cg_FR()` for Fletcher-Reeves.
 
 An additional constructor is
 
@@ -56,6 +64,7 @@ Default values are:
   - `θ2 = $(FOMO_θ2)`
   - `M = $(FOMO_M)`
   - `step_backend = $(FOMO_step_backend)
+  - `momentum_backend = $(FOMO_momentum_backend)`
 """
 struct FOMOParameterSet{T} <: AbstractParameterSet
   η1::Parameter{T, RealInterval{T}}
@@ -69,6 +78,7 @@ struct FOMOParameterSet{T} <: AbstractParameterSet
   θ2::Parameter{T, RealInterval{T}}
   M::Parameter{Int, IntegerRange{Int}}
   step_backend::Parameter{Union{r2_step, tr_step}, CategoricalSet{Union{r2_step, tr_step}}}
+  momentum_backend::Parameter{Union{ia_momentum, nesterov_HB, cg_PR, cg_FR}, CategoricalSet{Union{ia_momentum, nesterov_HB, cg_PR, cg_FR}}}
 end
 
 # add a default constructor
@@ -85,6 +95,7 @@ function FOMOParameterSet(
   θ2::T = get(FOMO_θ2, nlp),
   M::Int = get(FOMO_M, nlp),
   step_backend::AbstractFOMethod = get(FOMO_step_backend, nlp),
+  momentum_backend::AbstractMomentumMethod = get(FOMO_momentum_backend ,nlp)
 ) where {T}
   @assert η1 <= η2
   FOMOParameterSet(
@@ -99,6 +110,7 @@ function FOMOParameterSet(
     Parameter(θ2, RealInterval(T(1), T(Inf), upper_open = true)),
     Parameter(M, IntegerRange(Int(1), typemax(Int))),
     Parameter(step_backend, CategoricalSet{Union{tr_step, r2_step}}([r2_step(); tr_step()])),
+    Parameter(momentum_backend, CategoricalSet{Union{ia_momentum, nesterov_HB, cg_PR, cg_FR}}([ia_momentum(); nesterov_HB(); cg_PR(); cg_FR()])),
   )
 end
 
@@ -110,15 +122,20 @@ A First-Order with MOmentum (FOMO) model-based method for unconstrained optimiza
 # Algorithm description
 
 The step is computed along
-d = - (1-βktilde) .* ∇f(xk) - βktilde .* mk
+dk = - ∇f(xk) - βktilde .* mk
 with mk the memory of past gradients (initialized at 0), and updated at each successful iteration as
-mk .= ∇f(xk) .* (1 - βktilde) .+ mk .* βktilde
-and βktilde ∈ [0,β] chosen as to ensure d is gradient-related, i.e., the following 2 conditions are satisfied:
-(1-βktilde) .* ∇f(xk) + βktilde .* ∇f(xk)ᵀmk ≥ θ1 * ‖∇f(xk)‖² (1)
-‖∇f(xk)‖ ≥ θ2 * ‖(1-βktilde) *. ∇f(xk) + βktilde .* mk‖       (2)
-In the nonmonotone case, (1) rewrites
-(1-βktilde) .* ∇f(xk) + βktilde .* ∇f(xk)ᵀmk + (fm - fk)/μk ≥ θ1 * ‖∇f(xk)‖²,
-with fm the largest objective value over the last M successful iterations, and fk = f(xk).
+m_k+1 .= dk
+and βktilde chosen as to ensure d is gradient-related, i.e., the following 2 conditions are satisfied:
+∇f(xk)ᵀdk ≤ - θ1 * ‖∇f(xk)‖² (1)
+θ2 * ‖∇f(xk)‖ ≥ ‖dk‖       (2)
+In the nonmonotone case,  dk must also satisfied (4) to ensure it is non zero:
+ ‖dk‖ ≥ θ1 ‖∇f(xk)‖, (4) 
+and in this context, (1) becomes (3)
+∇f(xk)ᵀdk - (fm - fk)/μk ≤ - θ1 * ‖∇f(xk)‖² (3)
+with fm the largest objective value over the last M successful iterations, and fk = f(xk)
+
+
+
 
 # Advanced usage
 
@@ -151,6 +168,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `M = $(FOMO_M)` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `step_backend = $(FOMO_step_backend)`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
+- `momentum_backend`: momentum mode for βₖ. Options are `ia_momentum()`, `nesterov_HB()`, `cg_PR()` for Polsak-Ribière, `cg_FR()` for Fletcher-Reeves.
 
 # Output
 
@@ -235,6 +253,7 @@ end
   θ2::T = get(FOMO_θ2, nlp),
   M::Int = get(FOMO_M, nlp),
   step_backend::AbstractFOMethod = get(FOMO_step_backend, nlp),
+  momentum_backend::AbstractMomentumMethod = get(FOMO_momentum_backend, nlp),
   kwargs...,
 ) where {T, V}
   solver = FomoSolver(
@@ -250,6 +269,7 @@ end
     θ2 = θ2,
     M = M,
     step_backend = step_backend,
+    momentum_backend = momentum_backend
   )
   solver_specific = Dict(:avgβktilde => T(0.0))
   stats = GenericExecutionStats(nlp; solver_specific = solver_specific)
@@ -435,8 +455,10 @@ function SolverCore.solve!(
   M = value(solver.params.M)
   step_backend = value(solver.params.step_backend)
 
-  use_momentum = typeof(solver) <: FomoSolver
   is_r2 = typeof(step_backend) <: r2_step
+
+  use_momentum = typeof(solver) <: FomoSolver
+  momentum_backend = use_momentum ? value(solver.params.momentum_backend) : nothing # not used if no momentum
 
   SolverCore.reset!(stats)
   start_time = time()
@@ -460,7 +482,7 @@ function SolverCore.solve!(
 
   grad!(nlp, x, g)
   norm_∇fk = norm(g)
-  d .= -g ./ (oneT - β)
+  d .= -g
   norm_d = norm_∇fk
   set_dual_residual!(stats, norm_∇fk)
 
@@ -516,14 +538,15 @@ function SolverCore.solve!(
 
   done = stats.status != :unknown
 
-  βktilde = β
+  βktilde = T(0)
+  βk = β
   ρk = T(0)
   avgβktilde = T(0)
   siter::Int = 0
   mdot∇f = T(0) # dot(momentum,∇fk)
   norm_m = T(0)
   while !done
-    μk = step_mult(solver.α, norm_d, step_backend)*(oneT-βktilde)
+    μk = step_mult(solver.α, norm_d, step_backend)
     c .= x .+ μk .* d
     step_underflow = x == c # step addition underfow on every dimensions, should happen before solver.α == 0
     ΔTk =  (norm_∇fk^2 + βktilde* mdot∇f) * μk # = dot(d,d) * μk with momentum, ‖∇fk‖²μk without momentum
@@ -538,7 +561,7 @@ function SolverCore.solve!(
       if use_momentum
         βktilde *= γ3
         βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, βktilde, θ1, θ2)
-        d .= -g .+ βktilde*momentum # d = -∇fk + γ3*momentumm, avoid storing gradient
+        d .= βktilde*momentum .- g 
         norm_d = norm(d) # TODO only needed in TR context, not in R2, 
       end
     end
@@ -552,20 +575,24 @@ function SolverCore.solve!(
       max_obj_mem = maximum(obj_mem)
 
       if use_momentum
-        momentum .= -g .+ β*momentum
+        momentum .= -g .+ βk*momentum
         norm_m = norm(momentum)
+        d.=g # temp. storage of ∇fk-1 in d to avoid storage, needed for compute_beta function
+        norm_∇fk₋ = norm_∇fk
       end
+      
       grad!(nlp, x, g)
       norm_∇fk = norm(g)
-      d .= -g
       if use_momentum
-        mdot∇f = dot(momentum, d)
-        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, β, θ1, θ2)
-        d .+=  βktilde*momentum
+        βk = compute_beta(β,norm_∇fk,norm_∇fk₋,g,d,momentum_backend)
+        mdot∇f = dot(momentum, g)
+        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, βk, θ1, θ2)
+        d .=  βktilde*momentum .- g
         norm_d = norm(d)
         avgβktilde += βktilde
         siter += 1
       else
+        d .= -g
         norm_d = norm_∇fk
       end
     end
@@ -583,7 +610,7 @@ function SolverCore.solve!(
           @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ρk
       else
         infoline =
-          @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ρk βktilde norm_m
+          @sprintf "%5d  %9.2e  %7.1e  %7.1e  %7.1e  %7.1e" stats.iter stats.objective norm_∇fk step_param ρk βktilde
       end
     end
 
@@ -673,6 +700,30 @@ function find_beta_tilde(
   βktilde
 end
 
+"""
+    compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::, ::ia_momentum)
+    compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::, ::AbstractMomentumMethod)
+    compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::, ::cg_PR)
+    compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::, ::cg_FR)
+
+Compute β coefficient for the given momentum_backend.
+"""
+function compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::V, ::ia_momentum) where {T,V}
+  β
+end
+
+function compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::V, ::nesterov_HB) where {T,V}
+  β
+end
+
+function compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::V, ::cg_PR) where {T,V}
+  dp = dot(∇fk,∇fk₋)
+  (norm_∇fk^2 - dp)/norm_∇fk₋^2
+end
+
+function compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::V, ::cg_FR) where {T,V}
+  norm_∇fk^2/norm_∇fk₋^2
+end
 """
     init_alpha(norm_∇fk::T, ::r2_step)
     init_alpha(norm_∇fk::T, ::tr_step)
