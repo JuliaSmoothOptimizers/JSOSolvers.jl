@@ -1,5 +1,5 @@
 export fomo, FomoSolver, FOMOParameterSet, FoSolver, fo, R2, TR
-export tr_step, r2_step, ia_momentum, nesterov_HB, cg_PR, cg_FR
+export tr_step, r2_step, nesterov_HB, cg_PR, cg_FR
 
 abstract type AbstractFirstOrderSolver <: AbstractOptimizationSolver end
 
@@ -8,7 +8,7 @@ struct tr_step <: AbstractFOMethod end
 struct r2_step <: AbstractFOMethod end
 
 abstract type AbstractMomentumMethod end
-struct ia_momentum <: AbstractMomentumMethod end
+#struct ia_momentum <: AbstractMomentumMethod end
 struct nesterov_HB <: AbstractMomentumMethod end
 struct cg_PR <: AbstractMomentumMethod end
 struct cg_FR <: AbstractMomentumMethod end
@@ -29,7 +29,7 @@ const FOMO_θ2 =
   DefaultParameter((nlp::AbstractNLPModel) -> 1 / eps(eltype(nlp.meta.x0))^(1 // 3), "1/eps(T)^(1/3)")
 const FOMO_M = DefaultParameter(1)
 const FOMO_step_backend = DefaultParameter(nlp -> r2_step(), "r2_step()")
-const FOMO_momentum_backend = DefaultParameter(nlp -> ia_momentum(), "ia_momentum()")
+const FOMO_momentum_backend = DefaultParameter(nlp -> nesterov_HB(), "nesterov_HB()")
 
 """
     FOMOParameterSet{T} <: AbstractParameterSet
@@ -44,7 +44,7 @@ This structure designed for `fomo` regroups the following parameters:
   - `θ2`: momentum contribution parameter for convergence condition (2). 
   - `M` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
   - `step_backend`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
-  - `momentum_backend`: momentum mode for βₖ. Options are `ia_momentum()`, `nesterov_HB()`, `cg_PR()` for Polak-Ribière, `cg_FR()` for Fletcher-Reeves.
+  - `momentum_backend`: momentum mode for βₖ. Options are, `nesterov_HB()`, `cg_PR()` for Polak-Ribière, `cg_FR()` for Fletcher-Reeves.
 
 An additional constructor is
 
@@ -78,7 +78,7 @@ struct FOMOParameterSet{T} <: AbstractParameterSet
   θ2::Parameter{T, RealInterval{T}}
   M::Parameter{Int, IntegerRange{Int}}
   step_backend::Parameter{Union{r2_step, tr_step}, CategoricalSet{Union{r2_step, tr_step}}}
-  momentum_backend::Parameter{Union{ia_momentum, nesterov_HB, cg_PR, cg_FR}, CategoricalSet{Union{ia_momentum, nesterov_HB, cg_PR, cg_FR}}}
+  momentum_backend::Parameter{Union{nesterov_HB, cg_PR, cg_FR}, CategoricalSet{Union{nesterov_HB, cg_PR, cg_FR}}}
 end
 
 # add a default constructor
@@ -110,7 +110,7 @@ function FOMOParameterSet(
     Parameter(θ2, RealInterval(T(1), T(Inf), upper_open = true)),
     Parameter(M, IntegerRange(Int(1), typemax(Int))),
     Parameter(step_backend, CategoricalSet{Union{tr_step, r2_step}}([r2_step(); tr_step()])),
-    Parameter(momentum_backend, CategoricalSet{Union{ia_momentum, nesterov_HB, cg_PR, cg_FR}}([ia_momentum(); nesterov_HB(); cg_PR(); cg_FR()])),
+    Parameter(momentum_backend, CategoricalSet{Union{nesterov_HB, cg_PR, cg_FR}}([nesterov_HB(); cg_PR(); cg_FR()])),
   )
 end
 
@@ -168,7 +168,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `M = $(FOMO_M)` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `step_backend = $(FOMO_step_backend)`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
-- `momentum_backend`: momentum mode for βₖ. Options are `ia_momentum()`, `nesterov_HB()`, `cg_PR()` for Polsak-Ribière, `cg_FR()` for Fletcher-Reeves.
+- `momentum_backend`: momentum mode for βₖ. Options are `nesterov_HB()`, `cg_PR()` for Polsak-Ribière, `cg_FR()` for Fletcher-Reeves.
 
 # Output
 
@@ -653,9 +653,9 @@ end
     
 Returns κ update, needed only for `nesterov_HB` `momentum_backend`. 
 """
-function update_kappa(αk::T, αk₋::T, ::ia_momentum) where {T}
-  1
-end
+# function update_kappa(αk::T, αk₋::T, ::ia_momentum) where {T}
+#   1
+# end
 
 function update_kappa(αk::T, αk₋::T, ::nesterov_HB) where {T}
   αk/αk₋
@@ -694,6 +694,10 @@ function find_beta_tilde(
   θ1::T,
   θ2::T,
 ) where {T}
+  e = eps(T)
+  if abs(mdot∇f)<e 
+    mdot∇f = e*sign(mdot∇f) 
+  end
   # Condition 1: βktilde <= β1 if mdot∇f > 0, βktilde <= β1 if mdot∇f < 0, no condition if  mdot∇f == 0
   βktilde = βk
   β1 = ((1-θ1)*norm_∇f^2 + (max_obj_mem-fk)/μk)/(κ*mdot∇f) 
@@ -728,16 +732,15 @@ function find_beta_tilde(
 end
 
 """
-    compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::, ::ia_momentum)
     compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::, ::AbstractMomentumMethod)
     compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::, ::cg_PR)
     compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::, ::cg_FR)
 
 Compute β coefficient for the given momentum_backend.
 """
-function compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::V, ::ia_momentum) where {T,V}
-  β
-end
+# function compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::V, ::ia_momentum) where {T,V}
+#   β
+# end
 
 function compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::V, ::nesterov_HB) where {T,V}
   β
