@@ -545,6 +545,7 @@ function SolverCore.solve!(
   siter::Int = 0
   mdot∇f = T(0) # dot(momentum,∇fk)
   norm_m = T(0)
+  κ = oneT
   while !done
     μk = step_mult(solver.α, norm_d, step_backend)
     c .= x .+ μk .* d
@@ -554,16 +555,20 @@ function SolverCore.solve!(
     unbounded = fck < fmin
     ρk = (max_obj_mem - fck) / (max_obj_mem - stats.objective + ΔTk)
     # Update regularization parameters
+    α₋ = solver.α
     if ρk >= η2
       solver.α = min(αmax, γ2 * solver.α)
     elseif ρk < η1
       solver.α = solver.α * γ1
       if use_momentum
         βktilde *= γ3
-        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, βktilde, θ1, θ2)
+        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, κ, βktilde, θ1, θ2)
         d .= βktilde*momentum .- g 
         norm_d = norm(d) # TODO only needed in TR context, not in R2, 
       end
+    end
+    if use_momentum
+      update_kappa(solver.α, α₋,momentum_backend)
     end
 
     # Acceptance of the new candidate
@@ -586,7 +591,7 @@ function SolverCore.solve!(
       if use_momentum
         βk = compute_beta(β,norm_∇fk,norm_∇fk₋,g,d,momentum_backend)
         mdot∇f = dot(momentum, g)
-        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, βk, θ1, θ2)
+        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, κ, βk, θ1, θ2)
         d .=  βktilde*momentum .- g
         norm_d = norm(d)
         avgβktilde += βktilde
@@ -644,6 +649,27 @@ function SolverCore.solve!(
 end
 
 """
+    update_kappa(αk, αk₋)
+    
+Returns κ update, needed only for `nesterov_HB` `momentum_backend`. 
+"""
+function update_kappa(αk::T, αk₋::T, ::ia_momentum) where {T}
+  1
+end
+
+function update_kappa(αk::T, αk₋::T, ::nesterov_HB) where {T}
+  αk/αk₋
+end
+
+function update_kappa(αk::T, αk₋::T, ::cg_PR) where {T}
+  1
+end
+
+function update_kappa(αk::T, αk₋::T, ::cg_FR) where {T}
+  1
+end
+
+"""
     find_beta_tilde(m, mdot∇f, norm_∇f, μk, fk, max_obj_mem, βktilde, θ1, θ2)
 
 `βktilde` is computed such that the two gradient-related conditions (first one is relaxed in the nonmonotone case) are ensured: 
@@ -663,13 +689,14 @@ function find_beta_tilde(
   μk::T,
   fk::T,
   max_obj_mem::T,
+  κ::T,
   βk::T,
   θ1::T,
   θ2::T,
 ) where {T}
   # Condition 1: βktilde <= β1 if mdot∇f > 0, βktilde <= β1 if mdot∇f < 0, no condition if  mdot∇f == 0
   βktilde = βk
-  β1 = ((1-θ1)*norm_∇f^2 + (max_obj_mem-fk)/μk)/mdot∇f 
+  β1 = ((1-θ1)*norm_∇f^2 + (max_obj_mem-fk)/μk)/(κ*mdot∇f) 
   if mdot∇f>0
     βktilde = min(β1,βktilde)
   elseif mdot∇f<0
@@ -679,9 +706,9 @@ function find_beta_tilde(
   # Condition 2: βktilde ∈ [r21,r22], r21 and r22 are roots of  P(βktilde) = (1-θ2^2)norm_∇f -2βktilde mdot∇f + βktilde^2 norm_m. 
   # Roots are necessarily real and r21 ≤ 0 ≤ r22
   if norm_m ≠ 0
-    Δ2 = (mdot∇f^2- (1-θ2^2)*(norm_∇f*norm_m)^2)
-    r21 = (mdot∇f-sqrt(Δ2))/norm_m
-    r22 = (mdot∇f+sqrt(Δ2))/norm_m
+    Δ2 = (κ^2*mdot∇f^2- (1-θ2^2)*(norm_∇f*norm_m)^2)
+    r21 = (κ*mdot∇f-sqrt(Δ2))/norm_m
+    r22 = (κ*mdot∇f+sqrt(Δ2))/norm_m
     βktilde = max(r21,βktilde)
     βktilde = min(r22,βktilde)
   end
@@ -689,10 +716,10 @@ function find_beta_tilde(
   # roots are not necessarily real. If complex condition does not apply. If real, they both have the same sign.
   r31 = 0
   r32 = 0
-  Δ3= (mdot∇f^2- (1-θ1^2)*(norm_∇f*norm_m)^2)
+  Δ3= (κ^2*mdot∇f^2- (1-θ1^2)*(norm_∇f*norm_m)^2)
   if Δ3>0
-    r31 = (mdot∇f-sqrt(Δ3))/((1-θ1^2)*norm_∇f^2)
-    r32 = (mdot∇f+sqrt(Δ3))/((1-θ1^2)*norm_∇f^2)
+    r31 = (κ*mdot∇f-sqrt(Δ3))/((1-θ1^2)*norm_∇f^2)
+    r32 = (κ*mdot∇f+sqrt(Δ3))/((1-θ1^2)*norm_∇f^2)
   end
   if βktilde >r31 && βktilde < r32
     βktilde = sign(r31)*min(abs(r31),abs(r32))
