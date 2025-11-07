@@ -8,18 +8,32 @@ function tests()
         ("lbfgs", lbfgs),
         ("tron", tron),
         ("R2", R2),
-        ("fomo_r2", fomo),
-        ("fomo_tr", (nlp; kwargs...) -> fomo(nlp, step_backend = JSOSolvers.tr_step(); kwargs...)),
+        ("fomo_r2_nesterov_HB", fomo),
+        ("fomo_tr_nesterov_HB", (nlp; kwargs...) -> fomo(nlp, step_backend = JSOSolvers.tr_step(); kwargs...)),
+        ("fomo_r2_cg_PR", (nlp; kwargs...) -> fomo(nlp, momentum_backend = JSOSolvers.cg_PR(); kwargs...)),
+        ("fomo_tr_cg_PR", (nlp; kwargs...) -> fomo(nlp, step_backend = JSOSolvers.tr_step(), momentum_backend = JSOSolvers.cg_PR(); kwargs...)),
+        ("fomo_r2_cg_FR", (nlp; kwargs...) -> fomo(nlp, momentum_backend = JSOSolvers.cg_FR(); kwargs...)),
+        ("fomo_tr_cg_FR", (nlp; kwargs...) -> fomo(nlp, step_backend = JSOSolvers.tr_step(), momentum_backend = JSOSolvers.cg_FR(); kwargs...)),
       ]
         unconstrained_nlp(solver)
         multiprecision_nlp(solver, :unc)
       end
       @testset "$name : nonmonotone configuration" for (name, solver) in [
         ("R2", (nlp; kwargs...) -> R2(nlp, M = 2; kwargs...)),
-        ("fomo_r2", (nlp; kwargs...) -> fomo(nlp, M = 2; kwargs...)),
+        ("fomo_r2_nesterov_HB", (nlp; kwargs...) -> fomo(nlp, M = 2; kwargs...)),
         (
-          "fomo_tr",
+          "fomo_tr_nesterov_HB",
           (nlp; kwargs...) -> fomo(nlp, M = 2, step_backend = JSOSolvers.tr_step(); kwargs...),
+        ),
+        ("fomo_r2_cg_PR", (nlp; kwargs...) -> fomo(nlp, M = 2, momentum_backend = JSOSolvers.cg_PR(); kwargs...)),
+        (
+          "fomo_tr_cg_PR",
+          (nlp; kwargs...) -> fomo(nlp, M = 2, step_backend = JSOSolvers.tr_step(), momentum_backend = JSOSolvers.cg_PR(); kwargs...),
+        ),
+        ("fomo_r2_cg_FR", (nlp; kwargs...) -> fomo(nlp, M = 2, momentum_backend = JSOSolvers.cg_FR(); kwargs...)),
+        (
+          "fomo_tr_cg_FR",
+          (nlp; kwargs...) -> fomo(nlp, M = 2, step_backend = JSOSolvers.tr_step(), momentum_backend = JSOSolvers.cg_FR(); kwargs...),
         ),
       ]
         unconstrained_nlp(solver)
