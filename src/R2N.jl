@@ -142,6 +142,7 @@ mutable struct HSLDirectSolver{T, S} <: AbstractMASolver
     vals::Vector{T}
     n::Int
     nnzh::Int
+    work::Vector{T} # workspace for solves # used for ma57 solver 
 end
 
 """
@@ -168,7 +169,12 @@ function HSLDirectSolver(nlp::AbstractNLPModel{T, V}, hsl_constructor) where {T,
     end
 
     hsl_obj = hsl_constructor(n, cols, rows, vals)
-    return HSLDirectSolver{T, typeof(hsl_obj)}(hsl_obj, rows, cols, vals, n, nnzh)
+    if hsl_constructor == ma57_coord
+        work = Vector{T}(undef, n * size(nlp.meta.x0, 2)) # size(b, 2)
+    else
+        work = Vector{T}(undef, 0) # No workspace needed for MA97
+    end
+    return HSLDirectSolver{T, typeof(hsl_obj)}(hsl_obj, rows, cols, vals, n, nnzh, work)
 end
 
 
@@ -872,7 +878,7 @@ function subsolve!(
         #     return false, :err, 1, 0
         # end
         s .= g
-        s = ma57_solve(r2_subsolver.hsl_obj, s)
+        ma57_solve!(r2_subsolver.hsl_obj, s, r2_subsolver.work)
     else
         error("Unknown HSL solver type")
     end
