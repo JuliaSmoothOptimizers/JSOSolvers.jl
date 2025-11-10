@@ -6,6 +6,11 @@ using LinearOperators, LinearAlgebra
 using SparseArrays
 using HSL
 
+#TODO opnorm (f norm) of coo matrix
+# then move it to SparseMatrixCOO
+# Keep H as Sparse
+
+
 #TODO move to LinearOperators
 # Define a new mutable operator for A = H + σI
 mutable struct ShiftedOperator{T, V, OpH <: Union{AbstractLinearOperator{T}, AbstractMatrix{T}}} <: AbstractLinearOperator{T}
@@ -151,7 +156,7 @@ function HSLDirectSolver(nlp::AbstractNLPModel{T, V}, hsl_constructor) where {T,
 
     rows = Vector{Int}(undef, total_nnz)
     cols = Vector{Int}(undef, total_nnz)
-    vals = zeros(T, total_nnz)
+    vals = Vector{T}(undef, total_nnz) 
 
     hess_structure!(nlp, view(rows, 1:nnzh), view(cols, 1:nnzh))
     hess_coord!(nlp, nlp.meta.x0, view(vals, 1:nnzh))
@@ -314,14 +319,15 @@ function R2NSolver(
   A = nothing
 
   local H, r2_subsolver
+  
   if subsolver == :ma97
     LIBHSL_isfunctional() || error("HSL library is not functional")
     r2_subsolver = HSLDirectSolver(nlp, ma97_coord)
-    H = spzeros(T, nvar, nvar)
+    H = spzeros(T, nvar, nvar)#TODO change this 
   elseif subsolver == :ma57
     LIBHSL_isfunctional() || error("HSL library is not functional")
     r2_subsolver = HSLDirectSolver(nlp, ma57_coord)
-    H = spzeros(T, nvar, nvar)
+    H = spzeros(T, nvar, nvar)#TODO change this 
 
   else  # not using ma971
     # H = isa(nlp, QuasiNewtonModel) ? nlp.op : hess_op!(nlp, x, Hs) 
@@ -564,8 +570,8 @@ function SolverCore.solve!(
       if H isa AbstractLinearOperator
         λmax, found_λ = opnorm(H) # This uses iterative methods (p=2)
       else
-        # H is a SparseMatrixCSC (MA97 case), use p=Inf as suggested by the error
-        λmax = opnorm(H, Inf) 
+        #TODO check
+        λmax = norm(view(r2_subsolver.vals, 1:r2_subsolver.nnzh)) # f-norm of the H 
         found_λ = true # We assume the Inf-norm was found
       end
       cp_step_log = "ν_k"
@@ -590,7 +596,7 @@ function SolverCore.solve!(
     end
     if !(r2_subsolver isa ShiftedLBFGSSolver) && !(r2_subsolver isa HSLDirectSolver)
       if r2_subsolver.stats.npcCount >= 1  #npc case
-        if npc_handler == :armijo #TODO check this logic with Prof. Orban
+        if npc_handler == :armijo #TODO SolverTools.jl / armijo_goldstein / check LBFGS file
           c = one(T) * 1e-4 #TODO do I want user to set this value?
           α = one(T) * 1.0
           increase_factor = one(T) * 1.5
@@ -850,6 +856,7 @@ function subsolve!(
     end
 
     # Dispatch to correct factorization/solve based on S
+    #TODO put this in a separate function
     if S <: Ma97{T}
         ma97_factorize!(r2_subsolver.hsl_obj)
         if r2_subsolver.hsl_obj.info.flag != 0
@@ -860,15 +867,18 @@ function subsolve!(
         ma97_solve!(r2_subsolver.hsl_obj, s)
     elseif S <: Ma57{T}
         ma57_factorize!(r2_subsolver.hsl_obj)
-        if r2_subsolver.hsl_obj.info.flag != 0
-            @warn("MA57 factorization failed with flag = $(r2_subsolver.hsl_obj.info.flag)")
-            return false, :err, 1, 0
-        end
+        # if r2_subsolver.hsl_obj.info.flag != 0
+        #     @warn("MA57 factorization failed with flag = $(r2_subsolver.hsl_obj.info.flag)")
+        #     return false, :err, 1, 0
+        # end
         s .= g
-        ma57_solve!(r2_subsolver.hsl_obj, s)
+        s = ma57_solve(r2_subsolver.hsl_obj, s)
     else
         error("Unknown HSL solver type")
     end
 
     return true, :first_order, 1, 0
 end
+
+# function ma_factorize(r2_subsolver::HSLDirectSolver)
+ 

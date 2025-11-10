@@ -25,6 +25,55 @@ nlp = ADNLPModel(
   name = "Extended Rosenbrock",
 )
 
+
+
+  σ = 1.0
+
+n = nlp.meta.nvar
+nnzh = nlp.meta.nnzh
+total_nnz = nnzh + n  # Max number of coordinates
+
+# 1. Build the coordinate structure of B + σI
+rows = Vector{Int}(undef, total_nnz)
+cols = Vector{Int}(undef, total_nnz)
+vals = zeros(T, total_nnz)  # Explicit zero initialization
+
+# 2. Fill Hessian structure and values
+hess_structure!(nlp, view(rows, 1:nnzh), view(cols, 1:nnzh))
+hess_coord!(nlp, x, view(vals, 1:nnzh))
+
+# 3. Fill diagonal for σI (structure and values)
+@inbounds for i = 1:n
+    rows[nnzh + i] = i
+    cols[nnzh + i] = i
+    vals[nnzh + i] = σ
+end
+
+# 4. Factorize and solve
+ma97_obj = ma97_coord(n, cols, rows, vals)
+ma97_factorize!(ma97_obj)
+
+b_aug = randn(T, n) .* 10  # Broadcasting for random vector initialization
+x0 = ma97_solve(ma97_obj, b_aug)
+
+
+
+
+
+
+sparse(rows, cols, vals)
+
+
+
+
+
+
+
+
+
+
+
+
 x = nlp.meta.x0
 # 1. get problem dimensions and Hessian structure
 meta_nlp = nlp.meta
@@ -48,8 +97,8 @@ hess_structure!(nlp, view(rows, 1:nnzh), view(cols, 1:nnzh))
 end
 
 # 5. Pre-allocate the augmented right-hand-side vector
-b_aug = Vector{T}(undef, n + n)
-
+b_aug = Vector{T}(undef, n)
+b_aug[1:n] .= -1.0
 #testing the solver
 
 #1. update the hessian values
@@ -59,7 +108,7 @@ hess_coord!(nlp, x, view(vals, 1:nnzh))
   vals[nnzh + i] = σ
 end
 
-b_aug[1:n] .= -1.0
+
 fill!(view(b_aug, (n + 1):(n + n)), zero(eltype(b_aug)))
 
 # Hx = SparseMatrixCOO(

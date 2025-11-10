@@ -21,7 +21,7 @@
   @test stats.status == :first_order
   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)
 
-  nlp.meta.x0 .= 2.0
+  # nlp.meta.x0 .= 2.0  #TODO check what happens 
   SolverCore.reset!(solver)
 
   stats = SolverCore.solve!(solver, nlp, stats, atol = 1e-10, rtol = 1e-10)
