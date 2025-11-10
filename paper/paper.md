@@ -22,7 +22,7 @@ authors:
 affiliations:
   - name: GERAD and Department of Mathematics and Industrial Engineering, Polytechnique Montréal, QC, Canada.
     index: 1
-  - name: Netherlands eScience Center, Amsterdam, NL
+  - name: Netherlands eScience Center, Amsterdam, Netherlands
     index: 2
   - name: Univ Rennes, INSA Rennes, CNRS, IRMAR - UMR 6625, Rennes, France
     index: 3
