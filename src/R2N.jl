@@ -73,6 +73,11 @@ struct R2NParameterSet{T} <: AbstractParameterSet
   δ1::Parameter{T, RealInterval{T}}
   σmin::Parameter{T, RealInterval{T}}
   non_mono_size::Parameter{Int, IntegerRange{Int}}
+  ls_c::Parameter{T, RealInterval{T}}
+  ls_increase::Parameter{T, RealInterval{T}}
+  ls_decrease::Parameter{T, RealInterval{T}}
+  ls_min_alpha::Parameter{T, RealInterval{T}}
+  ls_max_alpha::Parameter{T, RealInterval{T}}
 end
 
 # Default parameter values
@@ -92,6 +97,13 @@ const R2N_σmin = DefaultParameter(nlp -> begin
   T(eps(T))
 end, "eps(T)")
 const R2N_non_mono_size = DefaultParameter(1)
+# Line search parameters
+const R2N_ls_c = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1e-4), "T(1e-4)")
+const R2N_ls_increase = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1.5), "T(1.5)")
+const R2N_ls_decrease = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
+const R2N_ls_min_alpha = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1e-8), "T(1e-8)")
+const R2N_ls_max_alpha = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1e2), "T(1e2)")
+
 
 function R2NParameterSet(
   nlp::AbstractNLPModel;
@@ -105,6 +117,11 @@ function R2NParameterSet(
   δ1::T = get(R2N_δ1, nlp),
   σmin::T = get(R2N_σmin, nlp),
   non_mono_size::Int = get(R2N_non_mono_size, nlp),
+  ls_c::T = get(R2N_ls_c, nlp),
+  ls_increase::T = get(R2N_ls_increase, nlp),
+  ls_decrease::T = get(R2N_ls_decrease, nlp),
+  ls_min_alpha::T = get(R2N_ls_min_alpha, nlp),
+  ls_max_alpha::T = get(R2N_ls_max_alpha, nlp),
 ) where {T}
   R2NParameterSet{T}(
     Parameter(θ1, RealInterval(zero(T), one(T))),
@@ -117,6 +134,13 @@ function R2NParameterSet(
     Parameter(δ1, RealInterval(zero(T), one(T))),
     Parameter(σmin, RealInterval(zero(T), T(Inf))),
     Parameter(non_mono_size, IntegerRange(1, typemax(Int))),
+
+    Parameter(ls_c, RealInterval(zero(T), one(T))), # c is typically (0, 1)
+    Parameter(ls_increase, RealInterval(one(T), T(Inf))), # increase > 1
+    Parameter(ls_decrease, RealInterval(zero(T), one(T))), # decrease < 1
+    Parameter(ls_min_alpha, RealInterval(zero(T), T(Inf))),
+    Parameter(ls_max_alpha, RealInterval(zero(T), T(Inf))),
+    
   )
 end
 
@@ -216,7 +240,7 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `subsolver::Symbol  = :shifted_lbfgs`: the subsolver to solve the shifted system. The `MinresWorkspace` which solves the shifted linear system exactly at each iteration. Using the exact solver is only possible if `nlp` is an `LBFGSModel`. See `JSOSolvers.R2N_allowed_subsolvers` for a list of available subsolvers.
+- `subsolver::Symbol  = :cr`: the subsolver to solve the shifted system. The `MinresWorkspace` which solves the shifted linear system exactly at each iteration. Using the exact solver is only possible if `nlp` is an `LBFGSModel`. See `JSOSolvers.R2N_allowed_subsolvers` for a list of available subsolvers.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
 - `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
 - `npc_handler::Symbol = :armijo`: the non_positive_curve handling strategy.
@@ -292,7 +316,12 @@ function R2NSolver(
   δ1 = get(R2N_δ1, nlp),
   σmin = get(R2N_σmin, nlp),
   non_mono_size = get(R2N_non_mono_size, nlp),
-  subsolver::Symbol = :minres,
+  subsolver::Symbol = :cg,
+  ls_c = get(R2N_ls_c, nlp),
+  ls_increase = get(R2N_ls_increase, nlp),
+  ls_decrease = get(R2N_ls_decrease, nlp),
+  ls_min_alpha = get(R2N_ls_min_alpha, nlp),
+  ls_max_alpha = get(R2N_ls_max_alpha, nlp),
 ) where {T, V}
   params = R2NParameterSet(
     nlp;
@@ -306,6 +335,11 @@ function R2NSolver(
     δ1 = δ1,
     σmin = σmin,
     non_mono_size = non_mono_size,
+    ls_c = ls_c,
+    ls_increase = ls_increase,
+    ls_decrease = ls_decrease,
+    ls_min_alpha = ls_min_alpha,
+    ls_max_alpha = ls_max_alpha,
   )
   subsolver in R2N_allowed_subsolvers ||
     error("subproblem solver must be one of $(R2N_allowed_subsolvers)")
@@ -358,6 +392,7 @@ function R2NSolver(
   obj_vec = fill(typemin(T), non_mono_size)
   Sub = typeof(r2_subsolver)
 
+
   return R2NSolver{T, V, Op, ShiftedOp, Sub}(
     x,
     xt,
@@ -377,12 +412,13 @@ function R2NSolver(
 end
 #TODO Prof. Orban, check if I need to reset H in reset! function
 function SolverCore.reset!(solver::R2NSolver{T}) where {T}
-  fill!(solver.obj_vec, typemin(T))
-  reset!(solver.H)
-  if solver.r2_subsolver isa CgWorkspace || solver.r2_subsolver isa CrWorkspace
-    solver.A = ShiftedOperator(solver.H)
-  end
-  solver
+    fill!(solver.obj_vec, typemin(T))
+    reset!(solver.H)
+    # If using Krylov subsolvers, update the shifted operator
+    if solver.r2_subsolver isa CgWorkspace || solver.r2_subsolver isa CrWorkspace
+        solver.A = ShiftedOperator(solver.H)
+    end
+    solver
 end
 function SolverCore.reset!(solver::R2NSolver{T}, nlp::AbstractNLPModel) where {T}
   fill!(solver.obj_vec, typemin(T))
@@ -403,7 +439,12 @@ end
   δ1::Real = get(R2N_δ1, nlp),
   σmin::Real = get(R2N_σmin, nlp),
   non_mono_size::Int = get(R2N_non_mono_size, nlp),
-  subsolver::Symbol = :minres,
+  subsolver::Symbol = :cr,
+  ls_c::Real = get(R2N_ls_c, nlp),
+  ls_increase::Real = get(R2N_ls_increase, nlp),
+  ls_decrease::Real = get(R2N_ls_decrease, nlp),
+  ls_min_alpha::Real = get(R2N_ls_min_alpha, nlp),
+  ls_max_alpha::Real = get(R2N_ls_max_alpha, nlp),
   kwargs...,
 ) where {T, V}
   solver = R2NSolver(
@@ -419,6 +460,11 @@ end
     σmin = convert(T, σmin),
     non_mono_size = non_mono_size,
     subsolver = subsolver,
+    ls_c = convert(T, ls_c),
+    ls_increase = convert(T, ls_increase),
+    ls_decrease = convert(T, ls_decrease),
+    ls_min_alpha = convert(T, ls_min_alpha),
+    ls_max_alpha = convert(T, ls_max_alpha),
   )
   return solve!(solver, nlp; kwargs...)
 end
@@ -455,6 +501,11 @@ function SolverCore.solve!(
   σmin = value(params.σmin)
   non_mono_size = value(params.non_mono_size)
 
+  ls_c = value(params.ls_c)
+  ls_increase = value(params.ls_increase)
+  ls_decrease = value(params.ls_decrease)
+  ls_min_alpha = value(params.ls_min_alpha)
+  ls_max_alpha = value(params.ls_max_alpha)
 
   @assert(η1 > 0 && η1 < 1)
   @assert(θ1 > 0 && θ1 < 1)
@@ -594,48 +645,63 @@ function SolverCore.solve!(
     subsolver_solved, sub_stats, subiter, npcCount =
       subsolve!(r2_subsolver, solver, nlp, s, zero(T), n, subsolver_verbose)
 
-    if !subsolver_solved
+    #TODO Prof. Orban, trunk and tron  won't do this
+    if !subsolver_solved && npcCount == 0
       @warn("Subsolver failed to solve the system")
       # It might be better to increase σ and retry instead of stopping,
       # but for now, we'll stop.
-      break
+      break 
     end
     if !(r2_subsolver isa ShiftedLBFGSSolver) && !(r2_subsolver isa HSLDirectSolver)
       if r2_subsolver.stats.npcCount >= 1  #npc case
-        if npc_handler == :armijo #TODO SolverTools.jl / armijo_goldstein / check LBFGS file
-          c = one(T) * 1e-4 #TODO do I want user to set this value?
-          α = one(T) * 1.0
-          increase_factor = one(T) * 1.5
-          decrease_factor = one(T) * 0.5
-          min_alpha = one(T) * 1e-8
-          max_alpha = one(T) * 1e2
-          dir = r2_subsolver.npc_dir
-          f0 = stats.objective
-          grad_dir = dot(∇fk, dir)
-          # First, try α = 1
-          xt .= x .+ α * dir
-          fck = obj(nlp, xt)
-          if fck > f0 + c * α * grad_dir
-            # Backward tracking
-            while fck > f0 + c * α * grad_dir && α > min_alpha
-              α *= decrease_factor
-              xt .= x .+ α * dir
+        if npc_handler == :armijo 
+          # --- Algorithm 3: From MINRES Paper --- 
+          r2_subsolver.stats.npcCount = 0 # TODO check for Subsolver, it need to reset this 
+          
+          # 1. Get current state from R2N solver
+          α = one(T) * 1.0     # Initial step size guess
+          f0 = stats.objective   # Current objective value, f(x)
+          dir = r2_subsolver.npc_dir # The non-positive curvature direction
+          
+          # ∇fk = -∇f(x), so grad = -∇fk
+          grad_dir = dot(-∇fk, dir)
+
+          # 3. First Try (α = 1.0)
+          xt .= x .+ α .* dir
+          fck = obj(nlp, xt) # f(x + α*dir)
+
+          # Check Armijo violation using our new parameter 'ls_c'
+          if fck > f0 + ls_c * α * grad_dir
+            # 4. Backward Tracking (Algorithm 2)
+            while fck > f0 + ls_c * α * grad_dir && α > ls_min_alpha
+              α *= ls_decrease # Use parameter
+              xt .= x .+ α .* dir
               fck = obj(nlp, xt)
             end
           else
-            # Forward tracking
+            # 5. Forward Tracking
             while true
-              α_new = α * increase_factor
-              xt .= x .+ α_new * dir
-              fck_new = obj(nlp, xt)
-              if fck_new > f0 + c * α_new * grad_dir || α_new > max_alpha
+              α_new = α * ls_increase # Use parameter
+              if α_new > ls_max_alpha # Use parameter
                 break
               end
+
+              xt .= x .+ α_new .* dir
+              fck_new = obj(nlp, xt)
+              
+              if fck_new > f0 + ls_c * α_new * grad_dir
+                break
+              end
+              
               α = α_new
               fck = fck_new
             end
           end
-          s .= α * dir
+          
+          # 6. Store the final computed step
+          s .= α .* dir
+          # --- End of Algorithm 3 ---
+
         elseif npc_handler == :prev #Cr and cg will return the last iteration s
           s .= r2_subsolver.x
         elseif npc_handler == :cp

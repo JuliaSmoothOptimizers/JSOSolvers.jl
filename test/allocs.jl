@@ -46,7 +46,6 @@ if Sys.isunix()
             solver = eval(symsolver)(nlp; M = 2) # nonmonotone configuration allocates extra memory
           elseif name == :R2N_exact
             solver = eval(symsolver)(LBFGSModel(nlp), subsolver= :shifted_lbfgs)
-            #TODO MA97 
           else
             solver = eval(symsolver)(nlp)
           end

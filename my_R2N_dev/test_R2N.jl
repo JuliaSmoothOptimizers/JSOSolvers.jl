@@ -3,7 +3,7 @@ using JSOSolvers
 using HSL
 using NLPModels, ADNLPModels
 using SparseArrays, LinearAlgebra
-using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
+using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore 
 
 # f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
 # nlp = ADNLPModel(f, [-1.2; 1.0])
@@ -11,34 +11,58 @@ using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, Solve
 #   println("The status is: ", stats.status == :first_order)
 #   println("The solution is approximately: ", isapprox(stats.solution, [1.0; 1.0], atol = 1e-6))
 
-# s = :R2NSolver
-# fun = :R2N
-# f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
-# nlp = ADNLPModel(f, [-1.2; 1.0])
-# # nlp.meta.x0 .= 2.0
 
 
-# if fun == :R2N_exact
-#     nlp = LBFGSModel(nlp)
-#     solver = eval(s)(nlp,subsolver= :shifted_lbfgs)
-#   else 
-#     solver = eval(s)(nlp)
-#   end
+# for s in (:R2NSolver,  :FoSolver, :TronSolver, :TrunkSolver)
+for s in (:R2NSolver,  )
+    println("\n\n\t\t===================================")
+    println("============        Testing solver: $s            ==============\n\n")
+    f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
+    nlp = ADNLPModel(f, [-1.2; 1.0])
+    solver = eval(s)(nlp)
+    
 
-#   stats = GenericExecutionStats(nlp)
-#   stats = SolverCore.solve!(solver, nlp, stats, verbose = 1)
-#   println("The status is: ", stats.status == :first_order)
-#   println("The solution is approximately: ", isapprox(stats.solution, [1.0; 1.0], atol = 1e-6))
+    stats = GenericExecutionStats(nlp)
+    stats = SolverCore.solve!(solver, nlp, stats, verbose = 1)
+    println("The status is: ", stats.status == :first_order)
+    println("The solution is approximately: ", isapprox(stats.solution, [1.0; 1.0], atol = 1e-6))
 
-#   nlp.meta.x0 .= 2.0
-#   SolverCore.reset!(solver)
+    f2(x) = (x[1])^2 + 4 * (x[2] - x[1]^2)^2
+    nlp = ADNLPModel(f2, [-1.2; 1.0])
+  
+    solver = eval(s)(nlp,subsolver= :cg) 
+    
+    SolverCore.reset!(solver, nlp)
 
-#     stats = GenericExecutionStats(nlp)
-#   stats = SolverCore.solve!(solver, nlp, stats, verbose = 1)
-#   println("The status is: ", stats.status == :first_order)
-#   println("The solution is approximately: ", isapprox(stats.solution, [1.0; 1.0], atol = 1e-6))
+    stats = GenericExecutionStats(nlp)
+    stats = SolverCore.solve!(solver, nlp, stats, verbose = 50,  atol = 1e-10, rtol = 1e-10)
+    println("The status is: ", stats.status == :first_order)
+    println("The solution is approximately: ", isapprox(stats.solution, [0.0; 0.0], atol = 1e-6))
+    print(stats.solution)
+
+end
 
 
+println("example of different negative curvature handling strategies with R2N solver")
+n = 30
+nlp= ADNLPModel(
+      x -> sum(100 * (x[i + 1] - x[i]^2)^2 + (x[i] - 1)^2 for i = 1:(n - 1)),
+      collect(1:n) ./ (n + 1),
+      name = "Extended Rosenbrock";
+    )
+
+stats_armjio = R2N(nlp, verbose = 1, max_iter=5000, subsolver= :minres_qlp, npc_handler= :armijo)
+stats_sigma = R2N(nlp, verbose = 10, max_iter=5000, subsolver= :minres_qlp, npc_handler= :sigma)
+stats_prev = R2N(nlp, verbose = 10, max_iter=5000, subsolver= :minres_qlp, npc_handler= :prev)
+stats_cp = R2N(nlp, verbose = 10, max_iter=5000, subsolver= :minres_qlp, npc_handler= :cp)  
+stats_trunk = trunk(nlp, verbose = 10, max_iter=5000)
+println("The stats after 5k iteration is")
+println("Armijo: ", stats_armjio.status, " max_iter :" , stats_armjio.iter)
+println("Sigma: ", stats_sigma.status, " max_iter :" , stats_sigma.iter)
+println("Previous: ", stats_prev.status, " max_iter :" , stats_prev.iter)
+println("Cauchy Point: ", stats_cp.status, " max_iter :" , stats_cp.iter)
+println("Truncated: ", stats_trunk.status, " max_iter :" , stats_trunk.iter)
+println("\n\n\t\t===================================")
 
 # # # const npc_handler_allowed = [:armijo, :sigma, :prev, :cp]
 # for mysub in [:cg, :cr, :minres, :minres_qlp]
@@ -109,34 +133,34 @@ using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, Solve
 #   println("The solution is approximately: ", isapprox(stats.solution, [1.0; 1.0], atol = 1e-6))
 # end
 
-# testing MA97
-if LIBHSL_isfunctional() #TODO
-  f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
-  nlp = ADNLPModel(f, [-1.2; 1.0])
+# # testing MA97
+# if LIBHSL_isfunctional() #TODO
+#   f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
+#   nlp = ADNLPModel(f, [-1.2; 1.0])
 
-  stats = GenericExecutionStats(nlp)
+#   stats = GenericExecutionStats(nlp)
 
-  solver = R2NSolver(nlp, subsolver = :ma97)
-  stats = SolverCore.solve!(solver, nlp, stats, verbose = 1, max_iter = 50)
-  println("The status is: ", stats.status == :first_order)
-  println("The solution is approximately: ", isapprox(stats.solution, [1.0; 1.0], atol = 1e-6))
-else
-  @warn("HSL library is not functional. Skipping MA97 tests.")
-end
+#   solver = R2NSolver(nlp, subsolver = :ma97)
+#   stats = SolverCore.solve!(solver, nlp, stats, verbose = 1, max_iter = 50)
+#   println("The status is: ", stats.status == :first_order)
+#   println("The solution is approximately: ", isapprox(stats.solution, [1.0; 1.0], atol = 1e-6))
+# else
+#   @warn("HSL library is not functional. Skipping MA97 tests.")
+# end
 
-# testing MA57
-if LIBHSL_isfunctional() #TODO
-  f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
-  nlp = ADNLPModel(f, [-1.2; 1.0])
+# # testing MA57
+# if LIBHSL_isfunctional() #TODO
+#   f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
+#   nlp = ADNLPModel(f, [-1.2; 1.0])
 
-  stats = GenericExecutionStats(nlp)
+#   stats = GenericExecutionStats(nlp)
 
-  solver = R2NSolver(nlp, subsolver = :ma57)
-  stats = SolverCore.solve!(solver, nlp, stats, verbose = 1, max_iter = 50)
-  println("The status is: ", stats.status == :first_order)
-  println("The solution is approximately: ", isapprox(stats.solution, [1.0; 1.0], atol = 1e-6))
-else
-  @warn("HSL library is not functional. Skipping MA57 tests.")
-end
+#   solver = R2NSolver(nlp, subsolver = :ma57)
+#   stats = SolverCore.solve!(solver, nlp, stats, verbose = 1, max_iter = 50)
+#   println("The status is: ", stats.status == :first_order)
+#   println("The solution is approximately: ", isapprox(stats.solution, [1.0; 1.0], atol = 1e-6))
+# else
+#   @warn("HSL library is not functional. Skipping MA57 tests.")
+# end
 
-# testing different -ve handling strategies with Krylov solvers 
+# # testing different -ve handling strategies with Krylov solvers 
