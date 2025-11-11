@@ -240,7 +240,7 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `subsolver::Symbol  = :cr`: the subsolver to solve the shifted system. The `MinresWorkspace` which solves the shifted linear system exactly at each iteration. Using the exact solver is only possible if `nlp` is an `LBFGSModel`. See `JSOSolvers.R2N_allowed_subsolvers` for a list of available subsolvers.
+- `subsolver::Symbol  = :cg`: the subsolver to solve the shifted system. The `MinresWorkspace` which solves the shifted linear system exactly at each iteration. Using the exact solver is only possible if `nlp` is an `LBFGSModel`. See `JSOSolvers.R2N_allowed_subsolvers` for a list of available subsolvers.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
 - `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
 - `npc_handler::Symbol = :armijo`: the non_positive_curve handling strategy.
@@ -439,7 +439,7 @@ end
   δ1::Real = get(R2N_δ1, nlp),
   σmin::Real = get(R2N_σmin, nlp),
   non_mono_size::Int = get(R2N_non_mono_size, nlp),
-  subsolver::Symbol = :cr,
+  subsolver::Symbol = :cg,
   ls_c::Real = get(R2N_ls_c, nlp),
   ls_increase::Real = get(R2N_ls_increase, nlp),
   ls_decrease::Real = get(R2N_ls_decrease, nlp),
