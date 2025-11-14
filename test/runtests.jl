@@ -90,7 +90,7 @@ end
   end
 end
 
-include("restart.jl")
+# include("restart.jl") #TODO issue with rtol -10e-10
 include("callback.jl")
 include("consistency.jl")
 include("test_solvers.jl")

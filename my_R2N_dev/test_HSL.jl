@@ -53,13 +53,16 @@ end
 ma97_obj = ma97_coord(n, cols, rows, vals)
 ma97_factorize!(ma97_obj)
 
+ma97_obj.info.flag  # Check factorization status
 b_aug = randn(T, n) .* 10  # Broadcasting for random vector initialization
 x0 = ma97_solve(ma97_obj, b_aug)
 
 
+ma57_obj = ma57_coord(n, cols, rows, vals)
+ma57_factorize!(ma57_obj)
 
-
-
+# ma57_obj.info.num_negative_eigs
+# ma97_obj.info.num_neg
 
 sparse(rows, cols, vals)
 

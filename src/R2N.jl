@@ -6,14 +6,10 @@ using LinearOperators, LinearAlgebra
 using SparseArrays
 using HSL
 
-#TODO opnorm (f norm) of coo matrix
-# then move it to SparseMatrixCOO
-# Keep H as Sparse
-
-
 #TODO move to LinearOperators
 # Define a new mutable operator for A = H + σI
-mutable struct ShiftedOperator{T, V, OpH <: Union{AbstractLinearOperator{T}, AbstractMatrix{T}}} <: AbstractLinearOperator{T}
+mutable struct ShiftedOperator{T, V, OpH <: Union{AbstractLinearOperator{T}, AbstractMatrix{T}}} <:
+               AbstractLinearOperator{T}
   H::OpH
   σ::T
   n::Int
@@ -21,7 +17,9 @@ mutable struct ShiftedOperator{T, V, OpH <: Union{AbstractLinearOperator{T}, Abs
   hermitian::Bool
 end
 
-function ShiftedOperator(H::OpH) where {T, OpH <: Union{AbstractLinearOperator{T}, AbstractMatrix{T}}}
+function ShiftedOperator(
+  H::OpH,
+) where {T, OpH <: Union{AbstractLinearOperator{T}, AbstractMatrix{T}}}
   is_sym = isa(H, AbstractLinearOperator) ? H.symmetric : issymmetric(H)
   is_herm = isa(H, AbstractLinearOperator) ? H.hermitian : ishermitian(H)
   return ShiftedOperator{T, Vector{T}, OpH}(H, zero(T), size(H, 1), is_sym, is_herm)
@@ -43,7 +41,6 @@ function LinearAlgebra.mul!(
   LinearAlgebra.axpy!(A.σ, x, y)
   return y
 end
-
 
 """
     R2NParameterSet([T=Float64]; θ1, θ2, η1, η2, γ1, γ2, γ3, σmin, non_mono_size)
@@ -104,7 +101,6 @@ const R2N_ls_decrease = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5
 const R2N_ls_min_alpha = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1e-8), "T(1e-8)")
 const R2N_ls_max_alpha = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1e2), "T(1e2)")
 
-
 function R2NParameterSet(
   nlp::AbstractNLPModel;
   θ1::T = get(R2N_θ1, nlp),
@@ -134,13 +130,11 @@ function R2NParameterSet(
     Parameter(δ1, RealInterval(zero(T), one(T))),
     Parameter(σmin, RealInterval(zero(T), T(Inf))),
     Parameter(non_mono_size, IntegerRange(1, typemax(Int))),
-
     Parameter(ls_c, RealInterval(zero(T), one(T))), # c is typically (0, 1)
     Parameter(ls_increase, RealInterval(one(T), T(Inf))), # increase > 1
     Parameter(ls_decrease, RealInterval(zero(T), one(T))), # decrease < 1
     Parameter(ls_min_alpha, RealInterval(zero(T), T(Inf))),
     Parameter(ls_max_alpha, RealInterval(zero(T), T(Inf))),
-    
   )
 end
 
@@ -160,13 +154,13 @@ HSLDirectSolver: Generic wrapper for HSL direct solvers (e.g., MA97, MA57).
 - nnzh: number of Hessian nonzeros
 """
 mutable struct HSLDirectSolver{T, S} <: AbstractMASolver
-    hsl_obj::S
-    rows::Vector{Int}
-    cols::Vector{Int}
-    vals::Vector{T}
-    n::Int
-    nnzh::Int
-    work::Vector{T} # workspace for solves # used for ma57 solver 
+  hsl_obj::S
+  rows::Vector{Int}
+  cols::Vector{Int}
+  vals::Vector{T}
+  n::Int
+  nnzh::Int
+  work::Vector{T} # workspace for solves # used for ma57 solver 
 end
 
 """
@@ -175,32 +169,31 @@ end
 Constructs an HSLDirectSolver for the given NLP model and HSL solver constructor (e.g., ma97_coord or ma57_coord).
 """
 function HSLDirectSolver(nlp::AbstractNLPModel{T, V}, hsl_constructor) where {T, V}
-    n = nlp.meta.nvar
-    nnzh = nlp.meta.nnzh
-    total_nnz = nnzh + n
+  n = nlp.meta.nvar
+  nnzh = nlp.meta.nnzh
+  total_nnz = nnzh + n
 
-    rows = Vector{Int}(undef, total_nnz)
-    cols = Vector{Int}(undef, total_nnz)
-    vals = Vector{T}(undef, total_nnz) 
+  rows = Vector{Int}(undef, total_nnz)
+  cols = Vector{Int}(undef, total_nnz)
+  vals = Vector{T}(undef, total_nnz)
 
-    hess_structure!(nlp, view(rows, 1:nnzh), view(cols, 1:nnzh))
-    hess_coord!(nlp, nlp.meta.x0, view(vals, 1:nnzh))
+  hess_structure!(nlp, view(rows, 1:nnzh), view(cols, 1:nnzh))
+  hess_coord!(nlp, nlp.meta.x0, view(vals, 1:nnzh))
 
-    @inbounds for i = 1:n
-        rows[nnzh + i] = i
-        cols[nnzh + i] = i
-        vals[nnzh + i] = one(T)
-    end
+  @inbounds for i = 1:n
+    rows[nnzh + i] = i
+    cols[nnzh + i] = i
+    vals[nnzh + i] = one(T)
+  end
 
-    hsl_obj = hsl_constructor(n, cols, rows, vals)
-    if hsl_constructor == ma57_coord
-        work = Vector{T}(undef, n * size(nlp.meta.x0, 2)) # size(b, 2)
-    else
-        work = Vector{T}(undef, 0) # No workspace needed for MA97
-    end
-    return HSLDirectSolver{T, typeof(hsl_obj)}(hsl_obj, rows, cols, vals, n, nnzh, work)
+  hsl_obj = hsl_constructor(n, cols, rows, vals)
+  if hsl_constructor == ma57_coord
+    work = Vector{T}(undef, n * size(nlp.meta.x0, 2)) # size(b, 2)
+  else
+    work = Vector{T}(undef, 0) # No workspace needed for MA97
+  end
+  return HSLDirectSolver{T, typeof(hsl_obj)}(hsl_obj, rows, cols, vals, n, nnzh, work)
 end
-
 
 const npc_handler_allowed = [:armijo, :sigma, :prev, :cp]
 
@@ -258,7 +251,7 @@ The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 # Callback
 $(Callback_docstring)
 
-# Examples #TODO
+# Examples
 ```jldoctest
 using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> sum(x.^2), ones(3))
@@ -359,7 +352,7 @@ function R2NSolver(
   A = nothing
 
   local H, r2_subsolver
-  
+
   if subsolver == :ma97
     LIBHSL_isfunctional() || error("HSL library is not functional")
     r2_subsolver = HSLDirectSolver(nlp, ma97_coord)
@@ -368,9 +361,7 @@ function R2NSolver(
     LIBHSL_isfunctional() || error("HSL library is not functional")
     r2_subsolver = HSLDirectSolver(nlp, ma57_coord)
     H = spzeros(T, nvar, nvar)#TODO change this 
-
-  else  # not using ma971
-    # H = isa(nlp, QuasiNewtonModel) ? nlp.op : hess_op!(nlp, x, Hs) 
+  else
     if subsolver == :shifted_lbfgs
       H = nlp.op
       r2_subsolver = ShiftedLBFGSSolver()
@@ -392,7 +383,6 @@ function R2NSolver(
   obj_vec = fill(typemin(T), non_mono_size)
   Sub = typeof(r2_subsolver)
 
-
   return R2NSolver{T, V, Op, ShiftedOp, Sub}(
     x,
     xt,
@@ -412,18 +402,21 @@ function R2NSolver(
 end
 #TODO Prof. Orban, check if I need to reset H in reset! function
 function SolverCore.reset!(solver::R2NSolver{T}) where {T}
-    fill!(solver.obj_vec, typemin(T))
-    reset!(solver.H)
-    # If using Krylov subsolvers, update the shifted operator
-    if solver.r2_subsolver isa CgWorkspace || solver.r2_subsolver isa CrWorkspace
-        solver.A = ShiftedOperator(solver.H)
-    end
-    solver
+  fill!(solver.obj_vec, typemin(T))
+  reset!(solver.H)
+  # If using Krylov subsolvers, update the shifted operator
+  if solver.r2_subsolver isa CgWorkspace || solver.r2_subsolver isa CrWorkspace
+    solver.A = ShiftedOperator(solver.H)
+  end
+  solver
 end
 function SolverCore.reset!(solver::R2NSolver{T}, nlp::AbstractNLPModel) where {T}
   fill!(solver.obj_vec, typemin(T))
-  # @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
-  # solver.H = isa(nlp, QuasiNewtonModel) ? nlp.op : hess_op!(nlp, solver.x, solver.Hs)
+  reset!(solver.H)
+  # If using Krylov subsolvers, update the shifted operator
+  if solver.r2_subsolver isa CgWorkspace || solver.r2_subsolver isa CrWorkspace
+    solver.A = ShiftedOperator(solver.H)
+  end
   solver
 end
 
@@ -558,21 +551,20 @@ function SolverCore.solve!(
     )
     @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk])
   end
-  cp_step_log = " "
+  # cp_step_log = " "
   if verbose > 0 && mod(stats.iter, verbose) == 0
     @info log_header(
-      [:iter, :f, :dual, :σ, :ρ, :sub_iter, :dir, :cp_step_log, :sub_status],
-      [Int, Float64, Float64, Float64, Float64, Int, String, String, String],
+      [:iter, :f, :dual, :σ, :ρ, :sub_iter, :dir, :sub_status],
+      [Int, Float64, Float64, Float64, Float64, Int, String, String],
       hdr_override = Dict(
         :f => "f(x)",
         :dual => "‖∇f‖",
         :sub_iter => "subiter",
         :dir => "dir",
-        :cp_step_log => "cp step",
         :sub_status => "status",
       ),
     )
-    @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk, 0, " ", " ", " "])
+    @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk, 0, " ", " "])
   end
 
   set_status!(
@@ -595,6 +587,10 @@ function SolverCore.solve!(
   solver.subtol = subtol
   r2_subsolver = solver.r2_subsolver
 
+  if r2_subsolver isa ShiftedLBFGSSolver
+    scp_flag = false # we don't need to do scp comparison for shifted lbfgs no matter what user says
+  end
+
   callback(nlp, solver, stats)
   subtol = solver.subtol
   σk = solver.σ
@@ -609,30 +605,32 @@ function SolverCore.solve!(
     scp_recal = true # Recalculate the Cauchy point if needed
 
     # Compute the Cauchy step.
-    # Note that we use buffer values Hs to avoid reallocating memory.
-    # mul!(Hs, H, ∇fk) #TODO check for HSL
-    if r2_subsolver isa HSLDirectSolver
-      coo_sym_prod!(r2_subsolver.rows, r2_subsolver.cols, r2_subsolver.vals, ∇fk, Hs)
-    else
-      mul!(Hs, H, ∇fk) # Use linear operator
-    end
-    curv = dot(∇fk, Hs)
-    slope = σk * norm_∇fk^2 # slope= σ * ||∇f||^2 
-    γ_k = (curv + slope) / norm_∇fk^2
-    if γ_k > 0
-      cp_step_log = "α_k"
-      ν_k = 2*(1-δ1) / (γ_k)
-    else
-      # we have to calcualte the scp, since we have encounter a negative curvature
-      if H isa AbstractLinearOperator
-        λmax, found_λ = opnorm(H) # This uses iterative methods (p=2)
+
+    if scp_flag == true || npc_handler == :cp
+      if r2_subsolver isa HSLDirectSolver
+        coo_sym_prod!(r2_subsolver.rows, r2_subsolver.cols, r2_subsolver.vals, ∇fk, Hs)
       else
-        #TODO check
-        λmax = norm(view(r2_subsolver.vals, 1:r2_subsolver.nnzh)) # f-norm of the H 
-        found_λ = true # We assume the Inf-norm was found
+        mul!(Hs, H, ∇fk) # Use linear operator
       end
-      cp_step_log = "ν_k"
-      ν_k = θ1 / (λmax + σk)
+
+      curv = dot(∇fk, Hs)
+      slope = σk * norm_∇fk^2 # slope= σ * ||∇f||^2 
+      γ_k = (curv + slope) / norm_∇fk^2
+
+      if γ_k > 0
+        # cp_step_log = "α_k"
+        ν_k = 2*(1-δ1) / (γ_k)
+      else
+        # we have to calcualte the scp, since we have encounter a negative curvature
+        if H isa AbstractLinearOperator
+          λmax, found_λ = opnorm(H) # This uses iterative methods (p=2)
+        else
+          λmax = norm(view(r2_subsolver.vals, 1:r2_subsolver.nnzh)) # f-norm of the H  #TODO double check if we need sigma
+          found_λ = true # We assume the Inf-norm was found
+        end
+        # cp_step_log = "ν_k"
+        ν_k = θ1 / (λmax + σk)
+      end
     end
 
     # Solving for step direction s_k
@@ -645,24 +643,23 @@ function SolverCore.solve!(
     subsolver_solved, sub_stats, subiter, npcCount =
       subsolve!(r2_subsolver, solver, nlp, s, zero(T), n, subsolver_verbose)
 
-    #TODO Prof. Orban, trunk and tron  won't do this
     if !subsolver_solved && npcCount == 0
       @warn("Subsolver failed to solve the system")
-      # It might be better to increase σ and retry instead of stopping,
       # but for now, we'll stop.
-      break 
+      # TODO exit cleaning 
+      break
     end
     if !(r2_subsolver isa ShiftedLBFGSSolver) && !(r2_subsolver isa HSLDirectSolver)
       if r2_subsolver.stats.npcCount >= 1  #npc case
-        if npc_handler == :armijo 
+        if npc_handler == :armijo
           # --- Algorithm 3: From MINRES Paper --- 
           r2_subsolver.stats.npcCount = 0 # TODO check for Subsolver, it need to reset this 
-          
+
           # 1. Get current state from R2N solver
           α = one(T) * 1.0     # Initial step size guess
           f0 = stats.objective   # Current objective value, f(x)
           dir = r2_subsolver.npc_dir # The non-positive curvature direction
-          
+
           # ∇fk = -∇f(x), so grad = -∇fk
           grad_dir = dot(-∇fk, dir)
 
@@ -688,16 +685,16 @@ function SolverCore.solve!(
 
               xt .= x .+ α_new .* dir
               fck_new = obj(nlp, xt)
-              
+
               if fck_new > f0 + ls_c * α_new * grad_dir
                 break
               end
-              
+
               α = α_new
               fck = fck_new
             end
           end
-          
+
           # 6. Store the final computed step
           s .= α .* dir
           # --- End of Algorithm 3 ---
@@ -711,6 +708,8 @@ function SolverCore.solve!(
           scp_recal = false # we don't need to recalculate the scp later
         end
       end
+    elseif r2_subsolver isa HSLDirectSolver
+      #TODO
     end
 
     if scp_flag && scp_recal # if the case was cp, then s = scp already
@@ -722,11 +721,17 @@ function SolverCore.solve!(
     end
     if npc_handler == :sigma && r2_subsolver.stats.npcCount >= 1  # non-positive curvature case happen and the npc_handler is sigma
       step_accepted = false
+      r2_subsolver.stats.npcCount = 0 # reset for next iteration
     else
       # Correctly compute curvature s' * B * s
-      #TODO Prof Orban, check if this is correct
       if solver.r2_subsolver isa HSLDirectSolver
-        coo_sym_prod!(solver.r2_subsolver.rows, solver.r2_subsolver.cols, solver.r2_subsolver.vals, s, Hs)
+        coo_sym_prod!(
+          solver.r2_subsolver.rows,
+          solver.r2_subsolver.cols,
+          solver.r2_subsolver.vals,
+          s,
+          Hs,
+        )
       else
         mul!(Hs, H, s) # Use linear operator
       end
@@ -769,7 +774,7 @@ function SolverCore.solve!(
         end
         # we need to update H if we use Ma97 or ma57
         if solver.r2_subsolver isa HSLDirectSolver
-           hess_coord!(nlp, x, view(solver.r2_subsolver.vals, 1:solver.r2_subsolver.nnzh))
+          hess_coord!(nlp, x, view(solver.r2_subsolver.vals, 1:solver.r2_subsolver.nnzh))
         end
       else # η1 > ρk
         σk = max(σmin, γ2 * σk)
@@ -795,17 +800,7 @@ function SolverCore.solve!(
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       dir_stat = step_accepted ? "↘" : "↗"
-      @info log_row([
-        stats.iter,
-        stats.objective,
-        norm_∇fk,
-        σk,
-        ρk,
-        subiter,
-        cp_step_log,
-        dir_stat,
-        sub_stats,
-      ])
+      @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk, subiter, dir_stat, sub_stats])
     end
 
     if stats.status == :user
@@ -911,46 +906,44 @@ end
 Solves the shifted system using the selected HSL direct solver (MA97 or MA57).
 """
 function subsolve!(
-    r2_subsolver::HSLDirectSolver{T, S},
-    R2N::R2NSolver,
-    nlp::AbstractNLPModel,
-    s,
-    atol,
-    n,
-    subsolver_verbose,
+  r2_subsolver::HSLDirectSolver{T, S},
+  R2N::R2NSolver,
+  nlp::AbstractNLPModel,
+  s,
+  atol,
+  n,
+  subsolver_verbose,
 ) where {T, S}
+  g = R2N.gx
+  σ = R2N.σ
 
-    g = R2N.gx
-    σ = R2N.σ
+  @inbounds for i = 1:n
+    r2_subsolver.vals[r2_subsolver.nnzh + i] = σ
+  end
 
-    @inbounds for i = 1:n
-        r2_subsolver.vals[r2_subsolver.nnzh + i] = σ
+  # Dispatch to correct factorization/solve based on S
+  #TODO put this in a separate function
+  if S <: Ma97{T}
+    ma97_factorize!(r2_subsolver.hsl_obj)
+    if r2_subsolver.hsl_obj.info.flag != 0
+      @warn("MA97 factorization failed with flag = $(r2_subsolver.hsl_obj.info.flag)")
+      return false, :err, 1, 0
     end
+    s .= g
+    ma97_solve!(r2_subsolver.hsl_obj, s)
+  elseif S <: Ma57{T}
+    ma57_factorize!(r2_subsolver.hsl_obj)
+    # if r2_subsolver.hsl_obj.info.flag != 0
+    #     @warn("MA57 factorization failed with flag = $(r2_subsolver.hsl_obj.info.flag)")
+    #     return false, :err, 1, 0
+    # end
+    s .= g
+    ma57_solve!(r2_subsolver.hsl_obj, s, r2_subsolver.work)
+  else
+    error("Unknown HSL solver type")
+  end
 
-    # Dispatch to correct factorization/solve based on S
-    #TODO put this in a separate function
-    if S <: Ma97{T}
-        ma97_factorize!(r2_subsolver.hsl_obj)
-        if r2_subsolver.hsl_obj.info.flag != 0
-            @warn("MA97 factorization failed with flag = $(r2_subsolver.hsl_obj.info.flag)")
-            return false, :err, 1, 0
-        end
-        s .= g
-        ma97_solve!(r2_subsolver.hsl_obj, s)
-    elseif S <: Ma57{T}
-        ma57_factorize!(r2_subsolver.hsl_obj)
-        # if r2_subsolver.hsl_obj.info.flag != 0
-        #     @warn("MA57 factorization failed with flag = $(r2_subsolver.hsl_obj.info.flag)")
-        #     return false, :err, 1, 0
-        # end
-        s .= g
-        ma57_solve!(r2_subsolver.hsl_obj, s, r2_subsolver.work)
-    else
-        error("Unknown HSL solver type")
-    end
-
-    return true, :first_order, 1, 0
+  return true, :first_order, 1, 0
 end
 
 # function ma_factorize(r2_subsolver::HSLDirectSolver)
- 

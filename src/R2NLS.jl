@@ -609,8 +609,8 @@ function SolverCore.solve!(
         σk,
         ρk,
         subiter,
-        cp_step_log,
         dir_stat,
+        cp_step_log,
         sub_stats,
       ])
     end
