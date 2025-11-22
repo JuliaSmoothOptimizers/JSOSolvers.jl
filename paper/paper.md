@@ -58,7 +58,7 @@ TRON and TRUNK have specialized implementations leveraging the structure of resi
 A key strength of `JSOSolvers.jl` lies in its efficiency and flexibility.
 The solvers support fully in-place execution, allowing repeated solves without additional memory allocation, which is particularly beneficial in high-performance and GPU computing environments where memory management is critical.
 The solvers support any floating-point type, including extended and multi-precision types such as BigFloat, DoubleFloats or QuadMath.
-In addition, several solvers support GPU arrays, broadening the range of hardware where the package can be effectively deployed, for instance when used together with `ExaModels.jl` [@shin2024accelerating].
+Moreover, TRUNK, TRUNK-NLS, and FOMO support GPU arrays, broadening the range of hardware where the package can be effectively deployed, for instance when used together with `ExaModels.jl` [@shin2024accelerating].
 The package documentation and \url{https://jso.dev/tutorials} provide examples illustrating the use of different floating-point systems.
 Furthermore, the solvers expose in-place function variants, allowing multiple optimization problems with identical dimensions and data types to be solved efficiently without reallocations.
 
