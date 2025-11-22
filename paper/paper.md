@@ -107,7 +107,7 @@ include("benchmark.jl") # run the benchmark and store the result in a JLD2 file
 include("analyze_benchmark.jl") # make the figure
 ```
 -->
-![Unconstrained solvers on CUTEst with respect to the elapsed time.](2025-09-06_ipopt_lbfgs_trunk_tron_cutest_Float64_0_291_time_pp.png){ width=100% }
+![Unconstrained solvers on CUTEst with respect to the elapsed time.](2025-09-06_ipopt_lbfgs_trunk_tron_cutest_Float64_0_291_time_pp.pdf){ width=100% }
 
 # Acknowledgements
 
