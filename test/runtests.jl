@@ -1,12 +1,14 @@
 # stdlib
 using Printf, LinearAlgebra, Logging, SparseArrays, Test
-
+using CUDA
 # additional packages
 using ADNLPModels, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
 using NLPModelsTest, SolverParameters
 
 # this package
 using JSOSolvers
+
+include("test-gpu.jl")
 
 @testset "Test parameterset" begin
   @testset "Test unconstrained parameters $paramset" for (paramset, fun) in (
