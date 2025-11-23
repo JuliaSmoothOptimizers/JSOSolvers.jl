@@ -1,6 +1,6 @@
 # stdlib
 using Printf, LinearAlgebra, Logging, SparseArrays, Test
-
+using CUDA
 # additional packages
 using ADNLPModels, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
 using NLPModelsTest, SolverParameters

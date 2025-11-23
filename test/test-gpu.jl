@@ -1,5 +1,3 @@
-using CUDA, NLPModelsTest
-
 if CUDA.functional()
   @testset "GPU multiple precision support tests (NLP)" begin
     @testset "GPU multiple precision support of problem $p with $fun (NLP)" for p in
@@ -17,7 +15,7 @@ if CUDA.functional()
     end
 
     @testset "GPU multiple precision support of problem $p with $fun (NLS)" for p in
-                                                                                NLPModelsTest.nlp_problems,
+                                                                                NLPModelsTest.nls_problems,
       fun in [trunk]
 
       nls = eval(Symbol(p))(CuArray{Float64, 1, CUDA.DeviceMemory})
