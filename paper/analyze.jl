@@ -46,6 +46,7 @@ for solver ∈ keys(stats)
   println(io, "Solver: $solver")
   pretty_stats(io, stats[solver][!, cols], hdr_override = header)
 end
+close(io)
 
 # Path because of Ipopt on windows issue:
 stats[:ipopt].elapsed_time .= stats[:ipopt].real_time
@@ -72,7 +73,7 @@ for solver ∈ keys(stats)
   push!(tim, solver => tim_solver)
 end
 tim_best = ones(nproblems) * Inf # time of the best 
-for i=1:nproblems
+for i = 1:nproblems
   for solver ∈ keys(stats)
     tim_best[i] = min(tim[solver][i], tim_best[i])
   end
@@ -85,11 +86,19 @@ end
 using Plots
 gr()
 
+# Save individual performance profiles
 for i = 1:length(costs)
   title_name = "" # "Unconstrained solvers on CUTEst w.r.t. $(costnames[i])"
-  performance_profile(stats, costs[i], title=title_name)
-  png("$name" * "_" * costnames[i] * "_pp.png")
+  performance_profile(stats, costs[i], title = title_name)
+
+  base = string(name, "_", costnames[i], "_pp")
+  # Save as SVG and PDF (add "eps" here if you also want EPS)
+  savefig("$base.svg")
+  savefig("$base.pdf")
 end
 
+# Combined profile_solvers plot
 profile_solvers(stats, costs, costnames)
-png("$name")
+# Save the combined figure as SVG and PDF
+savefig("$name.svg")
+savefig("$name.pdf")
