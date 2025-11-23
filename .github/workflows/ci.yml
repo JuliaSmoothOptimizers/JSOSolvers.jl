@@ -26,15 +26,15 @@ jobs:
             os: macos-latest
             arch: arm64
             allow_failure: false
-          - version: 'nightly'
+          - version: 'pre'
             os: ubuntu-latest
             arch: x64
             allow_failure: true
-          - version: 'nightly'
+          - version: 'pre'
             os: macOS-latest
             arch: x64
             allow_failure: true
-          - version: 'nightly'
+          - version: 'pre'
             os: windows-latest
             arch: x64
             allow_failure: true
