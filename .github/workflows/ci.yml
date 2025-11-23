@@ -44,14 +44,12 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
-      - name: List files for debug
-        run: ls -R
       - uses: actions/cache@v4
         env:
           cache-name: cache-artifacts
         with:
           path: ~/.julia/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('Project.toml') }}
           restore-keys: |
             ${{ runner.os }}-test-${{ env.cache-name }}-
             ${{ runner.os }}-test-
