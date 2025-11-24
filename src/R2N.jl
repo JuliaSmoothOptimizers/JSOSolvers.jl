@@ -599,14 +599,115 @@ function SolverCore.solve!(
 
   ν_k = one(T) # used for scp calculation
   γ_k = zero(T)
-  scp_recal = true
 
   while !done
-    scp_recal = true # Recalculate the Cauchy point if needed
 
+    # Solving for step direction s_k
+    ∇fk .*= -1
+    if r2_subsolver isa CgWorkspace || r2_subsolver isa CrWorkspace
+      # Update the shift in the operator
+      solver.A.σ = σk
+      solver.H = H
+    end
+    subsolver_solved, sub_stats, subiter, npcCount =
+      subsolve!(r2_subsolver, solver, nlp, s, zero(T), n, subsolver_verbose)
+
+    if !subsolver_solved && npcCount == 0
+      @warn("Subsolver failed to solve the system")
+      # TODO exit cleaning 
+      break
+    end
+
+    calc_scp_needed = false
+    force_sigma_increase = false
+
+    if r2_subsolver isa HSLDirectSolver
+      num_neg, num_zero = get_inertia(r2_subsolver)
+      coo_sym_prod!(r2_subsolver.rows, r2_subsolver.cols, r2_subsolver.vals, s, Hs)
+
+      # Check Singularity (Zero Eigenvalues)          # assume Inconsistent could happen then increase the sigma
+      if num_zero > 0
+        force_sigma_increase = true #TODO Prof. Orban, for now we just increase sigma when we have zero eigenvalues
+      end
+
+      # Check Indefinite (Negative Eigenvalues)
+      if !force_sigma_increase && num_neg > 0
+        # Curvature = s' (H+σI) s
+        curv_s = dot(s, Hs)
+
+        if curv_s < 0
+          npcCount = 1 # we need to set this for later use
+          if npc_handler == :prev
+            npc_handler = :armijo  #Force the npc_handler to be armijo and not :prev since we can not have that
+          end
+        else
+          # Step has positive curvature, but matrix has negative eigs.
+          #"compute scp and compare"
+          calc_scp_needed = true
+        end
+      end
+    end
+
+    if !(r2_subsolver isa ShiftedLBFGSSolver) && npcCount >= 1  #npc case
+      if npc_handler == :armijo
+        # --- Algorithm 3: From MINRES Paper --- 
+        npcCount = 0 # TODO check for Subsolver, it need to reset this 
+
+        # 1. Get current state from R2N solver
+        α = one(T) * 1.0     # Initial step size guess
+        f0 = stats.objective   # Current objective value, f(x)
+        if r2_subsolver isa HSLDirectSolver
+          dir = s
+        else
+          dir = r2_subsolver.npc_dir # The non-positive curvature direction
+        end
+        # ∇fk = -∇f(x), so grad = -∇fk
+        grad_dir = dot(-∇fk, dir)
+
+        # 3. First Try (α = 1.0)
+        xt .= x .+ α .* dir
+        fck = obj(nlp, xt) # f(x + α*dir)
+
+        # Check Armijo violation using our new parameter 'ls_c'
+        if fck > f0 + ls_c * α * grad_dir
+          # 4. Backward Tracking (Algorithm 2)
+          while fck > f0 + ls_c * α * grad_dir && α > ls_min_alpha
+            α *= ls_decrease # Use parameter
+            xt .= x .+ α .* dir
+            fck = obj(nlp, xt)
+          end
+        else
+          # 5. Forward Tracking
+          while true
+            α_new = α * ls_increase # Use parameter
+            if α_new > ls_max_alpha # Use parameter
+              break
+            end
+
+            xt .= x .+ α_new .* dir
+            fck_new = obj(nlp, xt)
+
+            if fck_new > f0 + ls_c * α_new * grad_dir
+              break
+            end
+
+            α = α_new
+            fck = fck_new
+          end
+        end
+
+        # 6. Store the final computed step
+        s .= α .* dir
+        # --- End of Algorithm 3 ---
+
+      elseif npc_handler == :prev #Cr and cg will return the last iteration s
+        s .= r2_subsolver.x
+      end
+    end
+
+    ∇fk .*= -1 # flip back to original +∇f
     # Compute the Cauchy step.
-
-    if scp_flag == true || npc_handler == :cp
+    if scp_flag == true || npc_handler == :cp || calc_scp_needed
       if r2_subsolver isa HSLDirectSolver
         coo_sym_prod!(r2_subsolver.rows, r2_subsolver.cols, r2_subsolver.vals, ∇fk, Hs)
       else
@@ -633,95 +734,22 @@ function SolverCore.solve!(
       end
     end
 
-    # Solving for step direction s_k
-    ∇fk .*= -1
-    if r2_subsolver isa CgWorkspace || r2_subsolver isa CrWorkspace
-      # Update the shift in the operator
-      solver.A.σ = σk
-      solver.H = H
-    end
-    subsolver_solved, sub_stats, subiter, npcCount =
-      subsolve!(r2_subsolver, solver, nlp, s, zero(T), n, subsolver_verbose)
+    ∇fk .*= -1 # flip to -∇f 
 
-    if !subsolver_solved && npcCount == 0
-      @warn("Subsolver failed to solve the system")
-      # but for now, we'll stop.
-      # TODO exit cleaning 
-      break
-    end
-    if !(r2_subsolver isa ShiftedLBFGSSolver) && !(r2_subsolver isa HSLDirectSolver)
-      if r2_subsolver.stats.npcCount >= 1  #npc case
-        if npc_handler == :armijo
-          # --- Algorithm 3: From MINRES Paper --- 
-          r2_subsolver.stats.npcCount = 0 # TODO check for Subsolver, it need to reset this 
-
-          # 1. Get current state from R2N solver
-          α = one(T) * 1.0     # Initial step size guess
-          f0 = stats.objective   # Current objective value, f(x)
-          dir = r2_subsolver.npc_dir # The non-positive curvature direction
-
-          # ∇fk = -∇f(x), so grad = -∇fk
-          grad_dir = dot(-∇fk, dir)
-
-          # 3. First Try (α = 1.0)
-          xt .= x .+ α .* dir
-          fck = obj(nlp, xt) # f(x + α*dir)
-
-          # Check Armijo violation using our new parameter 'ls_c'
-          if fck > f0 + ls_c * α * grad_dir
-            # 4. Backward Tracking (Algorithm 2)
-            while fck > f0 + ls_c * α * grad_dir && α > ls_min_alpha
-              α *= ls_decrease # Use parameter
-              xt .= x .+ α .* dir
-              fck = obj(nlp, xt)
-            end
-          else
-            # 5. Forward Tracking
-            while true
-              α_new = α * ls_increase # Use parameter
-              if α_new > ls_max_alpha # Use parameter
-                break
-              end
-
-              xt .= x .+ α_new .* dir
-              fck_new = obj(nlp, xt)
-
-              if fck_new > f0 + ls_c * α_new * grad_dir
-                break
-              end
-
-              α = α_new
-              fck = fck_new
-            end
-          end
-
-          # 6. Store the final computed step
-          s .= α .* dir
-          # --- End of Algorithm 3 ---
-
-        elseif npc_handler == :prev #Cr and cg will return the last iteration s
-          s .= r2_subsolver.x
-        elseif npc_handler == :cp
-          # Cauchy point
-          scp .= ν_k * ∇fk # the ∇fk is already negative
-          s .= scp
-          scp_recal = false # we don't need to recalculate the scp later
-        end
-      end
-    elseif r2_subsolver isa HSLDirectSolver
-      #TODO
-    end
-
-    if scp_flag && scp_recal # if the case was cp, then s = scp already
+    if scp_flag == true || npc_handler == :cp || calc_scp_needed
       # Based on the flag, scp is calcualted
-      scp .= ν_k * ∇fk # the ∇fk is already negative
-      if norm(s) > θ2 * norm(scp)
+      scp .= ν_k * ∇fk
+      if npc_handler == :cp && npcCount >= 1
+        s .= scp
+      elseif norm(s) > θ2 * norm(scp)
         s .= scp
       end
     end
-    if npc_handler == :sigma && r2_subsolver.stats.npcCount >= 1  # non-positive curvature case happen and the npc_handler is sigma
+    if force_sigma_increase || (npc_handler == :sigma && npcCount >= 1) # non-positive curvature case happen and the npc_handler is sigma
       step_accepted = false
-      r2_subsolver.stats.npcCount = 0 # reset for next iteration
+      σk = max(σmin, γ2 * σk)
+      solver.σ = σk
+      npcCount = 0 # reset for next iteration
     else
       # Correctly compute curvature s' * B * s
       if solver.r2_subsolver isa HSLDirectSolver
@@ -905,6 +933,81 @@ end
 
 Solves the shifted system using the selected HSL direct solver (MA97 or MA57).
 """
+# Wrapper for MA97
+function get_inertia(solver::HSLDirectSolver{T, S}) where {T, S <: Ma97{T}}
+  # MA97 provides num_neg directly. Rank is used to find num_zero.
+  n = solver.n
+  num_neg = solver.hsl_obj.info.num_neg
+  # If matrix is full rank, num_zero is 0.
+  num_zero = n - solver.hsl_obj.info.matrix_rank
+  return num_neg, num_zero
+end
+
+# Wrapper for MA57
+function get_inertia(solver::HSLDirectSolver{T, S}) where {T, S <: Ma57{T}}
+  # MA57 uses different field names
+  n = solver.n
+  num_neg = solver.hsl_obj.info.num_negative_eigs
+  num_zero = n - solver.hsl_obj.info.rank
+  return num_neg, num_zero
+end
+
+# Fallback for other solvers (ShiftedLBFGS, Krylov)
+# They don't provide direct inertia, so we return -1 (unknown)
+get_inertia(solver) = (-1, -1)
+
+"""
+Internal helper for HSLDirectSolver: fallback if an unsupported HSL type is used.
+"""
+function _hsl_factor_and_solve!(solver::HSLDirectSolver{T, S}, g, s) where {T, S}
+  error("Unsupported HSL solver type $(S)")
+end
+
+"""
+Factorize and solve using MA97.
+"""
+# --- MA97 Implementation ---
+function _hsl_factor_and_solve!(solver::HSLDirectSolver{T, S}, g, s) where {T, S <: Ma97{T}}
+  ma97_factorize!(solver.hsl_obj)
+
+  # Check for fatal errors only (flag < 0). 
+  # Warnings (flag > 0) usually imply singularity, which we handle in the main loop.
+  if solver.hsl_obj.info.flag < 0
+    return false, :err, 0, 0
+  end
+
+  # Solve (MA97 handles singular systems by returning a solution)
+  s .= g
+  ma97_solve!(solver.hsl_obj, s)
+
+  return true, :first_order, 1, 0
+end
+
+"""
+Factorize and solve using MA57.
+"""
+function _hsl_factor_and_solve!(solver::HSLDirectSolver{T, S}, g, s) where {T, S <: Ma57{T}}
+  ma57_factorize!(solver.hsl_obj)
+
+  # MA57 returns flag=4 for singular matrices. This is NOT an error for us.
+  # We only return false if it's a fatal error (flag < 0).
+  if solver.hsl_obj.info.flag < 0
+    return false, :err, 0, 0
+  end
+
+  # Solve
+  s .= g
+  ma57_solve!(solver.hsl_obj, s, solver.work)
+
+  return true, :first_order, 1, 0
+end
+
+"""
+    subsolve!(r2_subsolver::HSLDirectSolver, ...)
+
+Multiple-dispatch wrapper: updates the shifted diagonal then delegates to a
+solver-specific `_hsl_factor_and_solve!` method (MA97 / MA57).
+"""
 function subsolve!(
   r2_subsolver::HSLDirectSolver{T, S},
   R2N::R2NSolver,
@@ -916,34 +1019,8 @@ function subsolve!(
 ) where {T, S}
   g = R2N.gx
   σ = R2N.σ
-
   @inbounds for i = 1:n
     r2_subsolver.vals[r2_subsolver.nnzh + i] = σ
   end
-
-  # Dispatch to correct factorization/solve based on S
-  #TODO put this in a separate function
-  if S <: Ma97{T}
-    ma97_factorize!(r2_subsolver.hsl_obj)
-    if r2_subsolver.hsl_obj.info.flag != 0
-      @warn("MA97 factorization failed with flag = $(r2_subsolver.hsl_obj.info.flag)")
-      return false, :err, 1, 0
-    end
-    s .= g
-    ma97_solve!(r2_subsolver.hsl_obj, s)
-  elseif S <: Ma57{T}
-    ma57_factorize!(r2_subsolver.hsl_obj)
-    # if r2_subsolver.hsl_obj.info.flag != 0
-    #     @warn("MA57 factorization failed with flag = $(r2_subsolver.hsl_obj.info.flag)")
-    #     return false, :err, 1, 0
-    # end
-    s .= g
-    ma57_solve!(r2_subsolver.hsl_obj, s, r2_subsolver.work)
-  else
-    error("Unknown HSL solver type")
-  end
-
-  return true, :first_order, 1, 0
+  return _hsl_factor_and_solve!(r2_subsolver, g, s)
 end
-
-# function ma_factorize(r2_subsolver::HSLDirectSolver)

@@ -262,3 +262,56 @@ function subsolve!(
 
   return true, :first_order, 1, 0
 end
+
+
+
+
+# Example of creating and using the MA97Solver
+#  singular system
+A = [1000.0 0 0;
+     0 -0.001 1;
+     0 0 1]
+
+A = [0.0 0 0;
+     0 1 0;
+     0 0 1]
+
+b = [1,0.0,0]
+
+
+LBL = Ma97(A)
+ma97_factorize!(LBL)
+x_sol = ma97_solve(LBL, b)  # or x = LBL \ rhs
+dot(x_sol ,b)
+
+info = LBL.info
+println("flag:", info.flag)
+println("flag68:", info.flag68)
+println("flag77:", info.flag77)
+println("matrix_dup:", info.matrix_dup)
+println("matrix_missing_diag:", info.matrix_missing_diag)
+println("matrix_outrange:", info.matrix_outrange)
+println("matrix_rank:", info.matrix_rank)
+println("num_negative_eigs:", info.num_neg)
+
+LBL_57 = Ma57(A)
+ma57_factorize!(LBL_57)
+x_sol_57 = ma57_solve(LBL_57, b)  # or x = LBL \ rhs
+
+info_57 = LBL_57.info
+println("backward_error1:        ", info_57.backward_error1)
+println("backward_error2:        ", info_57.backward_error2)
+println("cond1:                  ", info_57.cond1)
+println("cond2:                  ", info_57.cond2)
+println("error_inf_norm:         ", info_57.error_inf_norm)
+println("info (status flag):     ", info_57.info)
+println("largest_front:          ", info_57.largest_front)
+println("matrix_inf_norm:        ", info_57.matrix_inf_norm)
+println("num_2x2_pivots:         ", info_57.num_2x2_pivots)
+println("num_delayed_pivots:     ", info_57.num_delayed_pivots)
+println("num_negative_eigs:      ", info_57.num_negative_eigs)
+println("num_pivot_sign_changes: ", info_57.num_pivot_sign_changes)
+println("rank:                   ", info_57.rank)
+println("rinfo:                  ", info_57.rinfo)
+println("scaled_residuals:       ", info_57.scaled_residuals)
+println("solution_inf_norm:      ", info_57.solution_inf_norm)
