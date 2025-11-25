@@ -1,9 +1,10 @@
 # [JSOSolvers.jl documentation](@id Home)
 
 `JSOSolvers.jl` is a collection of Julia optimization solvers for nonlinear, potentially nonconvex, continuous optimization problems that are unconstrained or bound-constrained:
-\begin{equation}\label{eq:nlp}
-    \underset{x \in \mathbb{R}^n}{\text{minimize}} \ f(x) \quad \text{subject to} \quad \ell \leq x \leq u,
-\end{equation}
+
+    min f(x)     s.t.  ℓ ≤ x ≤ u
+
+
 where $f:\mathbb{R}^n \rightarrow \mathbb{R}$ is a continuously differentiable function, with  $\ell \in \left(\mathbb{R} \cup \{-\infty\} \right)^n$, and  $u \in \left(\mathbb{R} \cup \{+\infty\} \right)^n$.
 The algorithms implemented here are iterative methods that aim to compute a stationary point of \eqref{eq:nlp} using first and, if possible, second-order derivatives.
 
