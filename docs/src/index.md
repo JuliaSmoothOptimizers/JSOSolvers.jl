@@ -9,7 +9,7 @@ where $f:\mathbb{R}^n \rightarrow \mathbb{R}$ is a continuously differentiable f
 The algorithms implemented here are iterative methods that aim to compute a stationary point of \eqref{eq:nlp} using first and, if possible, second-order derivatives.
 
 This package provides optimization solvers curated by the [JuliaSmoothOptimizers](https://jso.dev) organization.
-Solvers in `JSOSolvers.jl` take as input an `AbstractNLPModel`, JSO's general model API defined in `NLPModels.jl` [@NLPModels_jl], a flexible data type to evaluate objective and constraints, their derivatives, and to provide any information that a solver might request from a model.
+Solvers in `JSOSolvers.jl` take as input an `AbstractNLPModel`, JSO's general model API defined in `NLPModels.jl`, a flexible data type to evaluate objective and constraints, their derivatives, and to provide any information that a solver might request from a model.
 
 ## Installation
 
