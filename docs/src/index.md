@@ -18,10 +18,6 @@ Solvers in `JSOSolvers.jl` take as input an `AbstractNLPModel`, JSO's general mo
 `pkg> add JSOSolvers`
 ```
 
-## How to cite
-
-If you use JSOSolvers.jl in your work, please cite using the format given in [CITATION.cff](CITATION.cff).
-
 # Bug reports and discussions
 
 If you think you found a bug, feel free to open an [issue](https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/issues).
