@@ -8,9 +8,10 @@ using SolverBenchmark
 using CUTEst
 
 cutest_problems = readlines("list_problems.dat")
-problems = ((CUTEstModel(p) for p in cutest_problems), "cutest")
+problems = (CUTEstModel(p) for p in cutest_problems)
 
 max_time = 1200.0 # 20 minutes
+T = Float64
 tol = sqrt(eps(T)) # relative tolerance
 
 solvers = Dict(
