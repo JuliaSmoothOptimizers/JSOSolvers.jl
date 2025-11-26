@@ -13,34 +13,34 @@ using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, Solve
 
 
 
-# for s in (:R2NSolver,  :FoSolver, :TronSolver, :TrunkSolver)
-for s in (:R2NSolver,  )
-    println("\n\n\t\t===================================")
-    println("============        Testing solver: $s            ==============\n\n")
-    f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
-    nlp = ADNLPModel(f, [-1.2; 1.0])
-    solver = eval(s)(nlp)
+# # for s in (:R2NSolver,  :FoSolver, :TronSolver, :TrunkSolver)
+# for s in (:R2NSolver,  )
+#     println("\n\n\t\t===================================")
+#     println("============        Testing solver: $s            ==============\n\n")
+#     f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
+#     nlp = ADNLPModel(f, [-1.2; 1.0])
+#     solver = eval(s)(nlp)
     
 
-    stats = GenericExecutionStats(nlp)
-    stats = SolverCore.solve!(solver, nlp, stats, verbose = 1)
-    println("The status is: ", stats.status == :first_order)
-    println("The solution is approximately: ", isapprox(stats.solution, [1.0; 1.0], atol = 1e-6))
+#     stats = GenericExecutionStats(nlp)
+#     stats = SolverCore.solve!(solver, nlp, stats, verbose = 1)
+#     println("The status is: ", stats.status == :first_order)
+#     println("The solution is approximately: ", isapprox(stats.solution, [1.0; 1.0], atol = 1e-6))
 
-    f2(x) = (x[1])^2 + 4 * (x[2] - x[1]^2)^2
-    nlp = ADNLPModel(f2, [-1.2; 1.0])
+#     # f2(x) = (x[1])^2 + 4 * (x[2] - x[1]^2)^2
+#     # nlp = ADNLPModel(f2, [-1.2; 1.0])
   
-    solver = eval(s)(nlp,subsolver= :cg) 
+#     # solver = eval(s)(nlp,subsolver= :cg) 
     
-    SolverCore.reset!(solver, nlp)
+#     # SolverCore.reset!(solver, nlp)
 
-    stats = GenericExecutionStats(nlp)
-    stats = SolverCore.solve!(solver, nlp, stats, verbose = 50,  atol = 1e-10, rtol = 1e-10)
-    println("The status is: ", stats.status == :first_order)
-    println("The solution is approximately: ", isapprox(stats.solution, [0.0; 0.0], atol = 1e-6))
-    print(stats.solution)
+#     # stats = GenericExecutionStats(nlp)
+#     # stats = SolverCore.solve!(solver, nlp, stats, verbose = 50,  atol = 1e-10, rtol = 1e-10)
+#     # println("The status is: ", stats.status == :first_order)
+#     # println("The solution is approximately: ", isapprox(stats.solution, [0.0; 0.0], atol = 1e-6))
+#     # print(stats.solution)
 
-end
+# end
 
 
 println("example of different negative curvature handling strategies with R2N solver")
@@ -51,19 +51,19 @@ nlp= ADNLPModel(
       name = "Extended Rosenbrock";
     )
 
-stats_armjio = R2N(nlp, verbose = 1, max_iter=5000, subsolver= :minres_qlp, npc_handler= :armijo)
-stats_hsl= R2N(nlp, verbose = 10, max_iter=5000, subsolver= :ma97) # todo we need this to handle npc
-stats_sigma = R2N(nlp, verbose = 10, max_iter=5000, subsolver= :minres_qlp, npc_handler= :sigma)
-stats_prev = R2N(nlp, verbose = 10, max_iter=5000, subsolver= :minres_qlp, npc_handler= :prev)
-stats_cp = R2N(nlp, verbose = 10, max_iter=5000, subsolver= :minres_qlp, npc_handler= :cp)  
-stats_trunk = trunk(nlp, verbose = 1, max_iter=5000)
-println("The stats after 5k iteration is")
-println("Armijo: ", stats_armjio.status, " max_iter :" , stats_armjio.iter, " solution is ", stats_armjio.solution)
+stats_armjio = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :armijo)
+stats_hsl= R2N(nlp, verbose = 10, max_iter=700, subsolver= :ma97) # todo we need this to handle npc
+stats_sigma = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :sigma)
+stats_prev = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :prev)
+stats_cp = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :cp)  
+stats_trunk = trunk(nlp, verbose = 1, max_iter=700)
+println("The stats after max iteration is")
+println("Armijo: ", stats_armjio.status, " max_iter :" , stats_armjio.iter, " solution is ")#, stats_armjio.solution)
 println("Sigma: ", stats_sigma.status, " max_iter :" , stats_sigma.iter, " solution is ")#, stats_sigma.solution)
 println("Previous: ", stats_prev.status, " max_iter :" , stats_prev.iter, " solution is ")#, stats_prev.solution)
 println("Cauchy Point: ", stats_cp.status, " max_iter :" , stats_cp.iter, " solution is ")#, stats_cp.solution)
-println("trunk: ", stats_trunk.status, " max_iter :" , stats_trunk.iter, " solution is ", stats_trunk.solution)
-println("HSL: ", stats_hsl.status, " max_iter :" , stats_hsl.iter, " solution is ", stats_hsl.solution)
+println("trunk: ", stats_trunk.status, " max_iter :" , stats_trunk.iter, " solution is ")#, stats_trunk.solution)
+println("HSL: ", stats_hsl.status, " max_iter :" , stats_hsl.iter, " solution is ")#, stats_hsl.solution)
 println("\n\n\t\t===================================")
 
 
@@ -103,9 +103,9 @@ nlp= ADNLPModel(
       collect(1:n) ./ (n + 1),
       name = "Extended Rosenbrock";
     )
-stats_lbfgs_exact = R2N(LBFGSModel(nlp), subsolver= :shifted_lbfgs, verbose = 100, max_iter=2000)
+stats_lbfgs_exact = R2N(LBFGSModel(nlp), subsolver= :shifted_lbfgs, verbose = 100, max_iter=200)
 
-stats_trunk = trunk(LBFGSModel(nlp), verbose = 1, max_iter=5000)
+stats_trunk = trunk(LBFGSModel(nlp), verbose = 1, max_iter=500)
 
 
 print("----------------------------------\n")

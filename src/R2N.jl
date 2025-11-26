@@ -601,7 +601,7 @@ function SolverCore.solve!(
   γ_k = zero(T)
 
   while !done
-
+    npcCount = 0
     # Solving for step direction s_k
     ∇fk .*= -1
     if r2_subsolver isa CgWorkspace || r2_subsolver isa CrWorkspace
@@ -649,9 +649,9 @@ function SolverCore.solve!(
     end
 
     if !(r2_subsolver isa ShiftedLBFGSSolver) && npcCount >= 1  #npc case
+      npcCount = 0 # TODO check for Subsolver, it need to reset this 
       if npc_handler == :armijo
         # --- Algorithm 3: From MINRES Paper --- 
-        npcCount = 0 # TODO check for Subsolver, it need to reset this 
 
         # 1. Get current state from R2N solver
         α = one(T) * 1.0     # Initial step size guess
@@ -865,6 +865,8 @@ function subsolve!(
   n,
   subsolver_verbose,
 ) where {T, V}
+  #TODO for some reason npcCount is not updated
+  r2_subsolver.stats.niter, r2_subsolver.stats.npcCount = 0, 0
   krylov_solve!(
     r2_subsolver,
     R2N.A, # Use the ShiftedOperator A
@@ -892,6 +894,7 @@ function subsolve!(
   n,
   subsolver_verbose,
 ) where {T, V}
+  r2_subsolver.stats.niter, r2_subsolver.stats.npcCount = 0, 0
   krylov_solve!(
     r2_subsolver,
     R2N.H,
@@ -991,9 +994,9 @@ function _hsl_factor_and_solve!(solver::HSLDirectSolver{T, S}, g, s) where {T, S
 
   # MA57 returns flag=4 for singular matrices. This is NOT an error for us.
   # We only return false if it's a fatal error (flag < 0).
-  if solver.hsl_obj.info.flag < 0
-    return false, :err, 0, 0
-  end
+  # if solver.hsl_obj.info.flag < 0 #TODO we have flag in fortan but not on the Julia
+  # return false, :err, 0, 0
+  # end
 
   # Solve
   s .= g
