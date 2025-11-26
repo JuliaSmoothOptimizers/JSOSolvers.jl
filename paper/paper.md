@@ -93,12 +93,15 @@ Commercial solvers such as Artelys Knitro [@byrd2006k] provide robust algorithms
 
 `JSOSolvers.jl` can solve large-scale problems and can be benchmarked easily against other JSO-compliant solvers using `SolverBenchmark.jl` [@SolverBenchmark_jl].
 We include below performance profiles [@dolan2002benchmarking] with respect to elapsed time of `JSOSolvers.jl` solvers against Ipopt on all the 291 unconstrained problems from the CUTEst collection [@cutest], whose dimensions range from 2 up to 192,627 variables.
-
-*LBFGS uses only first-order information, while TRON and TRUNK use Hessian-vector products and IPOPT uses the Hessian as a matrix.*
-
+LBFGS uses only first-order information, while TRON and TRUNK use Hessian-vector products and IPOPT uses the Hessian as a matrix.
 Without explaining performance profiles in full detail, the plot shows that Ipopt is fastest on 42 problems (15%), TRON on 9 (3%), TRUNK on 64 (21%), and L-BFGS on 176 (60%).
 Nearly all problems were solved within the 20-minute limit: TRON solved 272 (93%), Ipopt 270, TRUNK 269, and L-BFGS 267.
-Overall, these results are very encouraging.
+
+Overall, these results are encouraging.
+Although Ipopt is a mature and highly optimized solver, TRUNK and L-BFGS achieve comparable problem coverage while being significantly faster on many instances.
+This suggests that the algorithms implemented here are competitive for large-scale problems.
+We also expect further gains as we continue refining algorithmic hyperparameters, which is one of the project’s short-term development goals.
+A complementary benchmark for bound-constrained problems is available in the package documentation.
 
 <!--
 ```
