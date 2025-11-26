@@ -2,9 +2,13 @@
 
 `JSOSolvers.jl` is a collection of Julia optimization solvers for nonlinear, potentially nonconvex, continuous optimization problems that are unconstrained or bound-constrained:
 
-    min f(x)     s.t.  ℓ ≤ x ≤ u
-
-
+$$
+\begin{aligned}
+    \min\; & f(x) \\
+    \text{s.t.}\; & \ell \leq x \leq u
+\end{aligned}
+\label{eq:nlp}
+$$
 where $f:\mathbb{R}^n \rightarrow \mathbb{R}$ is a continuously differentiable function, with  $\ell \in \left(\mathbb{R} \cup \{-\infty\} \right)^n$, and  $u \in \left(\mathbb{R} \cup \{+\infty\} \right)^n$.
 The algorithms implemented here are iterative methods that aim to compute a stationary point of \eqref{eq:nlp} using first and, if possible, second-order derivatives.
 
@@ -19,7 +23,7 @@ This strategy enables the solution of large-scale problems even when function an
 `JSOSolvers` is a registered package. To install this package, open the Julia REPL (i.e., execute the julia binary), type `]` to enter package mode, and install `JSOSolvers` as follows
 
 ```julia
-`pkg> add JSOSolvers`
+pkg> add JSOSolvers
 ```
 
 # Bug reports and discussions
