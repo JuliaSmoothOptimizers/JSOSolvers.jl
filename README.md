@@ -65,6 +65,8 @@ nlp = ADNLPModel(x -> 100 * (x[2] - x[1]^2)^2 + (x[1] - 1)^2, [-1.2; 1.0])
 stats = lbfgs(nlp) # or trunk, tron, R2
 ```
 
+Click on the badge [![](https://img.shields.io/badge/docs-stable-3f51b5.svg)](https://jso.dev/JSOSolvers.jl/stable) to access the documentation.
+
 ## How to cite
 
 If you use JSOSolvers.jl in your work, please cite using the format given in [CITATION.cff](CITATION.cff).

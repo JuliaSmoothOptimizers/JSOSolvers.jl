@@ -11,6 +11,9 @@ The algorithms implemented here are iterative methods that aim to compute a stat
 This package provides optimization solvers curated by the [JuliaSmoothOptimizers](https://jso.dev) organization.
 Solvers in `JSOSolvers.jl` take as input an `AbstractNLPModel`, JSO's general model API defined in `NLPModels.jl`, a flexible data type to evaluate objective and constraints, their derivatives, and to provide any information that a solver might request from a model.
 
+The solvers in `JSOSolvers.jl` adopt a matrix-free approach, where standard optimization methods are implemented without forming derivative matrices explicitly.
+This strategy enables the solution of large-scale problems even when function and gradient evaluations are expensive. The motivation is to solve large-scale unconstrained and bound-constrained problems such as parameter estimation in inverse problems, design optimization in engineering, and regularized machine learning models, and use these solvers to solve subproblems of penalty algorithms.
+
 ## Installation
 
 `JSOSolvers` is a registered package. To install this package, open the Julia REPL (i.e., execute the julia binary), type `]` to enter package mode, and install `JSOSolvers` as follows
@@ -47,7 +50,3 @@ where `nlp` is an AbstractNLPModel or some specialization, such as an `AbstractN
 - `stats` is a `SolverTools.GenericExecutionStats` with the output of the solver.
 
 See the full list of [Solvers](@ref).
-
-## Tutorials
-
-Beyond this repository's documentation, you can also find a list of tutorials on [JuliaSmoothOptimizers Tutorials](https://jso.dev/tutorials) by selecting the tag `JSOSolvers.jl`.
