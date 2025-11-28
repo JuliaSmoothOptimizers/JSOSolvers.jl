@@ -315,3 +315,6 @@ println("rank:                   ", info_57.rank)
 println("rinfo:                  ", info_57.rinfo)
 println("scaled_residuals:       ", info_57.scaled_residuals)
 println("solution_inf_norm:      ", info_57.solution_inf_norm)
+
+# TODO 
+# LBL_57.info.info[1] -- is the flag
