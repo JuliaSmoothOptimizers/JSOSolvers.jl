@@ -1,6 +1,42 @@
 # [JSOSolvers.jl documentation](@id Home)
 
-This package provides a few optimization solvers curated by the [JuliaSmoothOptimizers](https://jso.dev) organization.
+`JSOSolvers.jl` is a collection of Julia optimization solvers for nonlinear, potentially nonconvex, continuous optimization problems that are unconstrained or bound-constrained:
+
+```math
+\begin{aligned}
+    \min\; & f(x) \\
+    \text{s.t.}\; & \ell \leq x \leq u
+\end{aligned}
+```
+where $f:\mathbb{R}^n \rightarrow \mathbb{R}$ is a continuously differentiable function, with  $\ell \in \left(\mathbb{R} \cup \{-\infty\} \right)^n$, and  $u \in \left(\mathbb{R} \cup \{+\infty\} \right)^n$.
+The algorithms implemented here are iterative methods that aim to compute a stationary point of \eqref{eq:nlp} using first and, if possible, second-order derivatives.
+
+This package provides optimization solvers curated by the [JuliaSmoothOptimizers](https://jso.dev) organization.
+Solvers in `JSOSolvers.jl` take as input an `AbstractNLPModel`, JSO's general model API defined in `NLPModels.jl`, a flexible data type to evaluate objective and constraints, their derivatives, and to provide any information that a solver might request from a model.
+
+The solvers in `JSOSolvers.jl` adopt a matrix-free approach, where standard optimization methods are implemented without forming derivative matrices explicitly.
+This strategy enables the solution of large-scale problems even when function and gradient evaluations are expensive. The motivation is to solve large-scale unconstrained and bound-constrained problems such as parameter estimation in inverse problems, design optimization in engineering, and regularized machine learning models, and use these solvers to solve subproblems of penalty algorithms.
+
+## Installation
+
+`JSOSolvers` is a registered package. To install this package, open the Julia REPL (i.e., execute the julia binary), type `]` to enter package mode, and install `JSOSolvers` as follows
+
+```julia
+pkg> add JSOSolvers
+```
+
+You can run the package’s unit tests with:
+
+```julia
+pkg> test JSOSolvers
+```
+
+# Bug reports and discussions
+
+If you think you found a bug, feel free to open an [issue](https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/issues).
+Focused suggestions and requests can also be opened as issues. Before opening a pull request, start an issue or a discussion on the topic, please.
+
+If you want to ask a question not suited for a bug report, feel free to start a discussion [here](https://github.com/JuliaSmoothOptimizers/Organization/discussions). This forum is for general discussion about this repository and the [JuliaSmoothOptimizers](https://github.com/JuliaSmoothOptimizers), so questions about any of our packages are welcome.
 
 ## Basic usage
 
@@ -23,7 +59,3 @@ where `nlp` is an AbstractNLPModel or some specialization, such as an `AbstractN
 - `stats` is a `SolverTools.GenericExecutionStats` with the output of the solver.
 
 See the full list of [Solvers](@ref).
-
-## Tutorials
-
-Beyond this repository's documentation, you can also find a list of tutorials on [JuliaSmoothOptimizers Tutorials](https://jso.dev/tutorials) by selecting the tag `JSOSolvers.jl`.

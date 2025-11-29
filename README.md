@@ -55,6 +55,12 @@ This package provides an implementation of four classic algorithms for unconstra
 
 `pkg> add JSOSolvers`
 
+You can run the package’s unit tests with:
+
+```julia
+pkg> test JSOSolvers
+```
+
 ## Example
 
 ```julia
@@ -64,6 +70,10 @@ using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> 100 * (x[2] - x[1]^2)^2 + (x[1] - 1)^2, [-1.2; 1.0])
 stats = lbfgs(nlp) # or trunk, tron, R2
 ```
+
+## Documentation
+
+Click on the badge [![](https://img.shields.io/badge/docs-stable-3f51b5.svg)](https://jso.dev/JSOSolvers.jl/stable) to access the documentation.
 
 ## How to cite
 
