@@ -11,6 +11,7 @@ makedocs(
   sitename = "JSOSolvers.jl",
   pages = [
     "index.md",
+    "examples.md",
     "solvers.md",
     "benchmark.md",
     "floating-point-systems.md",
