@@ -55,6 +55,12 @@ This package provides an implementation of four classic algorithms for unconstra
 
 `pkg> add JSOSolvers`
 
+You can run the package’s unit tests with:
+
+```julia
+pkg> test JSOSolvers
+```
+
 ## Example
 
 ```julia
