@@ -25,6 +25,12 @@ This strategy enables the solution of large-scale problems even when function an
 pkg> add JSOSolvers
 ```
 
+You can run the package’s unit tests with:
+
+```julia
+pkg> test JSOSolvers
+```
+
 # Bug reports and discussions
 
 If you think you found a bug, feel free to open an [issue](https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/issues).
