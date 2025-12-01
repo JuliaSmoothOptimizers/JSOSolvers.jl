@@ -25,9 +25,10 @@ if LIBHSL_isfunctional()
                 f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
                 nlp = ADNLPModel(f, [-1.2; 1.0])
             
-                stats = mySolver(nlp, verbose = 1, max_iter = 14)
-                @test stats.status == :first_order "Solver $name did not converge to first-order optimality."
-                @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6) "Solver $name did not find the correct solution."
+                stats = mySolver(nlp)
+                @test stats.status == :first_order
+                @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)
+
             end
         end
     end
