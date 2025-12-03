@@ -614,10 +614,10 @@ function SolverCore.solve!(
 
     if !subsolver_solved && npcCount == 0
       @warn("Subsolver failed to solve the system")
-      # TODO exit cleaning 
+      # TODO exit cleaning, update stats
       break
     end
-
+#TODO ARMJO condition update
     calc_scp_needed = false
     force_sigma_increase = false
 
