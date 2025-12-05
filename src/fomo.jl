@@ -26,7 +26,16 @@ const FOMO_αmax =
 const FOMO_β = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(9 // 10), "T(9/10)")
 const FOMO_θ1 = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1 // 10), "T(1/10)")
 const FOMO_θ2 =
-  DefaultParameter((nlp::AbstractNLPModel) -> 1 / eps(eltype(nlp.meta.x0))^(1 // 3), "1/eps(T)^(1/3)")
+  DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1e3), "T(1e3)")
+const FOMO_θ1_HB = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1 // 10), "T(1/10)")
+const FOMO_θ2_HB =
+  DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1e3), "T(1e3)")
+const FOMO_θ1_PR = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1e-4), "T(1e-4)")
+const FOMO_θ2_PR =
+  DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1e3), "T(1e3)")
+const FOMO_θ1_FR = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1//2), "T(1/2)")
+const FOMO_θ2_FR =
+  DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1e2), "T(1e2)")
 const FOMO_M = DefaultParameter(1)
 const FOMO_step_backend = DefaultParameter(nlp -> r2_step(), "r2_step()")
 const FOMO_momentum_backend = DefaultParameter(nlp -> nesterov_HB(), "nesterov_HB()")
@@ -91,8 +100,8 @@ function FOMOParameterSet(
   γ3::T = get(FOMO_γ3, nlp),
   αmax::T = get(FOMO_αmax, nlp),
   β::T = get(FOMO_β, nlp),
-  θ1::T = get(FOMO_θ1, nlp),
-  θ2::T = get(FOMO_θ2, nlp),
+  θ1::T = get_θ1(momentum_backend, nlp),
+  θ2::T = get_θ2(momentum_backend, nlp),
   M::Int = get(FOMO_M, nlp),
   step_backend::AbstractFOMethod = get(FOMO_step_backend, nlp),
   momentum_backend::AbstractMomentumMethod = get(FOMO_momentum_backend ,nlp)
@@ -105,8 +114,8 @@ function FOMOParameterSet(
     Parameter(γ2, RealInterval(T(1), T(Inf), lower_open = true, upper_open = true)),
     Parameter(γ3, RealInterval(T(0), T(1))),
     Parameter(αmax, RealInterval(T(1), T(Inf), upper_open = true)),
-    Parameter(β, RealInterval(T(0), T(1), upper_open = true)),
-    Parameter(θ1, RealInterval(T(0), T(1))),
+    Parameter(β, RealInterval(T(0), T(1), upper_open = true)),   
+    Parameter(θ1, RealInterval(T(0), T(1), lower_open = true)),
     Parameter(θ2, RealInterval(T(1), T(Inf), upper_open = true)),
     Parameter(M, IntegerRange(Int(1), typemax(Int))),
     Parameter(step_backend, CategoricalSet{Union{tr_step, r2_step}}([r2_step(); tr_step()])),
@@ -551,6 +560,7 @@ function SolverCore.solve!(
     c .= x .+ μk .* d
     step_underflow = x == c # step addition underfow on every dimensions, should happen before solver.α == 0
     ΔTk =  (norm_∇fk^2 - βktilde* mdot∇f) * μk # = dot(d,∇fk) * μk with momentum, ‖∇fk‖²μk without momentum
+    #ΔTk =  norm_d^2 * μk
     fck = obj(nlp, c)
     unbounded = fck < fmin
     ρk = (max_obj_mem - fck) / (max_obj_mem - stats.objective + ΔTk)
@@ -562,7 +572,7 @@ function SolverCore.solve!(
       solver.α = solver.α * γ1
       if use_momentum
         βktilde *= γ3
-        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, κ, βktilde, θ1, θ2)
+        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, κ, βktilde, θ1, θ2, M)
         d .= βktilde*momentum .- g 
         norm_d = norm(d) # TODO only needed in TR context, not in R2, 
       end
@@ -591,7 +601,7 @@ function SolverCore.solve!(
       if use_momentum
         βk = compute_beta(β,norm_∇fk,norm_∇fk₋,g,d,momentum_backend)
         mdot∇f = dot(momentum, g)
-        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, κ, βk, θ1, θ2)
+        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, κ, βk, θ1, θ2, M)
         d .=  βktilde*momentum .- g
         norm_d = norm(d)
         avgβktilde += βktilde
@@ -693,6 +703,7 @@ function find_beta_tilde(
   βk::T,
   θ1::T,
   θ2::T,
+  M::Int,
 ) where {T}
   e = eps(T)
   if abs(mdot∇f)<e 
@@ -716,17 +727,20 @@ function find_beta_tilde(
     βktilde = max(r21,βktilde)
     βktilde = min(r22,βktilde)
   end
-  # Condition 3: βktilde ∉ [r31,r32], r31 and r32 are roots of  Q(βktilde) = (1-θ1^2)norm_∇f -2βktilde mdot∇f + βktilde^2 norm_m
+
+  # Condition 3 (only in nonmonotone case): βktilde ∉ [r31,r32], r31 and r32 are roots of  Q(βktilde) = (1-θ1^2)norm_∇f -2βktilde mdot∇f + βktilde^2 norm_m
   # roots are not necessarily real. If complex condition does not apply. If real, they both have the same sign.
-  r31 = 0
-  r32 = 0
-  Δ3= (κ^2*mdot∇f^2- (1-θ1^2)*(norm_∇f*norm_m)^2)
-  if Δ3>0
-    r31 = (κ*mdot∇f-sqrt(Δ3))/((1-θ1^2)*norm_∇f^2)
-    r32 = (κ*mdot∇f+sqrt(Δ3))/((1-θ1^2)*norm_∇f^2)
-  end
-  if βktilde >r31 && βktilde < r32
-    βktilde = sign(r31)*min(abs(r31),abs(r32))
+  if M>1
+    r31 = 0
+    r32 = 0
+    Δ3= (κ^2*mdot∇f^2- (1-θ1^2)*(norm_∇f*norm_m)^2)
+    if Δ3>0
+      r31 = (κ*mdot∇f-sqrt(Δ3))/((1-θ1^2)*norm_∇f^2)
+      r32 = (κ*mdot∇f+sqrt(Δ3))/((1-θ1^2)*norm_∇f^2)
+    end
+    if βktilde >r31 && βktilde < r32
+      βktilde = sign(r31)*min(abs(r31),abs(r32))
+    end
   end
   βktilde
 end
@@ -781,4 +795,28 @@ end
 
 function step_mult(α::T, norm_∇fk::T, ::tr_step) where {T}
   α / norm_∇fk
+end
+
+function get_θ1(m::AbstractMomentumMethod, nlp::AbstractNLPModel{T, V}) where{T, V}
+    if typeof(m) == nesterov_HB
+    θ1 = get(FOMO_θ1_HB, nlp)
+  elseif typeof(m) == cg_PR
+    θ1 = get(FOMO_θ1_PR, nlp)
+  elseif typeof(m) == cg_FR
+    θ1 = get(FOMO_θ1_FR, nlp)
+  else
+    get(FOMO_θ1, nlp)
+  end
+end
+
+function get_θ2(m::AbstractMomentumMethod, nlp::AbstractNLPModel{T, V}) where{T, V}
+    if typeof(m) == nesterov_HB
+    θ2 = get(FOMO_θ2_HB, nlp)
+  elseif typeof(m) == cg_PR
+    θ2 = get(FOMO_θ2_PR, nlp)
+  elseif typeof(m) == cg_FR
+    θ2 = get(FOMO_θ2_FR, nlp)
+  else
+    get(FOMO_θ2, nlp)
+  end
 end
