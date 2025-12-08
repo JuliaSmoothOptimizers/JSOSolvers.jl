@@ -31,6 +31,22 @@ You can run the package’s unit tests with:
 pkg> test JSOSolvers
 ```
 
+The tests cover basic solver correctness on analytical test problems, conformity with the NLPModels API, stopping rules and line-search behaviour, and linear algebra components used by second-order methods.
+
+## Dependencies
+
+`JSOSolvers.jl` is built on the JuliaSmoothOptimizers ecosystem and relies on a small set of packages to provide modeling, linear algebra utilities, and solver infrastructure.
+
+The main dependencies required to use the solvers are:
+
+- `NLPModels.jl` – defines the problem API used by all solvers;
+
+- `SolverTools.jl` – provides common optimization components such as line searches, stopping conditions, and trace utilities;
+
+- `Krylov.jl` – used by second-order methods such as TRON and TRUNK for solving Newton or trust-region subproblems.
+
+These dependencies are installed automatically when JSOSolvers.jl is added via the Julia package manager, and no additional configuration is required.
+
 # Bug reports and discussions
 
 If you think you found a bug, feel free to open an [issue](https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/issues).
