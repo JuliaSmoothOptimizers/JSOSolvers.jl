@@ -43,8 +43,13 @@ The main dependencies required to use the solvers are:
 
 - `SolverTools.jl` – provides common optimization components such as line searches, stopping conditions, and trace utilities;
 
-- `Krylov.jl` – used by second-order methods such as TRON and TRUNK for solving Newton or trust-region subproblems.
+- `Krylov.jl` – used by second-order methods such as TRON and TRUNK for solving Newton or trust-region subproblems;
 
+- `LinearOperators.jl` – provides abstractions for matrix-free linear operators used by iterative methods;
+
+- `SolverCore.jl` – provides the solver interface infrastructure;
+
+- `NLPModelsModifiers.jl` – provides utilities for modifying models (e.g., adding bounds or transformations).
 These dependencies are installed automatically when JSOSolvers.jl is added via the Julia package manager, and no additional configuration is required.
 
 # Bug reports and discussions
