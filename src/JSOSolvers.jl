@@ -7,6 +7,7 @@ using LinearAlgebra, Logging, Printf
 using Krylov,
   LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverParameters, SolverTools
 
+import SolverTools.reset!
 import SolverCore.solve!
 export solve!
 
