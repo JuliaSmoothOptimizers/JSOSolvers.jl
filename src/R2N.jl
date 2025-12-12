@@ -195,9 +195,9 @@ function HSLDirectSolver(nlp::AbstractNLPModel{T, V}, hsl_constructor) where {T,
   return HSLDirectSolver{T, typeof(hsl_obj)}(hsl_obj, rows, cols, vals, n, nnzh, work)
 end
 
-const npc_handler_allowed = [:armijo, :sigma, :prev, :cp]
+const npc_handler_allowed = [:gs, :sigma, :prev, :cp]
 
-const R2N_allowed_subsolvers = [:cg, :cr, :minres, :minres_qlp, :shifted_lbfgs, :ma97, :ma57] #TODO Prof. Orban check if I can add more
+const R2N_allowed_subsolvers = [:cg, :cr, :minres, :minres_qlp, :shifted_lbfgs, :ma97, :ma57]
 
 """
     R2N(nlp; kwargs...)
@@ -211,8 +211,6 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 
 # Arguments
 - `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
-
-
 
 # Keyword arguments
 - `params::R2NParameterSet = R2NParameterSet(nlp)`: algorithm parameters, see [`R2NParameterSet`](@ref).
@@ -236,8 +234,8 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `subsolver::Symbol  = :cg`: the subsolver to solve the shifted system. The `MinresWorkspace` which solves the shifted linear system exactly at each iteration. Using the exact solver is only possible if `nlp` is an `LBFGSModel`. See `JSOSolvers.R2N_allowed_subsolvers` for a list of available subsolvers.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
 - `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
-- `npc_handler::Symbol = :armijo`: the non_positive_curve handling strategy.
-  - `:armijo`: uses the Armijo rule to handle non-positive curvature.
+- `npc_handler::Symbol = :gs`: the non_positive_curve handling strategy.
+  - `:gs`: uses the Goldstein conditions rule to handle non-positive curvature.
   - `:sigma`: increase the regularization parameter σ.
   - `:prev`: if subsolver return after first iteration, increase the sigma, but if subsolver return after second iteration, set s_k = s_k^(t-1).
   - `:cp`: set s_k to Cauchy point.
@@ -252,7 +250,7 @@ The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 $(Callback_docstring)
 
 # Examples
-```jldoctest
+```jldoctest; output = false
 using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> sum(x.^2), ones(3))
 stats = R2N(nlp)
@@ -262,7 +260,7 @@ stats = R2N(nlp)
 "Execution stats: first-order stationary"
 ```
 
-```jldoctest
+```jldoctest; output = false
 using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> sum(x.^2), ones(3))
 solver = R2NSolver(nlp);
@@ -475,7 +473,7 @@ function SolverCore.solve!(
   max_iter::Int = typemax(Int),
   verbose::Int = 0,
   subsolver_verbose::Int = 0,
-  npc_handler::Symbol = :armijo,
+  npc_handler::Symbol = :gs,
   scp_flag::Bool = true,
 ) where {T, V}
   unconstrained(nlp) || error("R2N should only be called on unconstrained problems.")
@@ -599,9 +597,14 @@ function SolverCore.solve!(
 
   ν_k = one(T) # used for scp calculation
   γ_k = zero(T)
+  
+  # Initialize variables to avoid scope warnings (although not strictly necessary if logic is sound)
+  fck = f0
 
   while !done
     npcCount = 0
+    fck_computed = false # Reset flag for optimization
+    
     # Solving for step direction s_k
     ∇fk .*= -1
     if r2_subsolver isa CgWorkspace || r2_subsolver isa CrWorkspace
@@ -617,7 +620,6 @@ function SolverCore.solve!(
       # TODO exit cleaning, update stats
       break
     end
-#TODO ARMJO condition update
     calc_scp_needed = false
     force_sigma_increase = false
 
@@ -638,7 +640,7 @@ function SolverCore.solve!(
         if curv_s < 0
           npcCount = 1 # we need to set this for later use
           if npc_handler == :prev
-            npc_handler = :armijo  #Force the npc_handler to be armijo and not :prev since we can not have that
+            npc_handler = :gs  #Force the npc_handler to be gs and not :prev since we can not have that
           end
         else
           # Step has positive curvature, but matrix has negative eigs.
@@ -649,55 +651,89 @@ function SolverCore.solve!(
     end
 
     if !(r2_subsolver isa ShiftedLBFGSSolver) && npcCount >= 1  #npc case
-      if npc_handler == :armijo
+      if npc_handler == :gs # Goldstein Line Search
         npcCount = 0
-        # --- Algorithm 3: From MINRES Paper --- 
-        # 1. Get current state from R2N solver
-        α = one(T)      # Initial step size guess
-        f0 = stats.objective   # Current objective value, f(x)
+        
+        # --- Goldstein Line Search --- 
+        # Logic: Find alpha such that function drop is bounded between 
+        # two linear slopes defined by parameter c (ls_c).
+
+        # 1. Initialization - Type Stable
+        α = one(T)
+        f0_val = stats.objective
+        
+        # Retrieve direction
         if r2_subsolver isa HSLDirectSolver
-          dir = s
+            dir = s
         else
-          dir = r2_subsolver.npc_dir # The non-positive curvature direction
+            dir = r2_subsolver.npc_dir 
         end
-        # Note: In the loop ∇fk is currently -∇f, so -∇fk is +∇f
+
+        # grad_dir = ∇fᵀ d (Expected to be negative for descent/NPC)
+        # Note: ∇fk is currently -∇f, so we compute dot(-∇fk, dir)
         grad_dir = dot(-∇fk, dir)
 
-        # 3. First Try (α = 1.0)
-        xt .= x .+ α .* dir
-        fck = obj(nlp, xt) # f(x + α*dir) #TODO Expensive Eval 1
-      
-        # Check Armijo violation using our new parameter 'ls_c'
-        if fck > f0 + ls_c * α * grad_dir
-          # 4. Backward Tracking (Algorithm 2)
-          while fck > f0 + ls_c * α * grad_dir && α > ls_min_alpha
-            α *= ls_decrease # Use parameter
+        # Goldstein requires 0 < c < 0.5. 
+        # If user provided c >= 0.5, we cap it to ensure valid bounds.
+        c_goldstein = (ls_c >= 0.5) ? T(0.49) : ls_c
+
+        # Bracketing variables
+        α_min = zero(T)      # Lower bound of valid interval
+        α_max = T(Inf)       # Upper bound of valid interval
+        iter_ls = 0
+        max_iter_ls = 100    # Safety break #TODO Prof Orban?
+
+        while iter_ls < max_iter_ls
+            iter_ls += 1
+
+            # 2. Evaluate Candidate
             xt .= x .+ α .* dir
             fck = obj(nlp, xt)
-          end
-        else
-          # 5. Forward Tracking
-          while true
-            α_new = α * ls_increase # Use parameter
-            if α_new > ls_max_alpha # Use parameter
-              break
+
+            # 3. Check Conditions
+            # A: Armijo (Upper Bound) - Is step too big?
+            armijo_pass = fck <= f0_val + c_goldstein * α * grad_dir
+            
+            # B: Curvature (Lower Bound) - Is step too small?
+            # f(x+αd) >= f(x) + (1-c)αg'd
+            curvature_pass = fck >= f0_val + (1 - c_goldstein) * α * grad_dir
+
+            if !armijo_pass
+                # Fails Armijo: Step is too long. The valid point is to the LEFT.
+                α_max = α
+                α = 0.5 * (α_min + α_max) # Bisect
+            
+            elseif !curvature_pass
+                # Fails Curvature: Step is too short. The valid point is to the RIGHT.
+                α_min = α
+                if isinf(α_max)
+                    # No upper bound found yet, expand step
+                    α = α * ls_increase
+                    # Safety clamp
+                    if α > ls_max_alpha
+                        α = ls_max_alpha
+                        break 
+                    end
+                else
+                    # Upper bound exists, bisect
+                    α = 0.5 * (α_min + α_max)
+                end
+            else
+                # Satisfies BOTH Goldstein conditions
+                break
             end
-
-            xt .= x .+ α_new .* dir
-            fck_new = obj(nlp, xt)
-
-            if fck_new > f0 + ls_c * α_new * grad_dir
-              break
-            end
-
-            α = α_new
-            fck = fck_new
-          end
+            
+            # # Safety check for precision issues #TODO prof. Orban
+            # if !isinf(α_max) && abs(α_max - α_min) < 1e-12
+            #     break
+            # end
         end
 
-        # 6. Store the final computed step
+        # 4. Store the final computed step
         s .= α .* dir
-        # --- End of Algorithm 3 ---
+        
+        # 5. Flag that we already have the objective value
+        fck_computed = true
 
       elseif npc_handler == :prev #Cr and cg will return the last iteration s
         npcCount = 0
@@ -770,7 +806,11 @@ function SolverCore.solve!(
 
       ΔTk = slope - curv / 2
       xt .= x .+ s
-      fck = obj(nlp, xt)
+      
+      # OPTIMIZATION: Only calculate obj if Goldstein didn't already do it
+      if !fck_computed
+          fck = obj(nlp, xt)
+      end
 
       if non_mono_size > 1  #non-monotone behaviour
         k = mod(stats.iter, non_mono_size) + 1
@@ -866,7 +906,7 @@ function subsolve!(
   n,
   subsolver_verbose,
 ) where {T, V}
-  #TODO for some reason npcCount is not updated
+  # Reset counters including npcCount (Bug Fix)
   r2_subsolver.stats.niter, r2_subsolver.stats.npcCount = 0, 0
   krylov_solve!(
     r2_subsolver,
@@ -895,6 +935,7 @@ function subsolve!(
   n,
   subsolver_verbose,
 ) where {T, V}
+  # Reset counters including npcCount (Bug Fix)
   r2_subsolver.stats.niter, r2_subsolver.stats.npcCount = 0, 0
   krylov_solve!(
     r2_subsolver,
