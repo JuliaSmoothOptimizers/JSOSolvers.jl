@@ -51,14 +51,14 @@ nlp= ADNLPModel(
       name = "Extended Rosenbrock";
     )
 
-stats_armjio = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :armijo)
+stats_gs = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :gs)
 stats_hsl= R2N(nlp, verbose = 10, max_iter=700, subsolver= :ma97) # todo we need this to handle npc
 stats_sigma = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :sigma)
 stats_prev = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :prev)
 stats_cp = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :cp)  
 stats_trunk = trunk(nlp, verbose = 1, max_iter=700)
 println("The stats after max iteration is")
-println("Armijo: ", stats_armjio.status, " max_iter :" , stats_armjio.iter, " solution is ")#, stats_armjio.solution)
+println("gs: ", stats_gs.status, " max_iter :" , stats_gs.iter, " solution is ")#, stats_gs.solution)
 println("Sigma: ", stats_sigma.status, " max_iter :" , stats_sigma.iter, " solution is ")#, stats_sigma.solution)
 println("Previous: ", stats_prev.status, " max_iter :" , stats_prev.iter, " solution is ")#, stats_prev.solution)
 println("Cauchy Point: ", stats_cp.status, " max_iter :" , stats_cp.iter, " solution is ")#, stats_cp.solution)
@@ -115,7 +115,7 @@ print("----------------------------------\n")
 
 
 
-# # # const npc_handler_allowed = [:armijo, :sigma, :prev, :cp]
+# # # const npc_handler_allowed = [:gs, :sigma, :prev, :cp]
 # for mysub in [:cg, :cr, :minres, :minres_qlp]
 #   println("\n\n\t\t===================================")
 #   println("============        Testing subsolver: $mysub            ==============\n\n")
@@ -131,8 +131,8 @@ print("----------------------------------\n")
 #       (nlp, ; kwargs...) -> R2N(nlp; subsolver = mysub, npc_handler = :sigma, kwargs...),
 #     ),
 #     (
-#       "R2N_cg_armijo",
-#       (nlp, ; kwargs...) -> R2N(nlp; subsolver = mysub, npc_handler = :armijo, kwargs...),
+#       "R2N_cg_gs",
+#       (nlp, ; kwargs...) -> R2N(nlp; subsolver = mysub, npc_handler = :gs, kwargs...),
 #     ),
 #   ]
 #     println("Testing solver: $name,$mySolver")
