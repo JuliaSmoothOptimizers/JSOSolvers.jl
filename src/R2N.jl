@@ -649,25 +649,24 @@ function SolverCore.solve!(
     end
 
     if !(r2_subsolver isa ShiftedLBFGSSolver) && npcCount >= 1  #npc case
-      npcCount = 0 # TODO check for Subsolver, it need to reset this 
       if npc_handler == :armijo
+        npcCount = 0
         # --- Algorithm 3: From MINRES Paper --- 
-
         # 1. Get current state from R2N solver
-        α = one(T) * 1.0     # Initial step size guess
+        α = one(T)      # Initial step size guess
         f0 = stats.objective   # Current objective value, f(x)
         if r2_subsolver isa HSLDirectSolver
           dir = s
         else
           dir = r2_subsolver.npc_dir # The non-positive curvature direction
         end
-        # ∇fk = -∇f(x), so grad = -∇fk
+        # Note: In the loop ∇fk is currently -∇f, so -∇fk is +∇f
         grad_dir = dot(-∇fk, dir)
 
         # 3. First Try (α = 1.0)
         xt .= x .+ α .* dir
-        fck = obj(nlp, xt) # f(x + α*dir)
-
+        fck = obj(nlp, xt) # f(x + α*dir) #TODO Expensive Eval 1
+      
         # Check Armijo violation using our new parameter 'ls_c'
         if fck > f0 + ls_c * α * grad_dir
           # 4. Backward Tracking (Algorithm 2)
@@ -701,6 +700,7 @@ function SolverCore.solve!(
         # --- End of Algorithm 3 ---
 
       elseif npc_handler == :prev #Cr and cg will return the last iteration s
+        npcCount = 0
         s .= r2_subsolver.x
       end
     end
@@ -740,6 +740,7 @@ function SolverCore.solve!(
       # Based on the flag, scp is calcualted
       scp .= ν_k * ∇fk
       if npc_handler == :cp && npcCount >= 1
+        npcCount = 0
         s .= scp
       elseif norm(s) > θ2 * norm(scp)
         s .= scp
