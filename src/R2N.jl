@@ -768,13 +768,10 @@ function SolverCore.solve!(
         # cp_step_log = "ν_k"
         ν_k = θ1 / (λmax + σk)
       end
-    end
 
-    ∇fk .*= -1 # flip to -∇f 
-
-    if scp_flag == true || npc_handler == :cp || calc_scp_needed
       # Based on the flag, scp is calcualted
-      scp .= ν_k * ∇fk
+      # scp .= -ν_k * ∇fk #TODO do I make it use mul! ? 
+      mul!(scp, ∇fk, -ν_k)
       if npc_handler == :cp && npcCount >= 1
         npcCount = 0
         s .= scp
@@ -782,6 +779,8 @@ function SolverCore.solve!(
         s .= scp
       end
     end
+
+    ∇fk .*= -1 # flip to -∇f 
     if force_sigma_increase || (npc_handler == :sigma && npcCount >= 1) # non-positive curvature case happen and the npc_handler is sigma
       step_accepted = false
       σk = max(σmin, γ2 * σk)
