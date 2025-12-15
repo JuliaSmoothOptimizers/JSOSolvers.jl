@@ -552,17 +552,18 @@ function SolverCore.solve!(
   # cp_step_log = " "
   if verbose > 0 && mod(stats.iter, verbose) == 0
     @info log_header(
-      [:iter, :f, :dual, :σ, :ρ, :sub_iter, :dir, :sub_status],
-      [Int, Float64, Float64, Float64, Float64, Int, String, String],
+      [:iter, :f, :dual, :norm_s, :σ, :ρ, :sub_iter, :dir, :sub_status],
+      [Int, Float64, Float64, Float64, Float64, Float64, Int, String, String],
       hdr_override = Dict(
         :f => "f(x)",
         :dual => "‖∇f‖",
+        :norm_s => "‖s‖",
         :sub_iter => "subiter",
         :dir => "dir",
         :sub_status => "status",
       ),
     )
-    @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk, 0, " ", " "])
+    @info log_row([stats.iter, stats.objective, norm_∇fk, 0.0 ,σk, ρk, 0, " ", " "])
   end
 
   set_status!(
@@ -786,6 +787,7 @@ function SolverCore.solve!(
       σk = max(σmin, γ2 * σk)
       solver.σ = σk
       npcCount = 0 # reset for next iteration
+      ∇fk .*= -1 
     else
       # Correctly compute curvature s' * B * s
       if solver.r2_subsolver isa HSLDirectSolver
@@ -818,7 +820,8 @@ function SolverCore.solve!(
         ρk = (fck_max - fck) / (fck_max - stats.objective + ΔTk) #TODO Prof. Orban check if this is correct the denominator   
       else
         # Avoid division by zero/negative. If ΔTk <= 0, the model is bad.
-        ρk = (ΔTk > 10 * eps(T)) ? (stats.objective - fck) / ΔTk : -one(T)
+        # ρk = (ΔTk > 10 * eps(T)) ? (stats.objective - fck) / ΔTk : -one(T)
+        ρk = (stats.objective - fck) / ΔTk
       end
 
       # Update regularization parameters and Acceptance of the new candidate
@@ -838,7 +841,7 @@ function SolverCore.solve!(
         if ρk >= η2
           σk = max(σmin, γ3 * σk)
         else # η1 ≤ ρk < η2
-          σk = min(σmin, γ1 * σk)
+          σk = max(σmin, γ1 * σk)
         end
         # we need to update H if we use Ma97 or ma57
         if solver.r2_subsolver isa HSLDirectSolver
@@ -868,7 +871,7 @@ function SolverCore.solve!(
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       dir_stat = step_accepted ? "↘" : "↗"
-      @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk, subiter, dir_stat, sub_stats])
+      @info log_row([stats.iter, stats.objective, norm_∇fk, norm(s) ,σk, ρk, subiter, dir_stat, sub_stats])
     end
 
     if stats.status == :user

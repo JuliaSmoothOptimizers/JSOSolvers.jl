@@ -68,6 +68,10 @@ println("\n\n\t\t===================================")
 
 
 
+stats_sigma = R2N(nlp, verbose = 1, max_iter=700, σmin = 1.0 ,subsolver= :minres_qlp, npc_handler= :sigma)
+stats_cp = R2N(nlp, verbose = 1, max_iter=700,σmin = 1.0 ,subsolver= :minres_qlp, npc_handler= :cp)  
+
+
 
 
 
