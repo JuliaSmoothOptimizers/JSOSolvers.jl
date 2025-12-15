@@ -56,7 +56,7 @@ Parameter set for the R2N solver. Controls algorithmic tolerances and step accep
 - `γ2 = T(2.5)`: Regularization update parameter (γ1 ≤ γ2).
 - `γ3 = T(0.5)`: Regularization update parameter (0 < γ3 ≤ 1).
 - `δ1 = T(0.5)`: Cauchy point calculation parameter.
-- `σmin = eps(T)`: Minimum step parameter.
+- `σmin = eps(T)`: Minimum step parameter. #TODO too small I need it to be 1
 - `non_mono_size = 1`: the size of the non-monotone behaviour. If > 1, the algorithm will use a non-monotone strategy to accept steps.
 """
 struct R2NParameterSet{T} <: AbstractParameterSet
@@ -771,7 +771,6 @@ function SolverCore.solve!(
       end
 
       # Based on the flag, scp is calcualted
-      # scp .= -ν_k * ∇fk #TODO do I make it use mul! ? 
       mul!(scp, ∇fk, -ν_k)
       if npc_handler == :cp && npcCount >= 1
         npcCount = 0
@@ -820,8 +819,8 @@ function SolverCore.solve!(
         ρk = (fck_max - fck) / (fck_max - stats.objective + ΔTk) #TODO Prof. Orban check if this is correct the denominator   
       else
         # Avoid division by zero/negative. If ΔTk <= 0, the model is bad.
-        # ρk = (ΔTk > 10 * eps(T)) ? (stats.objective - fck) / ΔTk : -one(T)
-        ρk = (stats.objective - fck) / ΔTk
+        ρk = (ΔTk > 10 * eps(T)) ? (stats.objective - fck) / ΔTk : -one(T)
+        # ρk = (stats.objective - fck) / ΔTk
       end
 
       # Update regularization parameters and Acceptance of the new candidate

@@ -53,9 +53,9 @@ nlp= ADNLPModel(
 
 stats_gs = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :gs)
 stats_hsl= R2N(nlp, verbose = 10, max_iter=700, subsolver= :ma97) # todo we need this to handle npc
-stats_sigma = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :sigma)
+stats_sigma = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :sigma,  σmin = 1.0 )
 stats_prev = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :prev)
-stats_cp = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :cp)  
+stats_cp = R2N(nlp, verbose = 10, max_iter=700, subsolver= :minres_qlp, npc_handler= :cp,  σmin = 1.0 )  
 stats_trunk = trunk(nlp, verbose = 1, max_iter=700)
 println("The stats after max iteration is")
 println("gs: ", stats_gs.status, " max_iter :" , stats_gs.iter, " solution is ")#, stats_gs.solution)
@@ -70,6 +70,7 @@ println("\n\n\t\t===================================")
 
 stats_sigma = R2N(nlp, verbose = 1, max_iter=700, σmin = 1.0 ,subsolver= :minres_qlp, npc_handler= :sigma)
 stats_cp = R2N(nlp, verbose = 1, max_iter=700,σmin = 1.0 ,subsolver= :minres_qlp, npc_handler= :cp)  
+stats_prev = R2N(nlp, verbose = 1, max_iter=700, subsolver= :minres_qlp, npc_handler= :prev)
 
 
 
