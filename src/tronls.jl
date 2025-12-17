@@ -522,7 +522,7 @@ end
 
 """
 
-    α, s = cauchy_ls!(x, A, Fx, g, Δ, ℓ, u, s, As; μ₀ = 1e-2, μ₁ = 1.0, σ=10.0)
+    α, s = cauchy_ls!(x, A, Fx, g, Δ, ℓ, u, s, As; μ₀ = 1e-2, μ₁ = 1.0, σ = 10.0)
 
 Computes a Cauchy step `s = P(x - α g) - x` for
 
