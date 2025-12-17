@@ -83,7 +83,7 @@ The keyword arguments may include
 The keyword arguments of `TronSolverNLS` are passed to the [`TRONTrustRegion`](https://jso.dev/SolverTools.jl/stable/95-reference/#SolverTools.TRONTrustRegion) constructor.
 
 # Output
-The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
+The value returned is a [`GenericExecutionStats`](https://jso.dev/SolverCore.jl/stable/95-reference/#SolverCore.GenericExecutionStats), see `SolverCore.jl`.
 
 # Callback
 $(Callback_docstring)
@@ -466,7 +466,9 @@ function SolverCore.solve!(
   stats
 end
 
-"""`s = projected_line_search_ls!(x, A, g, d, ℓ, u, As, s; μ₀ = 1e-2)`
+"""
+
+    s = projected_line_search_ls!(x, A, g, d, ℓ, u, As, s; μ₀ = 1e-2)
 
 Performs a projected line search, searching for a step size `t` such that
 
@@ -518,7 +520,9 @@ function projected_line_search_ls!(
   return s
 end
 
-"""`α, s = cauchy_ls!(x, A, Fx, g, Δ, ℓ, u, s, As; μ₀ = 1e-2, μ₁ = 1.0, σ=10.0)`
+"""
+
+    α, s = cauchy_ls!(x, A, Fx, g, Δ, ℓ, u, s, As; μ₀ = 1e-2, μ₁ = 1.0, σ=10.0)
 
 Computes a Cauchy step `s = P(x - α g) - x` for
 
