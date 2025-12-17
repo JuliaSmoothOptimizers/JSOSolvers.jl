@@ -74,7 +74,7 @@ The solvers rely heavily on iterative linear algebra methods from `Krylov.jl` [@
 Julia's JIT compiler is attractive for the design of efficient scientific computing software, and, in particular, mathematical optimization [@lubin2015computing], and has become a natural choice for developing new solvers.
 
 While several options exist to solve \eqref{eq:nlp} in Julia, many rely on wrappers to solvers implemented in low-level compiled languages.
-For example, if \eqref{eq:nlp} is modeled using JuMP [@jump], it can be passed to solvers like IPOPT [@wachter2006implementation] or Artelys Knitro [@byrd2006k] via Julia’s native C++ and Fortran interoperability.
+For example, if \eqref{eq:nlp} is modeled using JuMP [@jump], it can be passed to solvers like IPOPT [@wachter2006implementation] or Artelys Knitro [@byrd2006k] via Julia’s native C and Fortran interoperability.
 However, these interfaces often lack flexibility with respect to data types and numerical precision.
 In contrast, solvers written in pure Julia can operate seamlessly with a variety of arithmetic types or even GPU array types.
 This capability is increasingly important as extended-precision arithmetic becomes more accessible through packages such as GNU MPFR, shipped with Julia.
