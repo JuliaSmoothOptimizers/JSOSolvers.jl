@@ -60,6 +60,3 @@ function tests()
 end
 
 tests()
-
-include("solvers/trunkls.jl")
-include("incompatible.jl")

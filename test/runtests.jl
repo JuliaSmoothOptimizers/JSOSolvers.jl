@@ -84,6 +84,8 @@ include("restart.jl")
 include("callback.jl")
 include("consistency.jl")
 include("test_solvers.jl")
+include("incompatible.jl")
+
 if VERSION ≥ v"1.7"
   include("allocs.jl")
 

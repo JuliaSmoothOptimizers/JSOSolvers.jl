@@ -15,7 +15,7 @@ stats = GenericExecutionStats(nlp) # pre-allocate output structure
 using JSOSolvers
 solver = TronSolver(nlp) # pre-allocate workspace
 SolverCore.solve!(solver, nlp, stats) # call tron in place
-JSOSolvers.reset!(solver)
+SolverCore.reset!(solver)
 NLPModels.reset!(nlp) # reset counters
 (@allocated SolverCore.solve!(solver, nlp, stats)) == 0
 
