@@ -138,6 +138,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
+- `callback`: function called at each iteration, see [`Callback`](https://jso.dev/JSOSolvers.jl/stable/#Callback) section.
 - `η1 = $(FOMO_η1)`, `η2 = $(FOMO_η2)`: step acceptance parameters.
 - `γ1 = $(FOMO_γ1)`, `γ2 = $(FOMO_γ2)`: regularization update parameters.
 - `γ3 = $(FOMO_γ3)` : momentum factor βmax update parameter in case of unsuccessful iteration.
@@ -155,10 +156,6 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 # Output
 
 The value returned is a [`GenericExecutionStats`](https://jso.dev/SolverCore.jl/stable/95-reference/#SolverCore.GenericExecutionStats), see `SolverCore.jl`.
-
-# Callback
-
-$(Callback_docstring)
 
 The callback is called at each iteration.
 The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
