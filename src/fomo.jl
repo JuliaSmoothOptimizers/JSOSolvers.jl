@@ -154,7 +154,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 
 # Output
 
-The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
+The value returned is a [`GenericExecutionStats`](https://jso.dev/SolverCore.jl/stable/95-reference/#SolverCore.GenericExecutionStats), see `SolverCore.jl`.
 
 # Callback
 

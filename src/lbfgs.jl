@@ -70,7 +70,7 @@ The keyword arguments may include
 - `verbose_subsolver::Int = 0`: if > 0, display iteration information every `verbose_subsolver` iteration of the subsolver.
 
 # Output
-The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
+The returned value is a [`GenericExecutionStats`](https://jso.dev/SolverCore.jl/stable/95-reference/#SolverCore.GenericExecutionStats), see `SolverCore.jl`.
 
 # Callback
 $(Callback_docstring)

@@ -81,7 +81,7 @@ The keyword arguments may include
 See `JSOSolvers.trunkls_allowed_subsolvers` for a list of available Krylov solvers.
 
 # Output
-The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
+The value returned is a [`GenericExecutionStats`](https://jso.dev/SolverCore.jl/stable/95-reference/#SolverCore.GenericExecutionStats), see `SolverCore.jl`.
 
 # Callback
 $(Callback_docstring)
