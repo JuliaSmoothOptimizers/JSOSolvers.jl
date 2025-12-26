@@ -10,10 +10,10 @@
 
 | Problem type          | Solvers  |
 | --------------------- | -------- |
-| Unconstrained NLP     | [`lbfgs`](@ref), [`tron`](@ref), [`trunk`](@ref), [`R2`](@ref), [`fomo`](@ref)|
-| Unconstrained NLS     | [`trunk`](@ref), [`tron`](@ref) |
-| Bound-constrained NLP | [`tron`](@ref) |
-| Bound-constrained NLS | [`tron`](@ref) |
+| Unconstrained Nonlinear Optimization Problem     | [`lbfgs`](@ref), [`tron`](@ref), [`trunk`](@ref), [`R2`](@ref), [`fomo`](@ref)|
+| Unconstrained Nonlinear Least Squares     | [`trunk`](@ref), [`tron`](@ref) |
+| Bound-constrained Nonlinear Optimization Problem  | [`tron`](@ref) |
+| Bound-constrained Nonlinear Least Squares | [`tron`](@ref) |
 
 ## Solver list
 

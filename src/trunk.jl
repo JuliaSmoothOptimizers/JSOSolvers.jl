@@ -74,7 +74,7 @@ The keyword arguments may include
 - `M`: linear operator that models a Hermitian positive-definite matrix of size `n`; passed to Krylov subsolvers. 
 
 # Output
-The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
+The returned value is a [`GenericExecutionStats`](https://jso.dev/SolverCore.jl/stable/95-reference/#SolverCore.GenericExecutionStats), see `SolverCore.jl`.
 
 # Callback
 $(Callback_docstring)
