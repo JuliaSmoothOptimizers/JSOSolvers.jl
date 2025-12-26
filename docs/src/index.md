@@ -84,7 +84,7 @@ The main dependencies required to use the solvers are:
 - `NLPModelsModifiers.jl` – provides utilities for modifying models (e.g., adding bounds or transformations).
 These dependencies are installed automatically when JSOSolvers.jl is added via the Julia package manager, and no additional configuration is required.
 
-# Bug reports and discussions
+## Bug reports and discussions
 
 If you think you found a bug, feel free to open an [issue](https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/issues).
 Focused suggestions and requests can also be opened as issues. Before opening a pull request, start an issue or a discussion on the topic, please.
@@ -95,6 +95,7 @@ If you want to ask a question not suited for a bug report, feel free to start a 
 
 All solvers here are _JSO-Compliant_, in the sense that they accept NLPModels and return GenericExecutionStats.
 This allows [benchmark them easily](https://jso.dev/tutorials/introduction-to-solverbenchmark/).
+See the full list of [Solvers](@ref).
 
 All solvers can be called like the following:
 
@@ -109,6 +110,21 @@ where `nlp` is an AbstractNLPModel or some specialization, such as an `AbstractN
 - `rtol` is the relative stopping tolerance (default: `rtol = √ϵ`);
 - `max_eval` is the maximum number of objective and constraints function evaluations (default: `-1`, which means no limit);
 - `max_time` is the maximum allowed elapsed time (default: `30.0`);
+- `callback` is a function that is called at each iteration.
 - `stats` is a `SolverTools.GenericExecutionStats` with the output of the solver.
 
-See the full list of [Solvers](@ref).
+### Callback
+
+The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
+Changing any of the input arguments will affect the subsequent iterations.
+In particular, setting `stats.status = :user` will stop the algorithm.
+All relevant information should be available in `nlp` and `solver`.
+Notably, you can access, and modify, the following:
+- `solver.x`: current iterate;
+- `solver.gx`: current gradient;
+- `stats`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
+  - `stats.dual_feas`: norm of the residual, for instance, the norm of the gradient for unconstrained problems;
+  - `stats.iter`: current iteration counter;
+  - `stats.objective`: current objective function value;
+  - `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm attained a stopping criterion. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
+  - `stats.elapsed_time`: elapsed time in seconds.
