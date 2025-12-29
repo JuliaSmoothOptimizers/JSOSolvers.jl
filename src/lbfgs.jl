@@ -61,6 +61,7 @@ The keyword arguments may include
 - `mem::Int = $(LBFGS_mem)`: algorithm parameter, see [`LBFGSParameterSet`](@ref).
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
+- `callback`: function called at each iteration, see [`Callback`](https://jso.dev/JSOSolvers.jl/stable/#Callback) section.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
@@ -71,9 +72,6 @@ The keyword arguments may include
 
 # Output
 The returned value is a [`GenericExecutionStats`](https://jso.dev/SolverCore.jl/stable/95-reference/#SolverCore.GenericExecutionStats), see `SolverCore.jl`.
-
-# Callback
-$(Callback_docstring)
 
 # Examples
 ```jldoctest
