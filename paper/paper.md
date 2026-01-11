@@ -40,20 +40,20 @@ bibliography: paper.bib
 where  $f:\mathbb{R}^n \rightarrow \mathbb{R}$ is a continuously differentiable function, with  $\ell \in \left(\mathbb{R} \cup \{-\infty\} \right)^n$, and  $u \in \left(\mathbb{R} \cup \{+\infty\} \right)^n$.
 The algorithms implemented here are iterative methods that aim to compute a stationary point of \eqref{eq:nlp} using first and, if possible, second-order derivatives.
 
-Our initial motivation for considering \eqref{eq:nlp} and developing `JSOSolvers.jl` is to solve large-scale unconstrained and bound-constrained problems such as parameter estimation in inverse problems, design optimization in engineering, and regularized machine learning models, and use these solvers to solve subproblems of penalty algorithms, such as `Percival.jl`[@Percival_jl] or `FletcherPenaltySolver.jl` [@FletcherPenaltySolver_jl], for constrained nonlinear continuous optimization problems.
+Our initial motivation for considering \eqref{eq:nlp} and developing `JSOSolvers.jl` is to solve large-scale unconstrained and bound-constrained problems such as parameter estimation in inverse problems, design optimization in engineering, and regularized machine learning models, and use these solvers to solve subproblems of penalty algorithms, such as `Percival.jl` [@Percival_jl] or `FletcherPenaltySolver.jl` [@FletcherPenaltySolver_jl], for constrained nonlinear continuous optimization problems.
 In many of these problems, explicitly storing Hessian matrices is either computationally prohibitive or impractical.
 The solvers in `JSOSolvers.jl` adopt a matrix-free approach, where standard optimization methods are implemented without forming derivative matrices explicitly.
 This strategy enables the solution of large-scale problems even when function and gradient evaluations are expensive.
 
 The library includes TRON, a trust-region Newton method for bound-constrained problems following the classical formulation of @tron, TRUNK, a factorization-free trust-region Newton method based on the truncated conjugate gradient method, as described by @conn2000trust, an implementation of L-BFGS, a limited-memory quasi-Newton method using a line search globalization strategy, and FOMO, a first-order method based on quadratic regularization designed for unconstrained optimization.
-The latter is an extension of a quadratic regularization method described by @aravkin2022proximal, and called R2 in `JSOSolvers.jl`.
+FOMO is an extension of a quadratic regularization method described by @aravkin2022proximal, and called R2 in `JSOSolvers.jl`.
 Unlike textbook implementations, our solvers introduce several design differences.
 TRON operates in a factorization-free mode, while the original Fortran TRON requires an explicitly formed Hessian.
 TRUNK departs from the Conn–Gould–Toint formulation by supporting a non-monotone mode and multiple subproblem solvers (CG, CR, MINRES, etc.).
 Our L-BFGS implementation uses a simplified line-search strategy that avoids the standard Wolfe conditions while maintaining robust convergence in practice.
 
 A nonlinear least-squares problem is a special case of \eqref{eq:nlp}, where $f(x)=\frac{1}{2}\|F(x)\|^2_2$ and the residual $F:\mathbb{R}^n \rightarrow \mathbb{R}^m$ is continuously differentiable, which appears in many applications, including inverse problems in imaging, geophysics, and machine learning. While it is possible to solve the problem using only the objective, knowing $F$ independently allows the development of more efficient methods.
-TRON and TRUNK have specialized implementations leveraging the structure of residual models to improve performance and scalability.
+Specialized variants of TRON and TRUNK, called TRON-NLS and TRUNK-NLS, leverage the structure of residual models to improve performance and scalability.
 
 A key strength of `JSOSolvers.jl` lies in its efficiency and flexibility.
 The solvers support fully in-place execution, allowing repeated solves without additional memory allocation, which is particularly beneficial in high-performance and GPU computing environments where memory management is critical.
@@ -84,7 +84,7 @@ Several alternatives to `JSOSolvers.jl` are available within and outside the Jul
 `Optim.jl` [@mogensen2018optim] is a general-purpose optimization library in pure Julia, suitable for small to medium-scale problems, but it lacks in-place execution and GPU support.
 `NLopt.jl` [@NLopt] provides access to a broad collection of optimization algorithms via a C library but does not support matrix-free methods or extended precision.
 `AdaptiveRegularization.jl` [@AdaptiveRegularization_jl] offers a matrix-free, multi-precision solver for unconstrained problems and is closely aligned with the design philosophy of `JSOSolvers.jl`.
-Ipopt [@wachter2006implementation], via `Ipopt.jl`, is widely used and efficient but requires explicit derivatives and is limited to CPU execution.
+Ipopt [@wachter2006implementation], via `Ipopt.jl`, is a widely used and efficient solver, but requires explicit derivatives and is limited to CPU execution.
 GALAHAD [@galahad], a Fortran-based suite for large-scale problems, is accessible through experimental Julia wrappers, yet lacks native composability.
 Commercial solvers such as Artelys Knitro [@byrd2006k] provide robust algorithms but remain constrained by licensing and limited Julia interoperability.
 `Optimization.jl` is a wrapper to existing optimization packages.
@@ -93,9 +93,13 @@ Commercial solvers such as Artelys Knitro [@byrd2006k] provide robust algorithms
 
 `JSOSolvers.jl` can solve large-scale problems and can be benchmarked easily against other JSO-compliant solvers using `SolverBenchmark.jl` [@SolverBenchmark_jl].
 We include below performance profiles [@dolan2002benchmarking] with respect to elapsed time of `JSOSolvers.jl` solvers against Ipopt on all the 291 unconstrained problems from the CUTEst collection [@cutest], whose dimensions range from 2 up to 192,627 variables.
-LBFGS uses only first-order information, while TRON and TRUNK use Hessian-vector products and IPOPT uses the Hessian as a matrix.
+LBFGS uses only first-order information, while TRON and TRUNK use Hessian-vector products and Ipopt uses the Hessian as a matrix.[^hardware]
 Without explaining performance profiles in full detail, the plot shows that Ipopt is fastest on 42 problems (15%), TRON on 9 (3%), TRUNK on 64 (21%), and L-BFGS on 176 (60%).
 Nearly all problems were solved within the 20-minute limit: TRON solved 272 (93%), Ipopt 270, TRUNK 269, and L-BFGS 267.
+
+[^hardware]: Benchmarks were run sequentially on a CPU-only machine.
+The hardware configuration was an Intel Core i7-class processor with approximately
+16 GB of RAM running Linux. Timings are intended for relative comparison only.
 
 Overall, these results are encouraging.
 Although Ipopt is a mature and highly optimized solver, TRUNK and L-BFGS achieve comparable problem coverage while being significantly faster on many instances.
