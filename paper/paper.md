@@ -62,7 +62,8 @@ Moreover, TRUNK, TRUNK-NLS, and FOMO support GPU arrays, broadening the range of
 The package documentation and \url{https://jso.dev/tutorials} provide examples illustrating the use of different floating-point systems.
 Furthermore, the solvers expose in-place function variants, allowing multiple optimization problems with identical dimensions and data types to be solved efficiently without reallocations.
 
-`JSOSolvers.jl` is built upon the JuliaSmoothOptimizers (JSO) tools [@The_JuliaSmoothOptimizers_Ecosystem] [^jso].
+`JSOSolvers.jl` is built upon the JuliaSmoothOptimizers (JSO) tools [^jso].
+
 JSO is an academic organization containing a collection of Julia packages for nonlinear optimization software development, testing, and benchmarking.
 It provides tools for building models, accessing problem repositories, and solving subproblems.
 Solvers in `JSOSolvers.jl` take as input an `AbstractNLPModel`, JSO's general model API defined in `NLPModels.jl` [@NLPModels_jl], a flexible data type to evaluate objective and constraints, their derivatives, and to provide any information that a solver might request from a model.
