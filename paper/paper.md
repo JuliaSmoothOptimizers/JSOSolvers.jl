@@ -11,7 +11,7 @@ authors:
     orcid: 0000-0001-7729-2513
     affiliation: 1
   - name: Dominique Monnet
-    orcid:
+    orcid: 0000-0002-5482-6831
     affiliation: 3
   - name: Dominique Orban
     orcid: 0000-0002-8017-7687
@@ -123,4 +123,5 @@ include("analyze_benchmark.jl") # make the figure
 Dominique Orban is partially supported by an NSERC Discovery Grant.
 
 # References
+
 
