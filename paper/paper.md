@@ -62,12 +62,14 @@ Moreover, TRUNK, TRUNK-NLS, and FOMO support GPU arrays, broadening the range of
 The package documentation and \url{https://jso.dev/tutorials} provide examples illustrating the use of different floating-point systems.
 Furthermore, the solvers expose in-place function variants, allowing multiple optimization problems with identical dimensions and data types to be solved efficiently without reallocations.
 
-`JSOSolvers.jl` is built upon the JuliaSmoothOptimizers (JSO) tools [@The_JuliaSmoothOptimizers_Ecosystem].
+`JSOSolvers.jl` is built upon the JuliaSmoothOptimizers (JSO) tools [@The_JuliaSmoothOptimizers_Ecosystem] [^jso].
 JSO is an academic organization containing a collection of Julia packages for nonlinear optimization software development, testing, and benchmarking.
 It provides tools for building models, accessing problem repositories, and solving subproblems.
 Solvers in `JSOSolvers.jl` take as input an `AbstractNLPModel`, JSO's general model API defined in `NLPModels.jl` [@NLPModels_jl], a flexible data type to evaluate objective and constraints, their derivatives, and to provide any information that a solver might request from a model.
 The user can hand-code derivatives, use automatic differentiation, or use JSO-interfaces to classical mathematical optimization modeling languages such as AMPL [@fourer2003ampl], CUTEst [@cutest], or JuMP [@jump]. 
 The solvers rely heavily on iterative linear algebra methods from `Krylov.jl` [@Krylov_jl].
+
+[^jso]: JuliaSmoothOptimizers https://jso.dev/
 
 # Statement of need
 
@@ -92,8 +94,8 @@ Commercial solvers such as Artelys Knitro [@byrd2006k] provide robust algorithms
 ## Benchmarking
 
 `JSOSolvers.jl` can solve large-scale problems and can be benchmarked easily against other JSO-compliant solvers using `SolverBenchmark.jl` [@SolverBenchmark_jl].
-We include below performance profiles [@dolan2002benchmarking] with respect to elapsed time of `JSOSolvers.jl` solvers against Ipopt on all the 291 unconstrained problems from the CUTEst collection [@cutest], whose dimensions range from 2 up to 192,627 variables.
-LBFGS uses only first-order information, while TRON and TRUNK use Hessian-vector products and Ipopt uses the Hessian as a matrix.[^hardware]
+We include below performance profiles [@dolan2002benchmarking] with respect to elapsed time of `JSOSolvers.jl` solvers against Ipopt on all the 291 unconstrained problems from the CUTEst collection [@cutest], whose dimensions range from 2 up to 192,627 variables.[^hardware]
+LBFGS uses only first-order information, while TRON and TRUNK use Hessian-vector products and Ipopt uses the Hessian as a matrix.
 Without explaining performance profiles in full detail, the plot shows that Ipopt is fastest on 42 problems (15%), TRON on 9 (3%), TRUNK on 64 (21%), and L-BFGS on 176 (60%).
 Nearly all problems were solved within the 20-minute limit: TRON solved 272 (93%), Ipopt 270, TRUNK 269, and L-BFGS 267.
 
