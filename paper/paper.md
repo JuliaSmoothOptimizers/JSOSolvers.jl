@@ -49,25 +49,25 @@ The library includes TRON, a trust-region Newton method for bound-constrained pr
 FOMO is an extension of a quadratic regularization method described by @aravkin2022proximal, and called R2 in `JSOSolvers.jl`.
 Unlike textbook implementations, our solvers introduce several design differences.
 TRON operates in a factorization-free mode, while the original Fortran TRON requires an explicitly formed Hessian.
-TRUNK departs from the Conn–Gould–Toint formulation by supporting a non-monotone mode and multiple subproblem solvers (CG, CR, MINRES, etc.).
+TRUNK departs from the Conn–Gould–Toint formulation by supporting a non-monotone mode and multiple subproblem solvers (CG, CR, MINRES, etc.)
 Our L-BFGS implementation uses a simplified line-search strategy that avoids the standard Wolfe conditions while maintaining robust convergence in practice.
 
 A nonlinear least-squares problem is a special case of \eqref{eq:nlp}, where $f(x)=\frac{1}{2}\|F(x)\|^2_2$ and the residual $F:\mathbb{R}^n \rightarrow \mathbb{R}^m$ is continuously differentiable, which appears in many applications, including inverse problems in imaging, geophysics, and machine learning. While it is possible to solve the problem using only the objective, knowing $F$ independently allows the development of more efficient methods.
 Specialized variants of TRON and TRUNK, called TRON-NLS and TRUNK-NLS, leverage the structure of residual models to improve performance and scalability.
 
-A key strength of `JSOSolvers.jl` lies in its efficiency and flexibility.
+Key strengths of `JSOSolvers.jl` are its efficiency and flexibility.
 The solvers support fully in-place execution, allowing repeated solves without additional memory allocation, which is particularly beneficial in high-performance and GPU computing environments where memory management is critical.
-The solvers support any floating-point type, including extended and multi-precision types such as BigFloat, DoubleFloats or QuadMath.
+The solvers support any floating-point type, including extended and multi-precision types such as BigFloat, DoubleFloats, and QuadMath.
 Moreover, TRUNK, TRUNK-NLS, and FOMO support GPU arrays, broadening the range of hardware where the package can be effectively deployed, for instance when used together with `ExaModels.jl` [@shin2024accelerating].
 The package documentation and \url{https://jso.dev/tutorials} provide examples illustrating the use of different floating-point systems.
 Furthermore, the solvers expose in-place function variants, allowing multiple optimization problems with identical dimensions and data types to be solved efficiently without reallocations.
 
-`JSOSolvers.jl` is built upon the JuliaSmoothOptimizers (JSO) tools [^jso].
+`JSOSolvers.jl` is built upon the JuliaSmoothOptimizers (JSO) tools[^jso].
 JSO is an academic organization containing a collection of Julia packages for nonlinear optimization software development, testing, and benchmarking.
 It provides tools for building models, accessing problem repositories, and solving subproblems.
 Solvers in `JSOSolvers.jl` take as input an `AbstractNLPModel`, JSO's general model API defined in `NLPModels.jl` [@NLPModels_jl], a flexible data type to evaluate objective and constraints, their derivatives, and to provide any information that a solver might request from a model.
-The user can hand-code derivatives, use automatic differentiation, or use JSO-interfaces to classical mathematical optimization modeling languages such as AMPL [@fourer2003ampl], CUTEst [@cutest], or JuMP [@jump]. 
-The solvers rely heavily on iterative linear algebra methods from `Krylov.jl` [@Krylov_jl].
+The user can hand-code derivatives, use automatic differentiation, or use JSO-interfaces to classical mathematical optimization modeling languages such as AMPL [@fourer2003ampl], CUTEst [@cutest], and JuMP [@jump]. 
+The solvers heavily rely on iterative linear algebra methods from `Krylov.jl` [@Krylov_jl].
 
 [^jso]: JuliaSmoothOptimizers https://jso.dev/
 
@@ -76,9 +76,9 @@ The solvers rely heavily on iterative linear algebra methods from `Krylov.jl` [@
 Julia's JIT compiler is attractive for the design of efficient scientific computing software, and, in particular, mathematical optimization [@lubin2015computing], and has become a natural choice for developing new solvers.
 
 While several options exist to solve \eqref{eq:nlp} in Julia, many rely on wrappers to solvers implemented in low-level compiled languages.
-For example, if \eqref{eq:nlp} is modeled using JuMP [@jump], it can be passed to solvers like IPOPT [@wachter2006implementation] or Artelys Knitro [@byrd2006k] via Julia’s native C and Fortran interoperability.
+For example, if \eqref{eq:nlp} is modeled using JuMP [@jump], it can be passed to solvers like IPOPT [@wachter2006implementation] and Artelys Knitro [@byrd2006k] via Julia’s native C and Fortran interoperability.
 However, these interfaces often lack flexibility with respect to data types and numerical precision.
-In contrast, solvers written in pure Julia can operate seamlessly with a variety of arithmetic types or even GPU array types.
+In contrast, solvers written in pure Julia can seamlessly operate with a variety of arithmetic types or even GPU array types.
 This capability is increasingly important as extended-precision arithmetic becomes more accessible through packages such as GNU MPFR, shipped with Julia.
 Such flexibility enables high-precision computing when numerical accuracy is paramount.
 
@@ -94,7 +94,7 @@ Commercial solvers such as Artelys Knitro [@byrd2006k] provide robust algorithms
 ## Benchmarking
 
 `JSOSolvers.jl` can solve large-scale problems and can be benchmarked easily against other JSO-compliant solvers using `SolverBenchmark.jl` [@SolverBenchmark_jl].
-We include below performance profiles [@dolan2002benchmarking] with respect to elapsed time of `JSOSolvers.jl` solvers against Ipopt on all the 291 unconstrained problems from the CUTEst collection [@cutest], whose dimensions range from 2 up to 192,627 variables.[^hardware]
+Below, we include performance profiles [@dolan2002benchmarking] with respect to elapsed time of `JSOSolvers.jl` solvers against Ipopt on all the 291 unconstrained problems from the CUTEst collection [@cutest], whose dimensions range from 2 up to 192,627 variables.[^hardware]
 LBFGS uses only first-order information, while TRON and TRUNK use Hessian-vector products and Ipopt uses the Hessian as a matrix.
 Without explaining performance profiles in full detail, the plot shows that Ipopt is fastest on 42 problems (15%), TRON on 9 (3%), TRUNK on 64 (21%), and L-BFGS on 176 (60%).
 Nearly all problems were solved within the 20-minute limit: TRON solved 272 (93%), Ipopt 270, TRUNK 269, and L-BFGS 267.
@@ -123,5 +123,6 @@ include("analyze_benchmark.jl") # make the figure
 Dominique Orban is partially supported by an NSERC Discovery Grant.
 
 # References
+
 
 
