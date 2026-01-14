@@ -3,7 +3,7 @@
 
 cff-version: 1.2.0
 title: >-
-  JSOSolvers.jl: JuliaSmoothOptimizers optimization solvers
+  JSOSolvers.jl: Unconstrained and bound-constrained optimization solvers
 message: >-
   If you use this software, please cite it using the
   metadata from this file.
@@ -18,6 +18,12 @@ authors:
       QC, Canada.
     orcid: 'https://orcid.org/0000-0001-7729-2513'
   - given-names: Dominique
+    family-names: Monnet
+    email: monnetdo@gmail.com
+    orcid: 'https://orcid.org/0000-0002-5482-6831'
+    affiliation: >-
+      Univ Rennes, INSA Rennes, CNRS, IRMAR - UMR 6625, Rennes, France
+  - given-names: Dominique
     family-names: Orban
     email: dominique.orban@gerad.ca
     orcid: 'https://orcid.org/0000-0002-8017-7687'
@@ -30,18 +36,18 @@ authors:
     email: abel.s.siqueira@gmail.com
     given-names: Abel
     family-names: Soares Siqueira
-  - given-names: contributors
 identifiers:
   - description: Zenodo archive
     type: doi
     value: 10.5281/zenodo.3991143
 keywords:
-  - Nonlinear Optimization
-  - Least squares
   - Julia
-  - Nonlinear Programming
+  - nonlinear optimization
+  - numerical optimization
+  - large-scale optimization
+  - unconstrained optimization
 license: MPL-2.0
-version: 0.11.0
-date-released: '2023-07-05'
+version: 0.14.5
+date-released: '2026-01-14'
 repository-code: >-
   https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl
