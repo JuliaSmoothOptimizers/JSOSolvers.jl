@@ -51,3 +51,30 @@ version: 0.14.5
 date-released: '2026-01-14'
 repository-code: >-
   https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl
+preferred-citation:
+  authors:
+  - family-names: Migot
+    given-names: Tangi
+    orcid: "https://orcid.org/0000-0001-7729-2513"
+  - family-names: Monnet
+    given-names: Dominique
+    orcid: "https://orcid.org/0000-0002-5482-6831"
+  - family-names: Orban
+    given-names: Dominique
+    orcid: "https://orcid.org/0000-0002-8017-7687"
+  - family-names: Siqueira
+    given-names: Abel Soares
+    orcid: "https://orcid.org/0000-0003-4451-281X"
+  date-published: 2026-01-14
+  doi: 10.21105/joss.09467
+  issn: 2475-9066
+  issue: 117
+  journal: Journal of Open Source Software
+  publisher:
+    name: Open Journals
+  start: 9467
+  title: "JSOSolvers.jl: Unconstrained and bound-constrained
+    optimization solvers"
+  type: article
+  url: "https://joss.theoj.org/papers/10.21105/joss.09467"
+  volume: 11
