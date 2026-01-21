@@ -164,6 +164,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance: algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
+- `callback`: function called at each iteration, see [`Callback`](https://jso.dev/JSOSolvers.jl/stable/#Callback) section.
 - `η1 = $(FOMO_η1)`, `η2 = $(FOMO_η2)`: step acceptance parameters.
 - `γ1 = $(FOMO_γ1)`, `γ2 = $(FOMO_γ2)`: regularization update parameters.
 - `γ3 = $(FOMO_γ3)` : momentum factor βktilde update parameter in case of unsuccessful iteration.
@@ -181,26 +182,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 
 # Output
 
-The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
-
-# Callback
-
-$(Callback_docstring)
-
-The callback is called at each iteration.
-The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
-Changing any of the input arguments will affect the subsequent iterations.
-In particular, setting `stats.status = :user || stats.stats = :unknown` will stop the algorithm.
-All relevant information should be available in `nlp` and `solver`.
-Notably, you can access, and modify, the following:
-- `solver.x`: current iterate;
-- `solver.gx`: current gradient;
-- `stats`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
-    - `stats.dual_feas`: norm of current gradient;
-    - `stats.iter`: current iteration counter;
-    - `stats.objective`: current objective function value;
-    - `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm has attained a stopping criterion. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
-    - `stats.elapsed_time`: elapsed time in seconds.
+The value returned is a [`GenericExecutionStats`](https://jso.dev/SolverCore.jl/stable/95-reference/#SolverCore.GenericExecutionStats), see `SolverCore.jl`.
 
 # Examples
 
@@ -331,10 +313,6 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 # Output
 
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
-
-# Callback
-
-$(Callback_docstring)
 
 # Examples
 

@@ -3,7 +3,7 @@
 ## CUTEst benchmark
 
 With JSO-compliant solvers, we can run the solver on a set of problems, explore the results, and compare to other JSO-compliant solvers using specialized benchmark tools.
-We are following here the tutorial in [SolverBenchmark.jl](https://jso.dev/SolverBenchmark.jl/stable) to run benchmarks on JSO-compliant solvers.
+We are following here the tutorial in [SolverBenchmark.jl](https://jso.dev/SolverBenchmark.jl/stable/) to run benchmarks on JSO-compliant solvers.
 
 ``` @example ex1
 using CUTEst

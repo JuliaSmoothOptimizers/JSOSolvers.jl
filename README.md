@@ -1,6 +1,6 @@
 # JSOSolvers.jl
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.3991143.svg)](https://doi.org/10.5281/zenodo.3991143)
+[![DOI](https://joss.theoj.org/papers/10.21105/joss.09467/status.svg)](https://doi.org/10.21105/joss.09467)
 [![GitHub release](https://img.shields.io/github/release/JuliaSmoothOptimizers/JSOSolvers.jl.svg)](https://github.com/JuliaSmoothOptimizers/JSOSolvers.jl/releases/latest)
 [![](https://img.shields.io/badge/docs-stable-3f51b5.svg)](https://jso.dev/JSOSolvers.jl/stable)
 [![](https://img.shields.io/badge/docs-latest-3f51b5.svg)](https://jso.dev/JSOSolvers.jl/latest)
@@ -55,6 +55,12 @@ This package provides an implementation of four classic algorithms for unconstra
 
 `pkg> add JSOSolvers`
 
+You can run the package’s unit tests with:
+
+```julia
+pkg> test JSOSolvers
+```
+
 ## Example
 
 ```julia
@@ -64,6 +70,10 @@ using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> 100 * (x[2] - x[1]^2)^2 + (x[1] - 1)^2, [-1.2; 1.0])
 stats = lbfgs(nlp) # or trunk, tron, R2
 ```
+
+## Documentation
+
+Click on the badge [![](https://img.shields.io/badge/docs-stable-3f51b5.svg)](https://jso.dev/JSOSolvers.jl/stable) to access the documentation.
 
 ## How to cite
 

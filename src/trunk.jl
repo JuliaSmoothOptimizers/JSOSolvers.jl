@@ -63,6 +63,7 @@ The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
+- `callback`: function called at each iteration, see [`Callback`](https://jso.dev/JSOSolvers.jl/stable/#Callback) section.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
@@ -74,10 +75,7 @@ The keyword arguments may include
 - `M`: linear operator that models a Hermitian positive-definite matrix of size `n`; passed to Krylov subsolvers. 
 
 # Output
-The returned value is a `GenericExecutionStats`, see `SolverCore.jl`.
-
-# Callback
-$(Callback_docstring)
+The returned value is a [`GenericExecutionStats`](https://jso.dev/SolverCore.jl/stable/95-reference/#SolverCore.GenericExecutionStats), see `SolverCore.jl`.
 
 # References
 This implementation follows the description given in
