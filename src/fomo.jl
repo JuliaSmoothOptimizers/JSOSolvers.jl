@@ -1,5 +1,5 @@
 export fomo, FomoSolver, FOMOParameterSet, FoSolver, fo, R2, TR
-export tr_step, r2_step, nesterov_HB, cg_PR, cg_FR
+export tr_step, r2_step, nesterov_HB, cg_PR, cg_FR, ia_momentum
 
 abstract type AbstractFirstOrderSolver <: AbstractOptimizationSolver end
 
@@ -9,6 +9,7 @@ struct r2_step <: AbstractFOMethod end
 
 abstract type AbstractMomentumMethod end
 #struct ia_momentum <: AbstractMomentumMethod end
+struct ia_momentum <: AbstractMomentumMethod end
 struct nesterov_HB <: AbstractMomentumMethod end
 struct cg_PR <: AbstractMomentumMethod end
 struct cg_FR <: AbstractMomentumMethod end
@@ -87,7 +88,7 @@ struct FOMOParameterSet{T} <: AbstractParameterSet
   θ2::Parameter{T, RealInterval{T}}
   M::Parameter{Int, IntegerRange{Int}}
   step_backend::Parameter{Union{r2_step, tr_step}, CategoricalSet{Union{r2_step, tr_step}}}
-  momentum_backend::Parameter{Union{nesterov_HB, cg_PR, cg_FR}, CategoricalSet{Union{nesterov_HB, cg_PR, cg_FR}}}
+  momentum_backend::Parameter{Union{ia_momentum, nesterov_HB, cg_PR, cg_FR}, CategoricalSet{Union{ia_momentum, nesterov_HB, cg_PR, cg_FR}}}
 end
 
 # add a default constructor
@@ -100,11 +101,11 @@ function FOMOParameterSet(
   γ3::T = get(FOMO_γ3, nlp),
   αmax::T = get(FOMO_αmax, nlp),
   β::T = get(FOMO_β, nlp),
-  θ1::T = get_θ1(momentum_backend, nlp),
-  θ2::T = get_θ2(momentum_backend, nlp),
   M::Int = get(FOMO_M, nlp),
   step_backend::AbstractFOMethod = get(FOMO_step_backend, nlp),
-  momentum_backend::AbstractMomentumMethod = get(FOMO_momentum_backend ,nlp)
+  momentum_backend::AbstractMomentumMethod = get(FOMO_momentum_backend ,nlp),
+  θ1::T = get_θ1(momentum_backend, nlp),
+  θ2::T = get_θ2(momentum_backend, nlp)
 ) where {T}
   @assert η1 <= η2
   FOMOParameterSet(
@@ -119,7 +120,7 @@ function FOMOParameterSet(
     Parameter(θ2, RealInterval(T(1), T(Inf), upper_open = true)),
     Parameter(M, IntegerRange(Int(1), typemax(Int))),
     Parameter(step_backend, CategoricalSet{Union{tr_step, r2_step}}([r2_step(); tr_step()])),
-    Parameter(momentum_backend, CategoricalSet{Union{nesterov_HB, cg_PR, cg_FR}}([nesterov_HB(); cg_PR(); cg_FR()])),
+    Parameter(momentum_backend, CategoricalSet{Union{ia_momentum, nesterov_HB, cg_PR, cg_FR}}([ia_momentum(); nesterov_HB(); cg_PR(); cg_FR()])),
   )
 end
 
@@ -559,8 +560,11 @@ function SolverCore.solve!(
     μk = step_mult(solver.α, norm_d, step_backend)
     c .= x .+ μk .* d
     step_underflow = x == c # step addition underfow on every dimensions, should happen before solver.α == 0
-    ΔTk =  (norm_∇fk^2 - βktilde* mdot∇f) * μk # = dot(d,∇fk) * μk with momentum, ‖∇fk‖²μk without momentum
-    #ΔTk =  norm_d^2 * μk
+    if !use_momentum
+      ΔTk =  norm_∇fk^2*μk
+    else
+      ΔTk = compute_model_red(norm_∇fk, mdot∇f, βktilde, μk, momentum_backend)
+    end
     fck = obj(nlp, c)
     unbounded = fck < fmin
     ρk = (max_obj_mem - fck) / (max_obj_mem - stats.objective + ΔTk)
@@ -572,8 +576,8 @@ function SolverCore.solve!(
       solver.α = solver.α * γ1
       if use_momentum
         βktilde *= γ3
-        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, κ, βktilde, θ1, θ2, M)
-        d .= βktilde*momentum .- g 
+        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, κ, βktilde, θ1, θ2, M, momentum_backend)
+        compute_direction!(d, g, momentum, βktilde, momentum_backend) 
         norm_d = norm(d) # TODO only needed in TR context, not in R2, 
       end
     end
@@ -590,7 +594,7 @@ function SolverCore.solve!(
       max_obj_mem = maximum(obj_mem)
 
       if use_momentum
-        momentum .= -g .+ βk*momentum
+        update_momentum!(g, momentum, βk, momentum_backend)
         norm_m = norm(momentum)
         d.=g # temp. storage of ∇fk-1 in d to avoid storage, needed for compute_beta function
         norm_∇fk₋ = norm_∇fk
@@ -601,8 +605,8 @@ function SolverCore.solve!(
       if use_momentum
         βk = compute_beta(β,norm_∇fk,norm_∇fk₋,g,d,momentum_backend)
         mdot∇f = dot(momentum, g)
-        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, κ, βk, θ1, θ2, M)
-        d .=  βktilde*momentum .- g
+        βktilde = find_beta_tilde(mdot∇f, norm_∇fk, norm_m, μk, stats.objective, max_obj_mem, κ, βk, θ1, θ2, M, momentum_backend)
+        compute_direction!(d, g, momentum, βktilde, momentum_backend) 
         norm_d = norm(d)
         avgβktilde += βktilde
         siter += 1
@@ -671,11 +675,7 @@ function update_kappa(αk::T, αk₋::T, ::nesterov_HB) where {T}
   αk/αk₋
 end
 
-function update_kappa(αk::T, αk₋::T, ::cg_PR) where {T}
-  1
-end
-
-function update_kappa(αk::T, αk₋::T, ::cg_FR) where {T}
+function update_kappa(αk::T, αk₋::T, ::AbstractMomentumMethod) where {T}
   1
 end
 
@@ -704,6 +704,7 @@ function find_beta_tilde(
   θ1::T,
   θ2::T,
   M::Int,
+  momentum_backend::AbstractMomentumMethod
 ) where {T}
   e = eps(T)
   if abs(mdot∇f)<e 
@@ -745,6 +746,112 @@ function find_beta_tilde(
   βktilde
 end
 
+function find_beta_tilde(
+  mdot∇f::T,
+  norm_∇f::T,
+  norm_m::T,
+  μk::T,
+  fk::T,
+  max_obj_mem::T,
+  κ::T,
+  βk::T,
+  θ1::T,
+  θ2::T,
+  M::Int,
+  momentum_backend::ia_momentum
+) where {T}
+  e = eps(T)
+  p = norm_∇f^2+mdot∇f
+  if abs(p)<e 
+    p = e*sign(p) 
+  end
+  # Condition 1: βktilde <= β1 if mdot∇f > 0, βktilde <= β1 if mdot∇f < 0, no condition if  mdot∇f == 0
+  βktilde = βk
+  β1 = ((1-θ1)*norm_∇f^2 + (max_obj_mem-fk)/μk)/(norm_∇f^2+mdot∇f) 
+  if p>0
+    βktilde = min(β1,βktilde)
+  elseif p<0
+    βktilde = max(β1,βktilde)
+  end
+  
+  # Condition 2: βktilde ∈ [r21,r22], r21 and r22 are roots of  P(βktilde) = (1-θ2^2)norm_∇f -2βktilde*(mdot∇f + mdot∇f) + βktilde^2 norm_m. 
+  # Roots are necessarily real and r21 ≤ 0 ≤ r22
+  a = norm_∇f^2 + 2*mdot∇f + norm_m^2
+  if a<e
+    a = e
+  end
+  b = -2*(norm_∇f^2+mdot∇f)
+  c = (1-θ2^2)*norm_∇f^2
+  Δ2 = b^2-4*a*c
+  r21 = (-b-sqrt(Δ2))/(2*a)
+  r22 = (-b+sqrt(Δ2))/(2*a)
+  βktilde = max(r21,βktilde)
+  βktilde = min(r22,βktilde)
+
+  # Condition 3 (only in nonmonotone case): βktilde ∉ [r31,r32], r31 and r32 are roots of  Q(βktilde) = aβtilde^2 + bβtilde +c
+  # roots are not necessarily real. If complex condition does not apply. If real, they both have the same sign.
+  if M>1
+    c = (1 - θ1^2)*norm_∇f^2
+    r31 = 0
+    r32 = 0
+    Δ3= b^2-4*a*c
+    if Δ3>0
+      r31 = (-b-sqrt(Δ2))/(2*a)
+      r32 = (-b+sqrt(Δ2))/(2*a)
+    end
+    if βktilde >r31 && βktilde < r32
+      βktilde = sign(r31)*min(abs(r31),abs(r32))
+    end
+  end
+  βktilde
+end
+
+
+
+"""
+    compute_direction!(d::V, ∇fk::V, momentum::V, β::T, ::AbstractMomentumMethod)
+    compute_direction!(d::V, ∇fk::V, momentum::V, β::T, ::ia_momentum)
+
+Compute search direction.
+"""
+
+function compute_direction!(d::V, ∇fk::V, momentum::V, βktilde::T, ::AbstractMomentumMethod) where {T,V}
+  d .= -∇fk + βktilde*momentum
+end
+
+function compute_direction!(d::V, ∇fk::V, momentum::V, βktilde::T, ::ia_momentum) where {T,V}
+  d .= -(1-βktilde)*∇fk + βktilde*momentum
+end
+
+"""
+    compute_model_red(norm_∇f::T, mdot∇f::T, βktilde::T, μk::T, ::AbstractMomentumMethod)
+    compute_model_red(norm_∇f::T, mdot∇f::T, βktilde::T, μk::T, ::ia_momentum)
+
+Compute model reduction provided by the step.
+"""
+function compute_model_red(norm_∇f::T, mdot∇f::T, βktilde::T, μk::T, ::AbstractMomentumMethod) where {T}
+  (norm_∇f^2 - βktilde* mdot∇f) * μk
+end
+
+function compute_model_red(norm_∇f::T, mdot∇f::T, βktilde::T, μk::T, ::ia_momentum) where {T}
+  ((1-βktilde) * norm_∇f^2 - βktilde * mdot∇f) * μk
+end
+
+"""
+    update_momentum!(∇fk::V, momentum::V, β::T, ::AbstractMomentumMethod)
+    update_momentum!(∇fk::V, momentum::V, β::T, ::ia_momentum)
+
+Update momentum.
+"""
+
+function update_momentum!(∇fk::V, momentum::V, βk::T, ::AbstractMomentumMethod) where {T,V}
+  momentum .= -∇fk + βk*momentum
+end
+
+function update_momentum!(∇fk::V, momentum::V, βk::T, ::ia_momentum) where {T,V}
+  momentum .= -(1-βk)*∇fk + βk*momentum
+end
+
 """
     compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::, ::AbstractMomentumMethod)
     compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::, ::cg_PR)
@@ -752,11 +859,8 @@ end
 
 Compute β coefficient for the given momentum_backend.
 """
-# function compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::V, ::ia_momentum) where {T,V}
-#   β
-# end
 
-function compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::V, ::nesterov_HB) where {T,V}
+function compute_beta(β::T, norm_∇fk::T, norm_∇fk₋::T, ∇fk::V, ∇fk₋::V, ::AbstractMomentumMethod) where {T,V}
   β
 end
 
@@ -798,7 +902,7 @@ function step_mult(α::T, norm_∇fk::T, ::tr_step) where {T}
 end
 
 function get_θ1(m::AbstractMomentumMethod, nlp::AbstractNLPModel{T, V}) where{T, V}
-    if typeof(m) == nesterov_HB
+  if typeof(m) == nesterov_HB
     θ1 = get(FOMO_θ1_HB, nlp)
   elseif typeof(m) == cg_PR
     θ1 = get(FOMO_θ1_PR, nlp)
@@ -810,7 +914,7 @@ function get_θ1(m::AbstractMomentumMethod, nlp::AbstractNLPModel{T, V}) where{T
 end
 
 function get_θ2(m::AbstractMomentumMethod, nlp::AbstractNLPModel{T, V}) where{T, V}
-    if typeof(m) == nesterov_HB
+  if typeof(m) == nesterov_HB
     θ2 = get(FOMO_θ2_HB, nlp)
   elseif typeof(m) == cg_PR
     θ2 = get(FOMO_θ2_PR, nlp)
