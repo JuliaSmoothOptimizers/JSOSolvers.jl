@@ -76,16 +76,14 @@ The keyword arguments may include
 - `cgtol::T = T(0.1)`: subproblem tolerance.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖x - Proj(x - ∇f(xᵏ))‖ ≤ atol + rtol * ‖∇f(x⁰)‖. Proj denotes here the projection over the bounds.
+- `callback`: function called at each iteration, see [`Callback`](https://jso.dev/JSOSolvers.jl/stable/#Callback) section.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver.
 
-The keyword arguments of `TronSolver` are passed to the [`TRONTrustRegion`](https://jso.dev/SolverTools.jl/stable/reference/#SolverTools.TRONTrustRegion) constructor.
+The keyword arguments of `TronSolver` are passed to the [`TRONTrustRegion`](https://jso.dev/SolverTools.jl/stable/95-reference/#SolverTools.TRONTrustRegion) constructor.
 
 # Output
-The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
-
-# Callback
-$(Callback_docstring)
+The value returned is a [`GenericExecutionStats`](https://jso.dev/SolverCore.jl/stable/95-reference/#SolverCore.GenericExecutionStats), see `SolverCore.jl`.
 
 # References
 TRON is described in
@@ -498,7 +496,9 @@ function projected_line_search!(
   return s
 end
 
-"""`α, s = cauchy!(x, H, g, Δ, ℓ, u, s, Hs; μ₀ = 1e-2, μ₁ = 1.0, σ=10.0)`
+"""
+
+    α, s = cauchy!(x, H, g, Δ, ℓ, u, s, Hs; μ₀ = 1e-2, μ₁ = 1.0, σ = 10.0)
 
 Computes a Cauchy step `s = P(x - α g) - x` for
 
@@ -588,7 +588,7 @@ end
 
 Compute an approximate solution `d` for
 
-min q(d) = ¹/₂dᵀHs + dᵀg    s.t.    ℓ ≦ x + d ≦ u,  ‖d‖ ≦ Δ
+    min q(d) = ¹/₂dᵀHs + dᵀg    s.t.    ℓ ≦ x + d ≦ u,  ‖d‖ ≦ Δ
 
 starting from `s`.  The steps are computed using the conjugate gradient method
 projected on the active bounds.
