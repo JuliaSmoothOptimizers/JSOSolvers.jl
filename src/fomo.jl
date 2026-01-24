@@ -70,11 +70,11 @@ Default values are:
   - `γ3::T = $(FOMO_γ3)`
   - `αmax::T = $(FOMO_αmax)`
   - `β = $(FOMO_β) ∈ [0,1)`
-  - `θ1 = $(FOMO_θ1)`
-  - `θ2 = $(FOMO_θ2)`
   - `M = $(FOMO_M)`
   - `step_backend = $(FOMO_step_backend)`
   - `momentum_backend = $(FOMO_momentum_backend)`
+  - `θ1 = $(FOMO_θ1)`
+  - `θ2 = $(FOMO_θ2)`
 """
 struct FOMOParameterSet{T} <: AbstractParameterSet
   η1::Parameter{T, RealInterval{T}}
@@ -84,11 +84,11 @@ struct FOMOParameterSet{T} <: AbstractParameterSet
   γ3::Parameter{T, RealInterval{T}}
   αmax::Parameter{T, RealInterval{T}}
   β::Parameter{T, RealInterval{T}}
-  θ1::Parameter{T, RealInterval{T}}
-  θ2::Parameter{T, RealInterval{T}}
   M::Parameter{Int, IntegerRange{Int}}
   step_backend::Parameter{Union{r2_step, tr_step}, CategoricalSet{Union{r2_step, tr_step}}}
   momentum_backend::Parameter{Union{ia_momentum, nesterov_HB, cg_PR, cg_FR}, CategoricalSet{Union{ia_momentum, nesterov_HB, cg_PR, cg_FR}}}
+  θ1::Parameter{T, RealInterval{T}}
+  θ2::Parameter{T, RealInterval{T}}
 end
 
 # add a default constructor
@@ -115,12 +115,12 @@ function FOMOParameterSet(
     Parameter(γ2, RealInterval(T(1), T(Inf), lower_open = true, upper_open = true)),
     Parameter(γ3, RealInterval(T(0), T(1))),
     Parameter(αmax, RealInterval(T(1), T(Inf), upper_open = true)),
-    Parameter(β, RealInterval(T(0), T(1), upper_open = true)),   
-    Parameter(θ1, RealInterval(T(0), T(1), lower_open = true)),
-    Parameter(θ2, RealInterval(T(1), T(Inf), upper_open = true)),
+    Parameter(β, RealInterval(T(0), T(1), upper_open = true)),
     Parameter(M, IntegerRange(Int(1), typemax(Int))),
     Parameter(step_backend, CategoricalSet{Union{tr_step, r2_step}}([r2_step(); tr_step()])),
-    Parameter(momentum_backend, CategoricalSet{Union{ia_momentum, nesterov_HB, cg_PR, cg_FR}}([ia_momentum(); nesterov_HB(); cg_PR(); cg_FR()])),
+    Parameter(momentum_backend, CategoricalSet{Union{ia_momentum, nesterov_HB, cg_PR, cg_FR}}([ia_momentum(); nesterov_HB(); cg_PR(); cg_FR()])),   
+    Parameter(θ1, RealInterval(T(0), T(1), lower_open = true)),
+    Parameter(θ2, RealInterval(T(1), T(Inf), upper_open = true)),
   )
 end
 
@@ -174,12 +174,12 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `β = $(FOMO_β) ∈ [0,1)`: target decay rate for the momentum.
-- `θ1 = $(FOMO_θ1)`: momentum contribution parameter for convergence condition (1).
-- `θ2 = $(FOMO_θ2)`: momentum contribution parameter for convergence condition (2). 
 - `M = $(FOMO_M)` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `step_backend = $(FOMO_step_backend)`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 - `momentum_backend`: momentum mode for βₖ. Options are `nesterov_HB()`, `cg_PR()` for Polsak-Ribière, `cg_FR()` for Fletcher-Reeves.
+- `θ1 = $(FOMO_θ1)`: momentum contribution parameter for convergence condition (1).
+- `θ2 = $(FOMO_θ2)`: momentum contribution parameter for convergence condition (2). 
 
 # Output
 
@@ -241,11 +241,11 @@ end
   γ3::T = get(FOMO_γ3, nlp),
   αmax::T = get(FOMO_αmax, nlp),
   β::T = get(FOMO_β, nlp),
-  θ1::T = get(FOMO_θ1, nlp),
-  θ2::T = get(FOMO_θ2, nlp),
   M::Int = get(FOMO_M, nlp),
   step_backend::AbstractFOMethod = get(FOMO_step_backend, nlp),
   momentum_backend::AbstractMomentumMethod = get(FOMO_momentum_backend, nlp),
+  θ1::T = get(FOMO_θ1, nlp),
+  θ2::T = get(FOMO_θ2, nlp),
   kwargs...,
 ) where {T, V}
   solver = FomoSolver(
@@ -310,7 +310,6 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `M = $(FOMO_M)` : algorithm parameter, see [`FOMOParameterSet`](@ref).
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `step_backend = $(FOMO_step_backend)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
-- `momentum_backend = $(FOMO_momentum_backend)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
 
 # Output
 
