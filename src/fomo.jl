@@ -73,7 +73,7 @@ Default values are:
   - `θ1 = $(FOMO_θ1)`
   - `θ2 = $(FOMO_θ2)`
   - `M = $(FOMO_M)`
-  - `step_backend = $(FOMO_step_backend)
+  - `step_backend = $(FOMO_step_backend)`
   - `momentum_backend = $(FOMO_momentum_backend)`
 """
 struct FOMOParameterSet{T} <: AbstractParameterSet
@@ -328,6 +328,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `M = $(FOMO_M)` : algorithm parameter, see [`FOMOParameterSet`](@ref).
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `step_backend = $(FOMO_step_backend)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
+- `momentum_backend = $(FOMO_momentum_backend)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
 
 # Output
 
