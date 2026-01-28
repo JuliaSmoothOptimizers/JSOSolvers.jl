@@ -59,6 +59,12 @@ end
   @test stats.status == :first_order
   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)
 
+  if s != :LBFGSSolver
+    stats = SolverCore.solve!(solver, LBFGSModel(nlp), stats, atol = 1e-10, rtol = 1e-10)
+    @test stats.status == :first_order
+    @test isapprox(stats.solution, [0.0; 0.0], atol = 1e-6)
+  end
+
   f2(x) = (x[1])^2 + 4 * (x[2] - x[1]^2)^2
   nlp = ADNLPModel(f2, [-1.2; 1.0])
   SolverCore.reset!(solver, nlp)
