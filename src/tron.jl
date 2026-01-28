@@ -128,6 +128,7 @@ mutable struct TronSolver{
   gt::V
   gn::V
   gpx::V
+  pfeas::V
   s::V
   Hs::V
   H::Op
@@ -162,6 +163,7 @@ function TronSolver(
   gt = V(undef, nvar)
   gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
   gpx = V(undef, nvar)
+  pfeas = V(undef, nvar)
   s = V(undef, nvar)
   Hs = V(undef, nvar)
   H = hess_op!(nlp, xc, Hs)
@@ -184,6 +186,7 @@ function TronSolver(
     gt,
     gn,
     gpx,
+    pfeas,
     s,
     Hs,
     H,
@@ -278,6 +281,7 @@ function SolverCore.solve!(
   gt = solver.gt
   gn = solver.gn
   gpx = solver.gpx
+  pfeas = solver.pfeas
   s = solver.s
   Hs = solver.Hs
   H = solver.H
@@ -290,14 +294,17 @@ function SolverCore.solve!(
   # Optimality measure
   project_step!(gpx, x, gx, ℓ, u, -one(T))
   πx = nrm2(n, gpx)
+  pfeas .= max.(zero(T), ℓ .- x, x .- u)  # should be zero when x ∈ [ℓ, u]
+  pfeasNorm = norm(pfeas)
   ϵ = atol + rtol * πx
   fmin = min(-one(T), fx) / eps(T)
-  optimal = πx <= ϵ
+  optimal = πx <= ϵ && pfeasNorm <= √eps(T)
   unbounded = fx < fmin
 
   set_iter!(stats, 0)
   set_objective!(stats, fx)
   set_dual_residual!(stats, πx)
+  set_primal_residual!(stats, pfeasNorm)
 
   if isa(nlp, QuasiNewtonModel)
     gn .= gx
@@ -400,6 +407,9 @@ function SolverCore.solve!(
       x .= xc
     end
 
+    pfeas .= max.(zero(T), ℓ .- x, x .- u)
+    pfeasNorm = norm(pfeas)
+
     set_iter!(stats, stats.iter + 1)
 
     verbose > 0 &&
@@ -414,12 +424,13 @@ function SolverCore.solve!(
     # Update the trust region
     update!(tr, s_norm)
 
-    optimal = πx <= ϵ
+    optimal = πx <= ϵ && pfeasNorm <= √eps(T)
     unbounded = fx < fmin
 
     set_objective!(stats, fx)
     set_time!(stats, time() - start_time)
     set_dual_residual!(stats, πx)
+    set_primal_residual!(stats, pfeasNorm)
 
     set_status!(
       stats,
