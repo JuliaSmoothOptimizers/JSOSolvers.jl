@@ -294,7 +294,7 @@ function SolverCore.solve!(
   # Optimality measure
   project_step!(gpx, x, gx, ℓ, u, -one(T))
   πx = nrm2(n, gpx)
-  pfeas .= max.(min.(zero(T), x .- ℓ), u .- x)  # should be zero
+  pfeas .= max.(zero(T), ℓ .- x, x .- u)  # should be zero when x ∈ [ℓ, u]
   pfeasNorm = norm(pfeas)
   ϵ = atol + rtol * πx
   fmin = min(-one(T), fx) / eps(T)
