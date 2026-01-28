@@ -281,7 +281,7 @@ function SolverCore.solve!(
   gt = solver.gt
   gn = solver.gn
   gpx = solver.gpx
-    pfeas = solver.pfeas
+  pfeas = solver.pfeas
   s = solver.s
   Hs = solver.Hs
   H = solver.H
