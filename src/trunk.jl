@@ -142,7 +142,7 @@ function TrunkSolver(
   xt = V(undef, nvar)
   gx = V(undef, nvar)
   gt = V(undef, nvar)
-  gn = V(undef, nvar)  # so solver can be apply to a quasi-Newton model later
+  gn = V(undef, nvar)  # so the solver can be applied to a quasi-Newton model later
   Hs = V(undef, nvar)
   krylov_subsolver = krylov_workspace(Val(subsolver), nvar, nvar, V)
   Sub = typeof(krylov_subsolver)
