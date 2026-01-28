@@ -142,7 +142,7 @@ function TrunkSolver(
   xt = V(undef, nvar)
   gx = V(undef, nvar)
   gt = V(undef, nvar)
-  gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
+  gn = V(undef, nvar)  # so solver can be apply to a quasi-Newton model later
   Hs = V(undef, nvar)
   krylov_subsolver = krylov_workspace(Val(subsolver), nvar, nvar, V)
   Sub = typeof(krylov_subsolver)
@@ -159,7 +159,6 @@ function SolverCore.reset!(solver::TrunkSolver)
 end
 
 function SolverCore.reset!(solver::TrunkSolver, nlp::AbstractNLPModel)
-  @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
   solver.H = hess_op!(nlp, solver.x, solver.Hs)
   solver.tr.good_grad = false
   solver.tr.radius = solver.tr.initial_radius
