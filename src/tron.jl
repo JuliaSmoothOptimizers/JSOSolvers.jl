@@ -407,7 +407,7 @@ function SolverCore.solve!(
       x .= xc
     end
 
-    pfeas .= max.(min.(zero(T), x .- ℓ), u .- x)
+    pfeas .= max.(zero(T), ℓ .- x, x .- u)
     pfeasNorm = norm(pfeas)
 
     set_iter!(stats, stats.iter + 1)
