@@ -151,13 +151,15 @@ const R2NLS_allowed_subsolvers = (:cgls, :crls, :lsqr, :lsmr, :qrmumps)
   R2NLS(nlp; kwargs...)
 
 An implementation of the Levenberg-Marquardt method with regularization for nonlinear least-squares problems:
+
   min ½‖F(x)‖²
+
 where `F: ℝⁿ → ℝᵐ` is a vector-valued function defining the least-squares residuals.
 For advanced usage, first create a `R2SolverNLS` to preallocate the necessary memory for the algorithm, and then call `solve!`:
   solver = R2SolverNLS(nlp)
   solve!(solver, nlp; kwargs...)
 # Arguments
-- `nlp::AbstractNLSModel{T, V}` is the nonlinear least-squares model to solve. See `NLPModels.jl` for additional details.
+- `nls::AbstractNLSModel{T, V}` is the nonlinear least-squares model to solve. See `NLPModels.jl` for additional details.
 # Keyword Arguments
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
@@ -266,14 +268,12 @@ function R2SolverNLS(
   gx = V(undef, nvar)
   Fx = V(undef, nequ)
   rt = V(undef, nequ)
-  Jv = V(undef, nequ)
-  Jtv = V(undef, nvar)
+  Jv = V(undef, subsolver == :qrmumps ? 0 : nequ)
+  Jtv = V(undef, subsolver == :qrmumps ? 0 : nvar)
   s = V(undef, nvar)
   scp = V(undef, nvar)
   σ = eps(T)^(1 / 5)
   if subsolver == :qrmumps
-    Jv = V(undef, 0)
-    Jtv = V(undef, 0)
     ls_subsolver = QRMumpsSolver(nlp)
     Jx = SparseMatrixCOO(
       nequ,
@@ -283,8 +283,8 @@ function R2SolverNLS(
       ls_subsolver.val[1:ls_subsolver.nnzj],
     )
   else
-    Jx = jac_op_residual!(nlp, x, Jv, Jtv)
     ls_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
+    Jx = jac_op_residual!(nlp, x, Jv, Jtv)
   end
   Sub = typeof(ls_subsolver)
   Op = typeof(Jx)
@@ -431,7 +431,7 @@ function SolverCore.solve!(
 
   σk = 2^round(log2(norm_∇fk + 1)) / norm_∇fk
   ϵ = atol + rtol * norm_∇fk
-  ϵF = Fatol + Frtol * 2 * √f
+  ϵF = Fatol + Frtol * resid_norm
 
   # Preallocate xt.
   xt = solver.xt
@@ -491,6 +491,7 @@ function SolverCore.solve!(
 
   callback(nlp, solver, stats)
 
+  # retrieve values again in case the user changed them in the callback
   subtol = solver.subtol
   σk = solver.σ
 
@@ -500,8 +501,8 @@ function SolverCore.solve!(
   while !done
 
     # Compute the Cauchy step.
-    mul!(temp, Jx, ∇f) # temp <- Jx'*∇f
-    curv = dot(temp, temp) # curv = ∇f' Jx'Jx *∇f
+    mul!(temp, Jx, ∇f) # temp <- Jx ∇f
+    curv = dot(temp, temp) # curv = ∇f' Jx' Jx ∇f
     slope = σk * norm_∇fk^2 # slope= σ * ||∇f||^2    
     γ_k = (curv + slope) / norm_∇fk^2
     temp .= .-r
@@ -526,7 +527,7 @@ function SolverCore.solve!(
       found_λ || error("operator norm computation failed")
       cp_step_log = "ν_k"
       ν_k = θ1 / (λmax + σk)
-      scp .= -ν_k * ∇f
+      @. scp = -ν_k * ∇f
       s .= scp
     end
 
