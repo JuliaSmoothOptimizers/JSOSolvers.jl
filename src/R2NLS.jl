@@ -7,7 +7,9 @@ using QRMumps, LinearAlgebra, SparseArrays
 #TODO prof Orban, the name should be R2SolverNLS or R2NSolverNLS
 """
   R2NLSParameterSet([T=Float64]; η1, η2, θ1, θ2, γ1, γ2, γ3, δ1, σmin, non_mono_size)
+
 Parameter set for the R2NLS solver. Controls algorithmic tolerances and step acceptance.
+
 # Keyword Arguments
 - `η1 = eps(T)^(1/4)`: Step acceptance parameter.
 - `η2 = T(0.95)`: Step acceptance parameter.
