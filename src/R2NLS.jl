@@ -147,14 +147,27 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
     b_aug = Vector{T}(undef, m+n)
 
     # 7. Create the solver object and set a finalizer for safe cleanup.
-    solver = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj)
+    # Initialize 'closed' to false
+    solver = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, false)
+
+    function free_qrm(s::QRMumpsSolver)
+      if !s.closed
+        qrm_spfct_destroy!(s.spfct)
+        qrm_spmat_destroy!(s.spmat)
+        s.closed = true
+      end
+    end
+
+    finalizer(free_qrm, solver) #TODO need more tests
     return solver
   end
 end
 
+
 const R2NLS_allowed_subsolvers = (:cgls, :crls, :lsqr, :lsmr, :qrmumps)
 
 """
+
   R2NLS(nlp; kwargs...)
 
 An implementation of the Levenberg-Marquardt method with regularization for nonlinear least-squares problems:
@@ -162,15 +175,23 @@ An implementation of the Levenberg-Marquardt method with regularization for nonl
   min ½‖F(x)‖²
 
 where `F: ℝⁿ → ℝᵐ` is a vector-valued function defining the least-squares residuals.
+
 For advanced usage, first create a `R2NLSSolver` to preallocate the necessary memory for the algorithm, and then call `solve!`:
+
   solver = R2NLSSolver(nlp)
   solve!(solver, nlp; kwargs...)
+
 # Arguments
+
 - `nls::AbstractNLSModel{T, V}` is the nonlinear least-squares model to solve. See `NLPModels.jl` for additional details.
+
 # Keyword Arguments
+
 - `x::V = nlp.meta.x0`: the initial guess.
-- `atol::T = √eps(T)`: absolute tolerance.
-- `rtol::T = √eps(T)`: relative tolerance; the algorithm stops when ‖J(x)ᵀF(x)‖ ≤ atol + rtol * ‖J(x₀)ᵀF(x₀)‖.
+- `atol::T = √eps(T)`: is the absolute stopping tolerance.
+- `rtol::T = √eps(T)`: is the relative stopping tolerance; the algorithm stops when ‖J(x)ᵀF(x)‖ ≤ atol + rtol * ‖J(x₀)ᵀF(x₀)‖.
+- `Fatol::T = zero(T)`: absolute tolerance for the residual.
+- `Frtol::T = zero(T)`: relative tolerance for the residual; the algorithm stops when ‖F(x)‖ ≤ Fatol + Frtol * ‖F(x₀)‖.
 - `params::R2NLSParameterSet = R2NLSParameterSet()`: algorithm parameters, see [`R2NLSParameterSet`](@ref).
 - `η1::T = $(R2NLS_η1)`: step acceptance parameter, see [`R2NLSParameterSet`](@ref).
 - `η2::T = $(R2NLS_η2)`: step acceptance parameter, see [`R2NLSParameterSet`](@ref).
@@ -189,19 +210,15 @@ For advanced usage, first create a `R2NLSSolver` to preallocate the necessary me
 - `max_time::Float64 = 30.0`: maximum allowed time in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `verbose::Int = 0`: if > 0, displays iteration details every `verbose` iterations.
+
 # Output
+
 Returns a `GenericExecutionStats` object containing statistics and information about the optimization process (see `SolverCore.jl`).
+
 - `callback`: function called at each iteration, see [`Callback`](https://jso.dev/JSOSolvers.jl/stable/#Callback) section.
 
 # Examples
-```jldoctest
-using JSOSolvers, ADNLPModels
-F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
-model = ADNLSModel(F, [-1.2; 1.0], 2)
-stats = R2NLS(model)
-# output
-"Execution stats: first-order stationary"
-```
+
 ```jldoctest
 using JSOSolvers, ADNLPModels
 F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
@@ -211,6 +228,7 @@ stats = solve!(solver, model)
 # output
 "Execution stats: first-order stationary"
 ```
+
 """
 mutable struct R2NLSSolver{
   T,
@@ -218,22 +236,22 @@ mutable struct R2NLSSolver{
   Op <: Union{AbstractLinearOperator{T}, SparseMatrixCOO{T, Int}},
   Sub <: Union{KrylovWorkspace{T, T, V}, QRMumpsSolver{T}},
 } <: AbstractOptimizationSolver
-  x::V
-  xt::V
-  temp::V
-  gx::V
-  Fx::V
-  rt::V
-  Jv::V
-  Jtv::V
-  Jx::Op
-  ls_subsolver::Sub
-  obj_vec::V # used for non-monotone behaviour
-  subtol::T
-  s::V
-  scp::V
-  σ::T
-  params::R2NLSParameterSet{T}
+  x::V         # Current iterate x_k
+  xt::V        # Trial iterate x_{k+1}
+  temp::V      # Temporary vector for intermediate calculations (e.g. J*v)
+  gx::V        # Gradient of the objective function: J' * F(x)
+  Fx::V        # Residual vector F(x)
+  rt::V        # Residual vector at trial point F(xt)
+  Jv::V        # Storage for Jacobian-vector products (J * v)
+  Jtv::V       # Storage for Jacobian-transpose-vector products (J' * v)
+  Jx::Op       # The Jacobian operator J(x)
+  ls_subsolver::Sub # The solver for the linear least-squares subproblem
+  obj_vec::V   # History of objective values for non-monotone strategy
+  subtol::T    # Current tolerance for the subproblem solver
+  s::V         # The calculated step direction
+  scp::V       # The Cauchy point step
+  σ::T         # Regularization parameter (Levenberg-Marquardt parameter)
+  params::R2NLSParameterSet{T} # Algorithmic parameters
 end
 
 function R2NLSSolver(
@@ -321,10 +339,15 @@ end
 
 function SolverCore.reset!(solver::R2NLSSolver{T}) where {T}
   fill!(solver.obj_vec, typemin(T))
+  solver.σ = eps(T)^(1 / 5)
+  solver.subtol = one(T)
   solver
 end
+
 function SolverCore.reset!(solver::R2NLSSolver{T}, nlp::AbstractNLSModel) where {T}
   fill!(solver.obj_vec, typemin(T))
+  solver.σ = eps(T)^(1 / 5)
+  solver.subtol = one(T)
   solver
 end
 
@@ -410,16 +433,16 @@ function SolverCore.solve!(
   subtol = solver.subtol
 
   σk = solver.σ
-  # preallocate storage for products with Jx and Jx'
   Jx = solver.Jx
+
   if Jx isa SparseMatrixCOO
     jac_coord_residual!(nlp, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
     Jx.vals .= view(ls_subsolver.val, 1:ls_subsolver.nnzj)
   end
 
   residual!(nlp, x, r)
-  f = obj(nlp, x, r, recompute = false)
-  f0 = f
+  resid_norm = norm(r)
+  f = resid_norm^2 / 2
 
   mul!(∇f, Jx', r)
 
@@ -427,40 +450,38 @@ function SolverCore.solve!(
   ρk = zero(T)
 
   # Stopping criterion: 
-  fmin = min(-one(T), f0) / eps(T)
-  unbounded = f < fmin
+  unbounded = false
 
   σk = 2^round(log2(norm_∇fk + 1)) / norm_∇fk
   ϵ = atol + rtol * norm_∇fk
   ϵF = Fatol + Frtol * resid_norm
 
-  # Preallocate xt.
   xt = solver.xt
   temp = solver.temp
 
-  optimal = norm_∇fk ≤ ϵ
+  stationary = norm_∇fk ≤ ϵ
   small_residual = 2 * √f ≤ ϵF
 
   set_iter!(stats, 0)
   set_objective!(stats, f)
   set_dual_residual!(stats, norm_∇fk)
 
-  if optimal
+  if stationary
     @info "Optimal point found at initial point"
     @info log_header(
-      [:iter, :f, :dual, :σ, :ρ],
+      [:iter, :resid_norm, :dual, :σ, :ρ],
       [Int, Float64, Float64, Float64, Float64],
-      hdr_override = Dict(:f => "f(x)", :dual => "‖∇f‖"),
+      hdr_override = Dict(:resid_norm => "‖F(x)‖", :dual => "‖∇f‖"),
     )
-    @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk])
+    @info log_row([stats.iter, resid_norm, norm_∇fk, σk, ρk])
   end
   cp_step_log = " "
   if verbose > 0 && mod(stats.iter, verbose) == 0
     @info log_header(
-      [:iter, :f, :dual, :σ, :ρ, :sub_iter, :dir, :cp_step_log, :sub_status],
+      [:iter, :resid_norm, :dual, :σ, :ρ, :sub_iter, :dir, :cp_step_log, :sub_status],
       [Int, Float64, Float64, Float64, Float64, Int, String, String, String],
       hdr_override = Dict(
-        :f => "f(x)",
+        :resid_norm => "‖F(x)‖",
         :dual => "‖∇f‖",
         :sub_iter => "subiter",
         :dir => "dir",
@@ -476,7 +497,7 @@ function SolverCore.solve!(
     get_status(
       nlp,
       elapsed_time = stats.elapsed_time,
-      optimal = optimal,
+      optimal = stationary,
       unbounded = unbounded,
       max_eval = max_eval,
       iter = stats.iter,
@@ -506,7 +527,7 @@ function SolverCore.solve!(
     curv = dot(temp, temp) # curv = ∇f' Jx' Jx ∇f
     slope = σk * norm_∇fk^2 # slope= σ * ||∇f||^2    
     γ_k = (curv + slope) / norm_∇fk^2
-    temp .= .-r
+    @. temp = - r
     solver.σ = σk
 
     if γ_k > 0
@@ -539,7 +560,8 @@ function SolverCore.solve!(
     curv = dot(temp, temp)
 
     residual!(nlp, xt, rt)
-    fck = obj(nlp, x, rt, recompute = false)
+    resid_norm_t = norm(rt)
+    fck = resid_norm_t^2 / 2
 
     ΔTk = -slope - curv / 2
     if non_mono_size > 1  #non-monotone behaviour
@@ -558,14 +580,16 @@ function SolverCore.solve!(
         jac_coord_residual!(nlp, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
         Jx.vals .= view(ls_subsolver.val, 1:ls_subsolver.nnzj)
       end
+      
       # update Jx implicitly for other solvers
       x .= xt
       r .= rt
       f = fck
+      resid_norm = resid_norm_t
       mul!(∇f, Jx', r) # ∇f = Jx' * r
       set_objective!(stats, fck)
-      unbounded = fck < fmin
       norm_∇fk = norm(∇f)
+
       if ρk >= η2
         σk = max(σmin, γ3 * σk)
       else # η1 ≤ ρk < η2
@@ -590,14 +614,14 @@ function SolverCore.solve!(
     subtol = solver.subtol
     norm_∇fk = stats.dual_feas
 
-    optimal = norm_∇fk ≤ ϵ
+    stationary = norm_∇fk ≤ ϵ
     small_residual = 2 * √f ≤ ϵF
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       dir_stat = step_accepted ? "↘" : "↗"
       @info log_row([
         stats.iter,
-        stats.objective,
+        resid_norm,
         norm_∇fk,
         σk,
         ρk,
@@ -616,7 +640,7 @@ function SolverCore.solve!(
         get_status(
           nlp,
           elapsed_time = stats.elapsed_time,
-          optimal = optimal,
+          optimal = stationary,
           unbounded = unbounded,
           small_residual = small_residual,
           max_eval = max_eval,
