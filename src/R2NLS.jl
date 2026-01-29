@@ -105,7 +105,7 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
 
   closed::Bool    # Avoid double-destroy
 
-  function QRMumpsSolver(nlp::AbstractNLSModel{T}) where {T}
+  function QRMumpsSolver(nls::AbstractNLSModel{T}) where {T}
     # Safely initialize QRMumps library
     qrm_init()
 
