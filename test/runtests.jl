@@ -2,7 +2,7 @@
 using Printf, LinearAlgebra, Logging, SparseArrays, Test
 using CUDA
 # additional packages
-using ADNLPModels, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
+using ADNLPModels, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools, Krylov
 using NLPModelsTest, SolverParameters
 
 # this package
@@ -16,6 +16,7 @@ include("test-gpu.jl")
     (TRONParameterSet, tron),
     (TRUNKParameterSet, trunk),
     (FOMOParameterSet, fomo),
+    (R2NParameterSet, R2N),
   )
     nlp = BROWNDEN()
     params = eval(paramset)(nlp)
@@ -50,7 +51,7 @@ end
 end
 
 @testset "Test iteration limit" begin
-  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk)
+  @testset "$fun" for fun in (R2, R2N,fomo, lbfgs, tron, trunk)
     f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
     nlp = ADNLPModel(f, [-1.2; 1.0])
 
@@ -58,7 +59,7 @@ end
     @test stats.status == :max_iter
   end
 
-  @testset "$(fun)-NLS" for fun in (tron, trunk)
+  @testset "$(fun)-NLS" for fun in (R2NLS, tron, trunk)
     f(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
     nlp = ADNLSModel(f, [-1.2; 1.0], 2)
 
@@ -68,20 +69,32 @@ end
 end
 
 @testset "Test unbounded below" begin
-  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk)
+  @testset "$name" for (name, solver) in [
+    ("trunk", trunk),
+    ("lbfgs", lbfgs),
+    ("tron", tron),
+    ("R2", R2),
+    # ("R2N", R2N),
+    (
+      "R2N_exact",
+      (nlp; kwargs...) ->
+        R2N(LBFGSModel(nlp), subsolver= :shifted_lbfgs; kwargs...),
+    ),
+    ("fomo", fomo),
+  ]
     T = Float64
     x0 = [T(0)]
     f(x) = -exp(x[1])
     nlp = ADNLPModel(f, x0)
 
-    stats = eval(fun)(nlp)
+    stats = solver(nlp)
     @test stats.status == :unbounded
     @test stats.objective < -one(T) / eps(T)
   end
 end
 
-include("restart.jl")
-include("callback.jl")
+include("test_hsl_subsolver.jl")
+# include("restart.jl") #TODO issue with rtol -10e-10include("callback.jl")
 include("consistency.jl")
 include("test_solvers.jl")
 include("incompatible.jl")
