@@ -1,26 +1,25 @@
-export R2NLS, R2SolverNLS, R2NLSParameterSet
+export R2NLS, R2NLSSolver, R2NLSParameterSet
 export QRMumpsSolver
-using SparseMatricesCOO
 
-using QRMumps, LinearAlgebra, SparseArrays
+using LinearAlgebra, SparseArrays
+using QRMumps, SparseMatricesCOO
 
-#TODO prof Orban, the name should be R2SolverNLS or R2NSolverNLS
 """
   R2NLSParameterSet([T=Float64]; η1, η2, θ1, θ2, γ1, γ2, γ3, δ1, σmin, non_mono_size)
 
 Parameter set for the R2NLS solver. Controls algorithmic tolerances and step acceptance.
 
 # Keyword Arguments
-- `η1 = eps(T)^(1/4)`: Step acceptance parameter.
-- `η2 = T(0.95)`: Step acceptance parameter.
-- `θ1 = T(0.5)`: Cauchy step parameter.
-- `θ2 = eps(T)^(-1)`: Cauchy step parameter.
-- `γ1 = T(1.5)`: Regularization update parameter.
-- `γ2 = T(2.5)`: Regularization update parameter.
-- `γ3 = T(0.5)`: Regularization update parameter.
-- `δ1 = T(0.5)`: Cauchy point calculation parameter.
-- `σmin = eps(T)`: Minimum step parameter.
-- `non_mono_size = 1`: the size of the non-monotone behaviour. If > 1, the algorithm will use a non-monotone strategy to accept steps.
+- `η1 = eps(T)^(1/4)`: Accept step if actual/predicted reduction ≥ η1 (0 < η1 ≤ η2 < 1).
+- `η2 = T(0.95)`: Step is very successful if reduction ≥ η2 (0 < η1 ≤ η2 < 1).
+- `θ1 = T(0.5)`: Controls Cauchy step size (0 < θ1 < 1).
+- `θ2 = eps(T)^(-1)`: Max allowed step ratio (θ2 > 1).
+- `γ1 = T(1.5)`: Increase regularization if step is not good (1 < γ1 ≤ γ2).
+- `γ2 = T(2.5)`: Further increase if step is rejected (γ1 ≤ γ2).
+- `γ3 = T(0.5)`: Decrease regularization if step is very good (0 < γ3 ≤ 1).
+- `δ1 = T(0.5)`: Cauchy point scaling (0 < δ1 < 1).
+- `σmin = eps(T)`: Smallest allowed regularization.
+- `non_mono_size = 1`: Window size for non-monotone acceptance.
 """
 struct R2NLSParameterSet{T} <: AbstractParameterSet
   η1::Parameter{T, RealInterval{T}}
@@ -63,16 +62,24 @@ function R2NLSParameterSet(
   σmin::T = get(R2NLS_σmin, nlp),
   non_mono_size::Int = get(R2NLS_non_mono_size, nlp),
 ) where {T}
+
+  @assert zero(T) < θ1 < one(T) "θ1 must satisfy 0 < θ1 < 1"
+  @assert θ2 > one(T) "θ2 must satisfy θ2 > 1"
+  @assert zero(T) < η1 <= η2 < one(T) "η1, η2 must satisfy 0 < η1 ≤ η2 < 1"
+  @assert one(T) < γ1 <= γ2 "γ1, γ2 must satisfy 1 < γ1 ≤ γ2"
+  @assert γ3 > zero(T) && γ3 <= one(T) "γ3 must satisfy 0 < γ3 ≤ 1"
+  @assert zero(T) < δ1 < one(T) "δ1 must satisfy 0 < δ1 < 1"
+  
   R2NLSParameterSet{T}(
-    Parameter(η1, RealInterval(zero(T), one(T))),
-    Parameter(η2, RealInterval(zero(T), one(T))),
-    Parameter(θ1, RealInterval(zero(T), one(T))),
-    Parameter(θ2, RealInterval(one(T), T(Inf))),
-    Parameter(γ1, RealInterval(one(T), T(Inf))),
-    Parameter(γ2, RealInterval(one(T), T(Inf))),
-    Parameter(γ3, RealInterval(zero(T), one(T))),
-    Parameter(δ1, RealInterval(zero(T), one(T))),
-    Parameter(σmin, RealInterval(zero(T), T(Inf))),
+    Parameter(η1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
+    Parameter(η2, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
+    Parameter(θ1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
+    Parameter(θ2, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
+    Parameter(γ1, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
+    Parameter(γ2, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
+    Parameter(γ3, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
+    Parameter(δ1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
+    Parameter(σmin, RealInterval(zero(T), T(Inf), lower_open = true, upper_open = true)),
     Parameter(non_mono_size, IntegerRange(1, typemax(Int))),
   )
 end
@@ -155,8 +162,8 @@ An implementation of the Levenberg-Marquardt method with regularization for nonl
   min ½‖F(x)‖²
 
 where `F: ℝⁿ → ℝᵐ` is a vector-valued function defining the least-squares residuals.
-For advanced usage, first create a `R2SolverNLS` to preallocate the necessary memory for the algorithm, and then call `solve!`:
-  solver = R2SolverNLS(nlp)
+For advanced usage, first create a `R2NLSSolver` to preallocate the necessary memory for the algorithm, and then call `solve!`:
+  solver = R2NLSSolver(nlp)
   solve!(solver, nlp; kwargs...)
 # Arguments
 - `nls::AbstractNLSModel{T, V}` is the nonlinear least-squares model to solve. See `NLPModels.jl` for additional details.
@@ -199,13 +206,13 @@ stats = R2NLS(model)
 using JSOSolvers, ADNLPModels
 F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
 model = ADNLSModel(F, [-1.2; 1.0], 2)
-solver = R2SolverNLS(model)
+solver = R2NLSSolver(model)
 stats = solve!(solver, model)
 # output
 "Execution stats: first-order stationary"
 ```
 """
-mutable struct R2SolverNLS{
+mutable struct R2NLSSolver{
   T,
   V,
   Op <: Union{AbstractLinearOperator{T}, SparseMatrixCOO{T, Int}},
@@ -229,7 +236,7 @@ mutable struct R2SolverNLS{
   params::R2NLSParameterSet{T}
 end
 
-function R2SolverNLS(
+function R2NLSSolver(
   nlp::AbstractNLSModel{T, V};
   η1::T = get(R2NLS_η1, nlp),
   η2::T = get(R2NLS_η2, nlp),
@@ -292,7 +299,7 @@ function R2SolverNLS(
   subtol = one(T) # must be ≤ 1.0
   obj_vec = fill(typemin(T), value(params.non_mono_size))
 
-  return R2SolverNLS{T, V, Op, Sub}(
+  return R2NLSSolver{T, V, Op, Sub}(
     x,
     xt,
     temp,
@@ -312,16 +319,16 @@ function R2SolverNLS(
   )
 end
 
-function SolverCore.reset!(solver::R2SolverNLS{T}) where {T}
+function SolverCore.reset!(solver::R2NLSSolver{T}) where {T}
   fill!(solver.obj_vec, typemin(T))
   solver
 end
-function SolverCore.reset!(solver::R2SolverNLS{T}, nlp::AbstractNLSModel) where {T}
+function SolverCore.reset!(solver::R2NLSSolver{T}, nlp::AbstractNLSModel) where {T}
   fill!(solver.obj_vec, typemin(T))
   solver
 end
 
-@doc (@doc R2SolverNLS) function R2NLS(
+@doc (@doc R2NLSSolver) function R2NLS(
   nlp::AbstractNLSModel{T, V};
   η1::Real = get(R2NLS_η1, nlp),
   η2::Real = get(R2NLS_η2, nlp),
@@ -336,7 +343,7 @@ end
   subsolver::Symbol = :lsmr,
   kwargs...,
 ) where {T, V}
-  solver = R2SolverNLS(
+  solver = R2NLSSolver(
     nlp;
     η1 = convert(T, η1),
     η2 = convert(T, η2),
@@ -354,7 +361,7 @@ end
 end
 
 function SolverCore.solve!(
-  solver::R2SolverNLS{T, V},
+  solver::R2NLSSolver{T, V},
   nlp::AbstractNLSModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
@@ -387,12 +394,6 @@ function SolverCore.solve!(
   δ1 = value(params.δ1)
   σmin = value(params.σmin)
   non_mono_size = value(params.non_mono_size)
-
-  @assert(η1 > 0 && η1 < 1)
-  @assert(θ1 > 0 && θ1 < 1)
-  @assert(θ2 > 1)
-  @assert(γ1 >= 1 && γ1 <= γ2 && γ3 <= 1)
-  @assert(δ1>0 && δ1<1)
 
   start_time = time()
   set_time!(stats, 0.0)
@@ -636,7 +637,7 @@ end
 # Dispatch for KrylovWorkspace
 function subsolve!(
   ls_subsolver::KrylovWorkspace,
-  R2NLS::R2SolverNLS,
+  R2NLS::R2NLSSolver,
   nlp,
   s,
   atol,
@@ -653,7 +654,7 @@ function subsolve!(
     rtol = R2NLS.subtol,
     λ = √(R2NLS.σ),  # λ ≥ 0 is a regularization parameter.
     itmax = max(2 * (n + m), 50),
-    # timemax = max_time - R2SolverNLS.stats.elapsed_time,
+    # timemax = max_time - R2NLSSolver.stats.elapsed_time,
     verbose = subsolver_verbose,
   )
   s .= ls_subsolver.x
@@ -663,7 +664,7 @@ end
 # Dispatch for QRMumpsSolver
 function subsolve!(
   ls::QRMumpsSolver,
-  R2NLS::R2SolverNLS,
+  R2NLS::R2NLSSolver,
   nlp,
   s,
   atol,
