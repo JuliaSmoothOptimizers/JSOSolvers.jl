@@ -149,7 +149,8 @@ const R2NLS_allowed_subsolvers = (:cgls, :crls, :lsqr, :lsmr, :qrmumps)
 
 """
   R2NLS(nlp; kwargs...)
-An inexact second-order quadratic regularization method designed specifically for nonlinear least-squares problems:
+
+An implementation of the Levenberg-Marquardt method with regularization for nonlinear least-squares problems:
   min ½‖F(x)‖²
 where `F: ℝⁿ → ℝᵐ` is a vector-valued function defining the least-squares residuals.
 For advanced usage, first create a `R2SolverNLS` to preallocate the necessary memory for the algorithm, and then call `solve!`:
