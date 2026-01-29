@@ -117,22 +117,30 @@ function R2NParameterSet(
   ls_min_alpha::T = get(R2N_ls_min_alpha, nlp),
   ls_max_alpha::T = get(R2N_ls_max_alpha, nlp),
 ) where {T}
+
+  @assert zero(T) < θ1 < one(T) "θ1 must satisfy 0 < θ1 < 1"
+  @assert θ2 > one(T) "θ2 must satisfy θ2 > 1"
+  @assert zero(T) < η1 <= η2 < one(T) "η1, η2 must satisfy 0 < η1 ≤ η2 < 1"
+  @assert one(T) < γ1 <= γ2 "γ1, γ2 must satisfy 1 < γ1 ≤ γ2"
+  @assert γ3 > zero(T) && γ3 <= one(T) "γ3 must satisfy 0 < γ3 ≤ 1"
+  @assert zero(T) < δ1 < one(T) "δ1 must satisfy 0 < δ1 < 1"
+   
   R2NParameterSet{T}(
-    Parameter(θ1, RealInterval(zero(T), one(T))),
-    Parameter(θ2, RealInterval(one(T), T(Inf))),
-    Parameter(η1, RealInterval(zero(T), one(T))),
-    Parameter(η2, RealInterval(zero(T), one(T))),
-    Parameter(γ1, RealInterval(one(T), T(Inf))),
-    Parameter(γ2, RealInterval(one(T), T(Inf))),
-    Parameter(γ3, RealInterval(zero(T), one(T))),
-    Parameter(δ1, RealInterval(zero(T), one(T))),
-    Parameter(σmin, RealInterval(zero(T), T(Inf))),
+    Parameter(θ1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
+    Parameter(θ2, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
+    Parameter(η1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
+    Parameter(η2, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
+    Parameter(γ1, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
+    Parameter(γ2, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
+    Parameter(γ3, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
+    Parameter(δ1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
+    Parameter(σmin, RealInterval(zero(T), T(Inf), lower_open = true, upper_open = true)),
     Parameter(non_mono_size, IntegerRange(1, typemax(Int))),
-    Parameter(ls_c, RealInterval(zero(T), one(T))), # c is typically (0, 1)
-    Parameter(ls_increase, RealInterval(one(T), T(Inf))), # increase > 1
-    Parameter(ls_decrease, RealInterval(zero(T), one(T))), # decrease < 1
-    Parameter(ls_min_alpha, RealInterval(zero(T), T(Inf))),
-    Parameter(ls_max_alpha, RealInterval(zero(T), T(Inf))),
+    Parameter(ls_c, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)), # c is typically (0, 1)
+    Parameter(ls_increase, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)), # increase > 1
+    Parameter(ls_decrease, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)), # decrease < 1
+    Parameter(ls_min_alpha, RealInterval(zero(T), T(Inf), lower_open = true, upper_open = true)),
+    Parameter(ls_max_alpha, RealInterval(zero(T), T(Inf), lower_open = true, upper_open = true)),
   )
 end
 
@@ -198,7 +206,7 @@ const R2N_allowed_subsolvers = [:cg, :cr, :minres, :minres_qlp, :shifted_lbfgs, 
 
 """
     R2N(nlp; kwargs...)
-An inexact second-order quadratic regularization method for unconstrained optimization (with shifted L-BFGS or shifted Hessian operator).
+A second-order quadratic regularization method for unconstrained optimization (with shifted L-BFGS or shifted Hessian operator).
 For advanced usage, first define a `R2NSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
     solver = R2NSolver(nlp)
     solve!(solver, nlp; kwargs...)
@@ -480,12 +488,6 @@ function SolverCore.solve!(
   ls_decrease = value(params.ls_decrease)
   ls_min_alpha = value(params.ls_min_alpha)
   ls_max_alpha = value(params.ls_max_alpha)
-
-  @assert(η1 > 0 && η1 < 1)
-  @assert(θ1 > 0 && θ1 < 1)
-  @assert(θ2 > 1)
-  @assert(γ1 >= 1 && γ1 <= γ2 && γ3 <= 1)
-  @assert(δ1 > 0 && δ1 < 1)
 
   start_time = time()
   set_time!(stats, 0.0)

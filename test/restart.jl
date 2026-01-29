@@ -28,26 +28,26 @@ end
 @testset "Test restart NLS with a different initial guess: $fun" for (fun, s) in (
   (:tron, :TronSolverNLS),
   (:trunk, :TrunkSolverNLS),
-  (:R2SolverNLS, :R2SolverNLS),
-  (:R2SolverNLS_CG, :R2SolverNLS),
-  (:R2SolverNLS_LSQR, :R2SolverNLS),
-  (:R2SolverNLS_CR, :R2SolverNLS),
-  (:R2SolverNLS_LSMR, :R2SolverNLS),
-  (:R2SolverNLS_QRMumps, :R2SolverNLS),
+  (:R2NLSSolver, :R2NLSSolver),
+  (:R2NLSSolver_CG, :R2NLSSolver),
+  (:R2NLSSolver_LSQR, :R2NLSSolver),
+  (:R2NLSSolver_CR, :R2NLSSolver),
+  (:R2NLSSolver_LSMR, :R2NLSSolver),
+  (:R2NLSSolver_QRMumps, :R2NLSSolver),
 )
   F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
   nlp = ADNLSModel(F, [-1.2; 1.0], 2)
 
   stats = GenericExecutionStats(nlp)
-  if fun == :R2SolverNLS_CG
+  if fun == :R2NLSSolver_CG
     solver = eval(s)(nlp, subsolver = :cgls)
-  elseif fun == :R2SolverNLS_LSQR
+  elseif fun == :R2NLSSolver_LSQR
     solver = eval(s)(nlp, subsolver = :lsqr)
-  elseif fun == :R2SolverNLS_CR
+  elseif fun == :R2NLSSolver_CR
     solver = eval(s)(nlp, subsolver = :crls)
-  elseif fun == :R2SolverNLS_LSMR
+  elseif fun == :R2NLSSolver_LSMR
     solver = eval(s)(nlp, subsolver = :lsmr)
-  elseif fun == :R2SolverNLS_QRMumps
+  elseif fun == :R2NLSSolver_QRMumps
     solver = eval(s)(nlp, subsolver = :qrmumps)
   else
     solver = eval(s)(nlp)
@@ -97,26 +97,26 @@ end
 @testset "Test restart NLS with a different problem: $fun" for (fun, s) in (
   (:tron, :TronSolverNLS),
   (:trunk, :TrunkSolverNLS),
-  (:R2SolverNLS, :R2SolverNLS),
-  (:R2SolverNLS_CG, :R2SolverNLS),
-  (:R2SolverNLS_LSQR, :R2SolverNLS),
-  (:R2SolverNLS_CR, :R2SolverNLS),
-  (:R2SolverNLS_LSMR, :R2SolverNLS),
-  (:R2SolverNLS_QRMumps, :R2SolverNLS),
+  (:R2NLSSolver, :R2NLSSolver),
+  (:R2NLSSolver_CG, :R2NLSSolver),
+  (:R2NLSSolver_LSQR, :R2NLSSolver),
+  (:R2NLSSolver_CR, :R2NLSSolver),
+  (:R2NLSSolver_LSMR, :R2NLSSolver),
+  (:R2NLSSolver_QRMumps, :R2NLSSolver),
 )
   F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
   nlp = ADNLSModel(F, [-1.2; 1.0], 2)
 
   stats = GenericExecutionStats(nlp)
-  if fun == :R2SolverNLS_CG
+  if fun == :R2NLSSolver_CG
     solver = eval(s)(nlp, subsolver = :cgls)
-  elseif fun == :R2SolverNLS_LSQR
+  elseif fun == :R2NLSSolver_LSQR
     solver = eval(s)(nlp, subsolver = :lsqr)
-  elseif fun == :R2SolverNLS_CR
+  elseif fun == :R2NLSSolver_CR
     solver = eval(s)(nlp, subsolver = :crls)
-  elseif fun == :R2SolverNLS_LSMR
+  elseif fun == :R2NLSSolver_LSMR
     solver = eval(s)(nlp, subsolver = :lsmr)
-  elseif fun == :R2SolverNLS_QRMumps
+  elseif fun == :R2NLSSolver_QRMumps
     solver = eval(s)(nlp, subsolver = :qrmumps)
   else
     solver = eval(s)(nlp)

@@ -68,14 +68,14 @@ if Sys.isunix()
 
     @testset "$name" for (name, symsolver) in (
       (:TrunkSolverNLS, :TrunkSolverNLS),
-      (:R2SolverNLS, :R2SolverNLS),
-      (:R2SolverNLS_QRMumps, :R2SolverNLS),
+      (:R2NLSSolver, :R2NLSSolver),
+      (:R2NLSSolver_QRMumps, :R2NLSSolver),
       (:TronSolverNLS, :TronSolverNLS),
     )
       for model in NLPModelsTest.nls_problems
         nlp = eval(Meta.parse(model))()
         if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolverNLS))
-          if name == :R2SolverNLS_QRMumps
+          if name == :R2NLSSolver_QRMumps
             solver = eval(symsolver)(nlp, subsolver = :qrmumps)
           else
             solver = eval(symsolver)(nlp)
