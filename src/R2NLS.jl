@@ -573,7 +573,7 @@ function SolverCore.solve!(
       ρk = (stats.objective - fck) / ΔTk
     end
 
-    # Update regularization parameters and Acceptance of the new candidate
+    # Update regularization parameters and determine acceptance of the new candidate
     step_accepted = ρk >= η1
     if step_accepted
       if Jx isa SparseMatrixCOO # we need to update the values of Jx in QRMumpsSolver
