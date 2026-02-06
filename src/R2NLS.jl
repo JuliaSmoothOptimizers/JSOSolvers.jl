@@ -15,7 +15,7 @@ Parameter set for the R2NLS solver. Controls algorithmic tolerances and step acc
 - `θ1 = T(0.5)`: Controls Cauchy step size (0 < θ1 < 1).
 - `θ2 = eps(T)^(-1)`: Maximum allowed ratio between the step and the Cauchy step (θ2 > 1).
 - `γ1 = T(1.5)`: Regularization increase factor on successful (but not very successful) step (1 < γ1 ≤ γ2).
-- `γ2 = T(2.5)`: Further increase if step is rejected (γ1 ≤ γ2).
+- `γ2 = T(2.5)`: Regularization increase factor on rejected step (γ1 ≤ γ2).
 - `γ3 = T(0.5)`: Decrease regularization if step is very good (0 < γ3 ≤ 1).
 - `δ1 = T(0.5)`: Cauchy point scaling (0 < δ1 < 1).
 - `σmin = eps(T)`: Smallest allowed regularization.
