@@ -587,7 +587,7 @@ function SolverCore.solve!(
       f = fck
       resid_norm = resid_norm_t
       mul!(∇f, Jx', r) # ∇f = Jx' * r
-      set_objective!(stats, fck)
+      set_objective!(stats, f)
       norm_∇fk = norm(∇f)
 
       if ρk >= η2
