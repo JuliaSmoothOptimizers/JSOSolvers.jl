@@ -13,7 +13,7 @@ Parameter set for the R2NLS solver. Controls algorithmic tolerances and step acc
 - `η1 = eps(T)^(1/4)`: Accept step if actual/predicted reduction ≥ η1 (0 < η1 ≤ η2 < 1).
 - `η2 = T(0.95)`: Step is very successful if reduction ≥ η2 (0 < η1 ≤ η2 < 1).
 - `θ1 = T(0.5)`: Controls Cauchy step size (0 < θ1 < 1).
-- `θ2 = eps(T)^(-1)`: Max allowed step ratio (θ2 > 1).
+- `θ2 = eps(T)^(-1)`: Maximum allowed ratio between the step and the Cauchy step (θ2 > 1).
 - `γ1 = T(1.5)`: Increase regularization if step is not good (1 < γ1 ≤ γ2).
 - `γ2 = T(2.5)`: Further increase if step is rejected (γ1 ≤ γ2).
 - `γ3 = T(0.5)`: Decrease regularization if step is very good (0 < γ3 ≤ 1).
