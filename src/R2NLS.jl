@@ -172,7 +172,7 @@ const R2NLS_allowed_subsolvers = (:cgls, :crls, :lsqr, :lsmr, :qrmumps)
 
 An implementation of the Levenberg-Marquardt method with regularization for nonlinear least-squares problems:
 
-  min ½‖F(x)‖²
+    min ½‖F(x)‖²
 
 where `F: ℝⁿ → ℝᵐ` is a vector-valued function defining the least-squares residuals.
 
