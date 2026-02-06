@@ -460,7 +460,7 @@ function SolverCore.solve!(
   temp = solver.temp
 
   stationary = norm_∇fk ≤ ϵ
-  small_residual = 2 * √f ≤ ϵF
+  small_residual = resid_norm ≤ ϵF
 
   set_iter!(stats, 0)
   set_objective!(stats, f)
