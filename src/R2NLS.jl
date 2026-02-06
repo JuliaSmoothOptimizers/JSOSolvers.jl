@@ -178,8 +178,8 @@ where `F: ℝⁿ → ℝᵐ` is a vector-valued function defining the least-squa
 
 For advanced usage, first create a `R2NLSSolver` to preallocate the necessary memory for the algorithm, and then call `solve!`:
 
-  solver = R2NLSSolver(nlp)
-  solve!(solver, nlp; kwargs...)
+    solver = R2NLSSolver(nls)
+    solve!(solver, nls; kwargs...)
 
 # Arguments
 
