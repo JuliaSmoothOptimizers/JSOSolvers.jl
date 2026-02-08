@@ -35,41 +35,40 @@ struct R2NLSParameterSet{T} <: AbstractParameterSet
 end
 
 # Default parameter values
-const R2NLS_η1 = DefaultParameter(nlp -> begin
-  T = eltype(nlp.meta.x0)
+const R2NLS_η1 = DefaultParameter(nls -> begin
+  T = eltype(nls.meta.x0)
   T(eps(T))^(T(1)/T(4))
 end, "eps(T)^(1/4)")
-const R2NLS_η2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.95), "T(0.95)")
-const R2NLS_θ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
-const R2NLS_θ2 = DefaultParameter(nlp -> inv(eps(eltype(nlp.meta.x0))), "eps(T)^(-1)")
-const R2NLS_γ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1.5), "T(1.5)")
-const R2NLS_γ2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(2.5), "T(2.5)")
-const R2NLS_γ3 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
-const R2NLS_δ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
-const R2NLS_σmin = DefaultParameter(nlp -> eps(eltype(nlp.meta.x0)), "eps(T)")
+const R2NLS_η2 = DefaultParameter(nls -> eltype(nls.meta.x0)(0.95), "T(0.95)")
+const R2NLS_θ1 = DefaultParameter(nls -> eltype(nls.meta.x0)(0.5), "T(0.5)")
+const R2NLS_θ2 = DefaultParameter(nls -> inv(eps(eltype(nls.meta.x0))), "eps(T)^(-1)")
+const R2NLS_γ1 = DefaultParameter(nls -> eltype(nls.meta.x0)(1.5), "T(1.5)")
+const R2NLS_γ2 = DefaultParameter(nls -> eltype(nls.meta.x0)(2.5), "T(2.5)")
+const R2NLS_γ3 = DefaultParameter(nls -> eltype(nls.meta.x0)(0.5), "T(0.5)")
+const R2NLS_δ1 = DefaultParameter(nls -> eltype(nls.meta.x0)(0.5), "T(0.5)")
+const R2NLS_σmin = DefaultParameter(nls -> eps(eltype(nls.meta.x0)), "eps(T)")
 const R2NLS_non_mono_size = DefaultParameter(1)
 
 function R2NLSParameterSet(
-  nlp::AbstractNLSModel;
-  η1::T = get(R2NLS_η1, nlp),
-  η2::T = get(R2NLS_η2, nlp),
-  θ1::T = get(R2NLS_θ1, nlp),
-  θ2::T = get(R2NLS_θ2, nlp),
-  γ1::T = get(R2NLS_γ1, nlp),
-  γ2::T = get(R2NLS_γ2, nlp),
-  γ3::T = get(R2NLS_γ3, nlp),
-  δ1::T = get(R2NLS_δ1, nlp),
-  σmin::T = get(R2NLS_σmin, nlp),
-  non_mono_size::Int = get(R2NLS_non_mono_size, nlp),
+  nls::AbstractNLSModel;
+  η1::T = get(R2NLS_η1, nls),
+  η2::T = get(R2NLS_η2, nls),
+  θ1::T = get(R2NLS_θ1, nls),
+  θ2::T = get(R2NLS_θ2, nls),
+  γ1::T = get(R2NLS_γ1, nls),
+  γ2::T = get(R2NLS_γ2, nls),
+  γ3::T = get(R2NLS_γ3, nls),
+  δ1::T = get(R2NLS_δ1, nls),
+  σmin::T = get(R2NLS_σmin, nls),
+  non_mono_size::Int = get(R2NLS_non_mono_size, nls),
 ) where {T}
-
   @assert zero(T) < θ1 < one(T) "θ1 must satisfy 0 < θ1 < 1"
   @assert θ2 > one(T) "θ2 must satisfy θ2 > 1"
   @assert zero(T) < η1 <= η2 < one(T) "η1, η2 must satisfy 0 < η1 ≤ η2 < 1"
   @assert one(T) < γ1 <= γ2 "γ1, γ2 must satisfy 1 < γ1 ≤ γ2"
   @assert γ3 > zero(T) && γ3 <= one(T) "γ3 must satisfy 0 < γ3 ≤ 1"
   @assert zero(T) < δ1 < one(T) "δ1 must satisfy 0 < δ1 < 1"
-  
+
   R2NLSParameterSet{T}(
     Parameter(η1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(η2, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
@@ -109,45 +108,32 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
   m::Int
   n::Int
   nnzj::Int
-
   closed::Bool    # Avoid double-destroy
 
   function QRMumpsSolver(nls::AbstractNLSModel{T}) where {T}
-    # Safely initialize QRMumps library
     qrm_init()
 
-    # 1. Get problem dimensions and Jacobian structure
-    meta_nls = nls_meta(nlp)
-    n = nlp.nls_meta.nvar
-    m = nlp.nls_meta.nequ
+    meta_nls = nls_meta(nls)
+    n = nls.nls_meta.nvar
+    m = nls.nls_meta.nequ
     nnzj = meta_nls.nnzj
 
-    # 2. Allocate COO arrays for the augmented matrix [J; sqrt(σ)I]
-    # Total non-zeros = non-zeros in Jacobian (nnzj) + n diagonal entries for the identity block.
     irn = Vector{Int}(undef, nnzj + n)
     jcn = Vector{Int}(undef, nnzj + n)
     val = Vector{T}(undef, nnzj + n)
 
-    # 3. Fill in the sparsity pattern of the Jacobian J(x)
-    jac_structure_residual!(nlp, view(irn, 1:nnzj), view(jcn, 1:nnzj))
+    jac_structure_residual!(nls, view(irn, 1:nnzj), view(jcn, 1:nnzj))
 
-    # 4. Fill in the sparsity pattern for the √σ·Iₙ block
-    # This block lives in rows m+1 to m+n and columns 1 to n.
     @inbounds for i = 1:n
       irn[nnzj + i] = m + i
       jcn[nnzj + i] = i
     end
 
-    # 5. Initialize QRMumps sparse matrix and factorization structures
     spmat = qrm_spmat_init(m + n, n, irn, jcn, val; sym = false)
     spfct = qrm_spfct_init(spmat)
     qrm_analyse!(spmat, spfct; transp = 'n')
 
-    # 6. Pre-allocate the augmented right-hand-side vector
     b_aug = Vector{T}(undef, m+n)
-
-    # 7. Create the solver object and set a finalizer for safe cleanup.
-    # Initialize 'closed' to false
     solver = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, false)
 
     function free_qrm(s::QRMumpsSolver)
@@ -158,17 +144,20 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
       end
     end
 
-    finalizer(free_qrm, solver) #TODO need more tests
+    function destroy!(s::QRMumpsSolver) #for user use, in case they want to free memory before the finalizer runs
+      free_qrm(s)
+    end
+    finalizer(free_qrm, solver)
+
     return solver
   end
 end
-
 
 const R2NLS_allowed_subsolvers = (:cgls, :crls, :lsqr, :lsmr, :qrmumps)
 
 """
 
-  R2NLS(nlp; kwargs...)
+  R2NLS(nls; kwargs...)
 
 An implementation of the Levenberg-Marquardt method with regularization for nonlinear least-squares problems:
 
@@ -187,7 +176,7 @@ For advanced usage, first create a `R2NLSSolver` to preallocate the necessary me
 
 # Keyword Arguments
 
-- `x::V = nlp.meta.x0`: the initial guess.
+- `x::V = nls.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: is the absolute stopping tolerance.
 - `rtol::T = √eps(T)`: is the relative stopping tolerance; the algorithm stops when ‖J(x)ᵀF(x)‖ ≤ atol + rtol * ‖J(x₀)ᵀF(x₀)‖.
 - `Fatol::T = zero(T)`: absolute tolerance for the residual.
@@ -203,7 +192,8 @@ For advanced usage, first create a `R2NLSSolver` to preallocate the necessary me
 - `δ1::T = $(R2NLS_δ1)`: Cauchy point calculation parameter, see [`R2NLSParameterSet`](@ref).
 - `σmin::T = $(R2NLS_σmin)`: minimum step parameter, see [`R2NLSParameterSet`](@ref).
 - `non_mono_size::Int = $(R2NLS_non_mono_size)`: the size of the non-monotone history. If > 1, the algorithm will use a non-monotone strategy to accept steps.
-- `scp_flag::Bool = true`: if true, compare the norm of the calculated step with `θ2 * norm(scp)` each iteration, selecting the smaller step.
+- `scp_flag::Bool = true`: if true, safeguards the step size by reverting to the Cauchy point `scp` if the calculated step `s` is too large relative to the Cauchy step (i.e., if `‖s‖ > θ2 * ‖scp‖`).
+- `scp_est::Bool = true`: if true and scp_flag is true, the scp is calculated using the Cauchy point formula, otherwise it is calculated using the operator norm of the Jacobian.
 - `subsolver::Symbol = :lsmr`: method used as subproblem solver, see `JSOSolvers.R2NLS_allowed_subsolvers` for a list.
 - `subsolver_verbose::Int = 0`: if > 0, display subsolver iteration details every `subsolver_verbose` iterations when a KrylovWorkspace type is selected.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
@@ -230,17 +220,13 @@ stats = solve!(solver, model)
 ```
 
 """
-mutable struct R2NLSSolver{
-  T,
-  V,
-  Op <: Union{AbstractLinearOperator{T}, SparseMatrixCOO{T, Int}},
-  Sub <: Union{KrylovWorkspace{T, T, V}, QRMumpsSolver{T}},
-} <: AbstractOptimizationSolver
+mutable struct R2NLSSolver{T, V, Op, Sub <: Union{KrylovWorkspace{T, T, V}, QRMumpsSolver{T}}} <:
+               AbstractOptimizationSolver
   x::V         # Current iterate x_k
   xt::V        # Trial iterate x_{k+1}
   temp::V      # Temporary vector for intermediate calculations (e.g. J*v)
   gx::V        # Gradient of the objective function: J' * F(x)
-  Fx::V        # Residual vector F(x)
+  r::V        # Residual vector F(x)
   rt::V        # Residual vector at trial point F(xt)
   Jv::V        # Storage for Jacobian-vector products (J * v)
   Jtv::V       # Storage for Jacobian-transpose-vector products (J' * v)
@@ -255,21 +241,21 @@ mutable struct R2NLSSolver{
 end
 
 function R2NLSSolver(
-  nlp::AbstractNLSModel{T, V};
-  η1::T = get(R2NLS_η1, nlp),
-  η2::T = get(R2NLS_η2, nlp),
-  θ1::T = get(R2NLS_θ1, nlp),
-  θ2::T = get(R2NLS_θ2, nlp),
-  γ1::T = get(R2NLS_γ1, nlp),
-  γ2::T = get(R2NLS_γ2, nlp),
-  γ3::T = get(R2NLS_γ3, nlp),
-  δ1::T = get(R2NLS_δ1, nlp),
-  σmin::T = get(R2NLS_σmin, nlp),
-  non_mono_size::Int = get(R2NLS_non_mono_size, nlp),
+  nls::AbstractNLSModel{T, V};
+  η1::T = get(R2NLS_η1, nls),
+  η2::T = get(R2NLS_η2, nls),
+  θ1::T = get(R2NLS_θ1, nls),
+  θ2::T = get(R2NLS_θ2, nls),
+  γ1::T = get(R2NLS_γ1, nls),
+  γ2::T = get(R2NLS_γ2, nls),
+  γ3::T = get(R2NLS_γ3, nls),
+  δ1::T = get(R2NLS_δ1, nls),
+  σmin::T = get(R2NLS_σmin, nls),
+  non_mono_size::Int = get(R2NLS_non_mono_size, nls),
   subsolver::Symbol = :lsmr,
 ) where {T, V}
   params = R2NLSParameterSet(
-    nlp;
+    nls;
     η1 = η1,
     η2 = η2,
     θ1 = θ1,
@@ -285,13 +271,13 @@ function R2NLSSolver(
     error("subproblem solver must be one of $(R2NLS_allowed_subsolvers)")
   value(params.non_mono_size) >= 1 || error("non_mono_size must be greater than or equal to 1")
 
-  nvar = nlp.meta.nvar
-  nequ = nlp.nls_meta.nequ
+  nvar = nls.meta.nvar
+  nequ = nls.nls_meta.nequ
   x = V(undef, nvar)
   xt = V(undef, nvar)
   temp = V(undef, nequ)
   gx = V(undef, nvar)
-  Fx = V(undef, nequ)
+  r = V(undef, nequ)
   rt = V(undef, nequ)
   Jv = V(undef, subsolver == :qrmumps ? 0 : nequ)
   Jtv = V(undef, subsolver == :qrmumps ? 0 : nvar)
@@ -299,17 +285,17 @@ function R2NLSSolver(
   scp = V(undef, nvar)
   σ = eps(T)^(1 / 5)
   if subsolver == :qrmumps
-    ls_subsolver = QRMumpsSolver(nlp)
+    ls_subsolver = QRMumpsSolver(nls)
     Jx = SparseMatrixCOO(
       nequ,
       nvar,
-      ls_subsolver.irn[1:ls_subsolver.nnzj],
-      ls_subsolver.jcn[1:ls_subsolver.nnzj],
-      ls_subsolver.val[1:ls_subsolver.nnzj],
+      view(ls_subsolver.irn, 1:ls_subsolver.nnzj),
+      view(ls_subsolver.jcn, 1:ls_subsolver.nnzj),
+      view(ls_subsolver.val, 1:ls_subsolver.nnzj),
     )
   else
     ls_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
-    Jx = jac_op_residual!(nlp, x, Jv, Jtv)
+    Jx = jac_op_residual!(nls, x, Jv, Jtv)
   end
   Sub = typeof(ls_subsolver)
   Op = typeof(Jx)
@@ -322,7 +308,7 @@ function R2NLSSolver(
     xt,
     temp,
     gx,
-    Fx,
+    r,
     rt,
     Jv,
     Jtv,
@@ -344,7 +330,7 @@ function SolverCore.reset!(solver::R2NLSSolver{T}) where {T}
   solver
 end
 
-function SolverCore.reset!(solver::R2NLSSolver{T}, nlp::AbstractNLSModel) where {T}
+function SolverCore.reset!(solver::R2NLSSolver{T}, nls::AbstractNLSModel) where {T}
   fill!(solver.obj_vec, typemin(T))
   solver.σ = eps(T)^(1 / 5)
   solver.subtol = one(T)
@@ -352,22 +338,22 @@ function SolverCore.reset!(solver::R2NLSSolver{T}, nlp::AbstractNLSModel) where 
 end
 
 @doc (@doc R2NLSSolver) function R2NLS(
-  nlp::AbstractNLSModel{T, V};
-  η1::Real = get(R2NLS_η1, nlp),
-  η2::Real = get(R2NLS_η2, nlp),
-  θ1::Real = get(R2NLS_θ1, nlp),
-  θ2::Real = get(R2NLS_θ2, nlp),
-  γ1::Real = get(R2NLS_γ1, nlp),
-  γ2::Real = get(R2NLS_γ2, nlp),
-  γ3::Real = get(R2NLS_γ3, nlp),
-  δ1::Real = get(R2NLS_δ1, nlp),
-  σmin::Real = get(R2NLS_σmin, nlp),
-  non_mono_size::Int = get(R2NLS_non_mono_size, nlp),
+  nls::AbstractNLSModel{T, V};
+  η1::Real = get(R2NLS_η1, nls),
+  η2::Real = get(R2NLS_η2, nls),
+  θ1::Real = get(R2NLS_θ1, nls),
+  θ2::Real = get(R2NLS_θ2, nls),
+  γ1::Real = get(R2NLS_γ1, nls),
+  γ2::Real = get(R2NLS_γ2, nls),
+  γ3::Real = get(R2NLS_γ3, nls),
+  δ1::Real = get(R2NLS_δ1, nls),
+  σmin::Real = get(R2NLS_σmin, nls),
+  non_mono_size::Int = get(R2NLS_non_mono_size, nls),
   subsolver::Symbol = :lsmr,
   kwargs...,
 ) where {T, V}
   solver = R2NLSSolver(
-    nlp;
+    nls;
     η1 = convert(T, η1),
     η2 = convert(T, η2),
     θ1 = convert(T, θ1),
@@ -380,15 +366,15 @@ end
     non_mono_size = non_mono_size,
     subsolver = subsolver,
   )
-  return solve!(solver, nlp; kwargs...)
+  return solve!(solver, nls; kwargs...)
 end
 
 function SolverCore.solve!(
   solver::R2NLSSolver{T, V},
-  nlp::AbstractNLSModel{T, V},
+  nls::AbstractNLSModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
-  x::V = nlp.meta.x0,
+  x::V = nls.meta.x0,
   atol::T = √eps(T),
   rtol::T = √eps(T),
   Fatol::T = zero(T),
@@ -400,8 +386,8 @@ function SolverCore.solve!(
   scp_flag::Bool = true,
   subsolver_verbose::Int = 0,
 ) where {T, V}
-  unconstrained(nlp) || error("R2NLS should only be called on unconstrained problems.")
-  if !(nlp.meta.minimize)
+  unconstrained(nls) || error("R2NLS should only be called on unconstrained problems.")
+  if !(nls.meta.minimize)
     error("R2NLS only works for minimization problem")
   end
 
@@ -421,13 +407,13 @@ function SolverCore.solve!(
   start_time = time()
   set_time!(stats, 0.0)
 
-  n = nlp.nls_meta.nvar
-  m = nlp.nls_meta.nequ
+  n = nls.nls_meta.nvar
+  m = nls.nls_meta.nequ
   x = solver.x .= x
   xt = solver.xt
-  ∇f = solver.gx # k-1
+  ∇f = solver.gx
   ls_subsolver = solver.ls_subsolver
-  r, rt = solver.Fx, solver.rt
+  r, rt = solver.r, solver.rt
   s = solver.s
   scp = solver.scp
   subtol = solver.subtol
@@ -436,11 +422,11 @@ function SolverCore.solve!(
   Jx = solver.Jx
 
   if Jx isa SparseMatrixCOO
-    jac_coord_residual!(nlp, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
+    jac_coord_residual!(nls, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
     Jx.vals .= view(ls_subsolver.val, 1:ls_subsolver.nnzj)
   end
 
-  residual!(nlp, x, r)
+  residual!(nls, x, r)
   resid_norm = norm(r)
   f = resid_norm^2 / 2
 
@@ -452,7 +438,9 @@ function SolverCore.solve!(
   # Stopping criterion: 
   unbounded = false
 
-  σk = 2^round(log2(norm_∇fk + 1)) / norm_∇fk
+  # σk = 2^round(log2(norm_∇fk + 1)) / norm_∇fk
+  # max(diagonal(J'J)) is a good proxy for the scale of the problem
+  σk = max(T(1e-6), T(1e-4) * maximum(sum(abs2, Jx, dims = 1)))  #TODO check if this is better init for σk than the one based on the gradient norm
   ϵ = atol + rtol * norm_∇fk
   ϵF = Fatol + Frtol * resid_norm
 
@@ -475,27 +463,26 @@ function SolverCore.solve!(
     )
     @info log_row([stats.iter, resid_norm, norm_∇fk, σk, ρk])
   end
-  cp_step_log = " "
+
   if verbose > 0 && mod(stats.iter, verbose) == 0
     @info log_header(
-      [:iter, :resid_norm, :dual, :σ, :ρ, :sub_iter, :dir, :cp_step_log, :sub_status],
-      [Int, Float64, Float64, Float64, Float64, Int, String, String, String],
+      [:iter, :resid_norm, :dual, :σ, :ρ, :sub_iter, :dir, :sub_status],
+      [Int, Float64, Float64, Float64, Float64, Int, String, String],
       hdr_override = Dict(
         :resid_norm => "‖F(x)‖",
         :dual => "‖∇f‖",
         :sub_iter => "subiter",
         :dir => "dir",
-        :cp_step_log => "cp step",
         :sub_status => "status",
       ),
     )
-    @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk, 0, " ", " ", " "])
+    @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk, 0, " ", " "])
   end
 
   set_status!(
     stats,
     get_status(
-      nlp,
+      nls,
       elapsed_time = stats.elapsed_time,
       optimal = stationary,
       unbounded = unbounded,
@@ -511,80 +498,77 @@ function SolverCore.solve!(
   solver.σ = σk
   solver.subtol = subtol
 
-  callback(nlp, solver, stats)
+  callback(nls, solver, stats)
 
   # retrieve values again in case the user changed them in the callback
   subtol = solver.subtol
   σk = solver.σ
 
   done = stats.status != :unknown
-  ν_k = one(T) # used for scp calculation
 
   while !done
-
-    # Compute the Cauchy step.
-    mul!(temp, Jx, ∇f) # temp <- Jx ∇f
-    curv = dot(temp, temp) # curv = ∇f' Jx' Jx ∇f
-    slope = σk * norm_∇fk^2 # slope= σ * ||∇f||^2    
-    γ_k = (curv + slope) / norm_∇fk^2
-    @. temp = - r
+    # Compute the step s.
     solver.σ = σk
+    subsolver_solved, sub_stats, subiter =
+      subsolve!(ls_subsolver, solver, nls, s, atol, n, m, max_time, subsolver_verbose)
 
-    if γ_k > 0
-      ν_k = 2*(1-δ1) / (γ_k)
-      cp_step_log = "α_k"
-      # Compute the step s.
-      subsolver_solved, sub_stats, subiter =
-        subsolve!(ls_subsolver, solver, nlp, s, atol, n, m, max_time, subsolver_verbose)
-      if scp_flag
-        # Based on the flag, scp is calcualted
-        scp .= -ν_k * ∇f
-        if norm(s) > θ2 * norm(scp)
-          s .= scp
-        end
+    if scp_flag
+      if scp_est # Compute the Cauchy step.
+        mul!(temp, Jx, ∇f)
+        curvature_gn = dot(temp, temp) # curvature_gn = ∇f' Jx' Jx ∇f
+        γ_k = curvature_gn / norm_∇fk^2 + σk
+        @. temp = - r
+        ν_k = 2*(1-δ1) / (γ_k)
+      else
+        λmax, found_λ = opnorm(Jx)
+        found_λ || error("operator norm computation failed")
+        ν_k = θ1 / (λmax + σk)
       end
-    else  # when zero curvature occures
-      # we have to calcualte the scp, since we have encounter a negative curvature
-      λmax, found_λ = opnorm(Jx)
-      found_λ || error("operator norm computation failed")
-      cp_step_log = "ν_k"
-      ν_k = θ1 / (λmax + σk)
+
       @. scp = -ν_k * ∇f
-      s .= scp
+      if norm(s) > θ2 * norm(scp)
+        s .= scp
+      end
     end
 
     # Compute actual vs. predicted reduction.
     xt .= x .+ s
-    mul!(temp, Jx, s)
-    slope = dot(r, temp)
-    curv = dot(temp, temp)
+    # pred = 0.5*||F(x)||^2 - 0.5*||F(x) + J(x)s||^2
+    mul!(temp, Jx, s)       # temp = J(x) * s
+    axpy!(one(T), r, temp)  # temp = F(x) + J(x) * s
+    pred_f = norm(temp)^2 / 2
 
-    residual!(nlp, xt, rt)
+    # stats.objective is already 0.5 * ||F(x)||^2
+    ΔTk = stats.objective - pred_f
+
+    residual!(nls, xt, rt)
     resid_norm_t = norm(rt)
-    fck = resid_norm_t^2 / 2
+    ft = resid_norm_t^2 / 2
 
-    ΔTk = -slope - curv / 2
     if non_mono_size > 1  #non-monotone behaviour
       k = mod(stats.iter, non_mono_size) + 1
       solver.obj_vec[k] = stats.objective
-      fck_max = maximum(solver.obj_vec)
-      ρk = (fck_max - fck) / (fck_max - stats.objective + ΔTk)
+      ft_max = maximum(solver.obj_vec)
+      ρk = (ft_max - ft) / (ft_max - stats.objective + ΔTk)
     else
-      ρk = (stats.objective - fck) / ΔTk
+      ρk = (stats.objective - ft) / ΔTk
     end
 
     # Update regularization parameters and determine acceptance of the new candidate
     step_accepted = ρk >= η1
+
     if step_accepted
-      if Jx isa SparseMatrixCOO # we need to update the values of Jx in QRMumpsSolver
-        jac_coord_residual!(nlp, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
-        Jx.vals .= view(ls_subsolver.val, 1:ls_subsolver.nnzj)
-      end
-      
+
       # update Jx implicitly for other solvers
       x .= xt
       r .= rt
-      f = fck
+      f = ft
+
+      # Now calculate Jacobian at the NEW point x_{k+1} for QRMumps, since it needs to update the values in place. For Krylov solvers, the Jacobian will be updated implicitly through the operator.
+      if Jx isa SparseMatrixCOO
+        jac_coord_residual!(nls, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
+      end
+
       resid_norm = resid_norm_t
       mul!(∇f, Jx', r) # ∇f = Jx' * r
       set_objective!(stats, f)
@@ -593,10 +577,10 @@ function SolverCore.solve!(
       if ρk >= η2
         σk = max(σmin, γ3 * σk)
       else # η1 ≤ ρk < η2
-        σk = min(σmin, γ1 * σk)
+        σk = γ1 * σk
       end
     else # η1 > ρk
-      σk = max(σmin, γ2 * σk)
+      σk = γ2 * σk
     end
 
     set_iter!(stats, stats.iter + 1)
@@ -608,7 +592,7 @@ function SolverCore.solve!(
     solver.subtol = subtol
     set_dual_residual!(stats, norm_∇fk)
 
-    callback(nlp, solver, stats)
+    callback(nls, solver, stats)
 
     σk = solver.σ
     subtol = solver.subtol
@@ -619,17 +603,7 @@ function SolverCore.solve!(
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       dir_stat = step_accepted ? "↘" : "↗"
-      @info log_row([
-        stats.iter,
-        resid_norm,
-        norm_∇fk,
-        σk,
-        ρk,
-        subiter,
-        dir_stat,
-        cp_step_log,
-        sub_stats,
-      ])
+      @info log_row([stats.iter, resid_norm, norm_∇fk, σk, ρk, subiter, dir_stat, sub_stats])
     end
 
     if stats.status == :user
@@ -638,7 +612,7 @@ function SolverCore.solve!(
       set_status!(
         stats,
         get_status(
-          nlp,
+          nls,
           elapsed_time = stats.elapsed_time,
           optimal = stationary,
           unbounded = unbounded,
@@ -662,7 +636,7 @@ end
 function subsolve!(
   ls_subsolver::KrylovWorkspace,
   R2NLS::R2NLSSolver,
-  nlp,
+  nls,
   s,
   atol,
   n,
@@ -689,7 +663,7 @@ end
 function subsolve!(
   ls::QRMumpsSolver,
   R2NLS::R2NLSSolver,
-  nlp,
+  nls,
   s,
   atol,
   n,
@@ -699,7 +673,7 @@ function subsolve!(
 )
 
   # 1. Update Jacobian values at the current point x
-  # jac_coord_residual!(nlp, R2NLS.x, view(ls.val, 1:ls.nnzj))
+  # jac_coord_residual!(nls, R2NLS.x, view(ls.val, 1:ls.nnzj))
 
   # 2. Update regularization parameter σ
   sqrt_σ = sqrt(R2NLS.σ)
@@ -709,7 +683,11 @@ function subsolve!(
 
   # 3. Build the augmented right-hand side vector: b_aug = [-F(x); 0]
   ls.b_aug[1:m] .= R2NLS.temp # -F(x)
-  fill!(view(ls.b_aug, (m + 1):(m + n)), zero(eltype(ls.b_aug))) # we have to do this for some reason #Applying all of its Householder (or Givens) transforms to the entire RHS vector b_aug—i.e. computing QTbQTb.
+  # Zero out the regularization part without allocating a view we have to do this, Applying all of its Householder (or Givens) transforms to the entire RHS vector b_aug—i.e. computing QTbQTb.
+  @inbounds for i = (m + 1):(m + n)
+    ls.b_aug[i] = zero(eltype(ls.b_aug))
+  end
+
   # Update spmat
   qrm_update!(ls.spmat, ls.val)
 
