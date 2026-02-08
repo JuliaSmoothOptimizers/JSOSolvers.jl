@@ -1,46 +1,9 @@
 export R2N, R2NSolver, R2NParameterSet
 export ShiftedLBFGSSolver, HSLDirectSolver
-export ShiftedOperator
 
 using LinearOperators, LinearAlgebra
 using SparseArrays
 using HSL
-
-#TODO move to LinearOperators
-# Define a new mutable operator for A = H + σI
-mutable struct ShiftedOperator{T, V, OpH <: Union{AbstractLinearOperator{T}, AbstractMatrix{T}}} <:
-               AbstractLinearOperator{T}
-  H::OpH
-  σ::T
-  n::Int
-  symmetric::Bool
-  hermitian::Bool
-end
-
-function ShiftedOperator(
-  H::OpH,
-) where {T, OpH <: Union{AbstractLinearOperator{T}, AbstractMatrix{T}}}
-  is_sym = isa(H, AbstractLinearOperator) ? H.symmetric : issymmetric(H)
-  is_herm = isa(H, AbstractLinearOperator) ? H.hermitian : ishermitian(H)
-  return ShiftedOperator{T, Vector{T}, OpH}(H, zero(T), size(H, 1), is_sym, is_herm)
-end
-
-# Define required properties for AbstractLinearOperator
-Base.size(A::ShiftedOperator) = (A.n, A.n)
-LinearAlgebra.isreal(A::ShiftedOperator{T}) where {T <: Real} = true
-LinearOperators.issymmetric(A::ShiftedOperator) = A.symmetric
-LinearOperators.ishermitian(A::ShiftedOperator) = A.hermitian
-
-# Define the core multiplication rules: y = (H + σI)x
-function LinearAlgebra.mul!(
-  y::AbstractVecOrMat,
-  A::ShiftedOperator{T, V, OpH},
-  x::AbstractVecOrMat{T},
-) where {T, V, OpH}
-  mul!(y, A.H, x)
-  LinearAlgebra.axpy!(A.σ, x, y)
-  return y
-end
 
 """
     R2NParameterSet([T=Float64]; θ1, θ2, η1, η2, γ1, γ2, γ3, σmin, non_mono_size)
@@ -117,14 +80,13 @@ function R2NParameterSet(
   ls_min_alpha::T = get(R2N_ls_min_alpha, nlp),
   ls_max_alpha::T = get(R2N_ls_max_alpha, nlp),
 ) where {T}
-
   @assert zero(T) < θ1 < one(T) "θ1 must satisfy 0 < θ1 < 1"
   @assert θ2 > one(T) "θ2 must satisfy θ2 > 1"
   @assert zero(T) < η1 <= η2 < one(T) "η1, η2 must satisfy 0 < η1 ≤ η2 < 1"
   @assert one(T) < γ1 <= γ2 "γ1, γ2 must satisfy 1 < γ1 ≤ γ2"
   @assert γ3 > zero(T) && γ3 <= one(T) "γ3 must satisfy 0 < γ3 ≤ 1"
   @assert zero(T) < δ1 < one(T) "δ1 must satisfy 0 < δ1 < 1"
-   
+
   R2NParameterSet{T}(
     Parameter(θ1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(θ2, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
@@ -235,7 +197,7 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
 - `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
 - `npc_handler::Symbol = :gs`: the non_positive_curve handling strategy.
-  - `:gs`: uses the Goldstein conditions rule to handle non-positive curvature.
+  - `:gs`: run line-search along NPC with Goldstein conditions.
   - `:sigma`: increase the regularization parameter σ.
   - `:prev`: if subsolver return after first iteration, increase the sigma, but if subsolver return after second iteration, set s_k = s_k^(t-1).
   - `:cp`: set s_k to Cauchy point.
@@ -269,6 +231,7 @@ mutable struct R2NSolver{
   Op <: Union{AbstractLinearOperator{T}, AbstractMatrix{T}}, #TODO confirm with Prof. Orban
   ShiftedOp <: Union{ShiftedOperator{T, V, Op}, Nothing}, # for cg and cr solvers
   Sub <: Union{KrylovWorkspace{T, T, V}, ShiftedLBFGSSolver, HSLDirectSolver{T, S} where S},
+  M <: AbstractNLPModel{T, V},
 } <: AbstractOptimizationSolver
   x::V
   xt::V
@@ -284,6 +247,7 @@ mutable struct R2NSolver{
   subtol::T
   σ::T
   params::R2NParameterSet{T}
+  h::LineModel{T, V, M}
 end
 
 function R2NSolver(
@@ -372,7 +336,10 @@ function R2NSolver(
   obj_vec = fill(typemin(T), non_mono_size)
   Sub = typeof(r2_subsolver)
 
-  return R2NSolver{T, V, Op, ShiftedOp, Sub}(
+  # Initialize LineModel pointing to x and s. We will redirect it later, but we initialize it here.
+  h = LineModel(nlp, x, s)
+
+  return R2NSolver{T, V, Op, ShiftedOp, Sub, typeof(nlp)}(
     x,
     xt,
     gx,
@@ -387,9 +354,10 @@ function R2NSolver(
     subtol,
     σ,
     params,
+    h,
   )
 end
-#TODO Prof. Orban, check if I need to reset H in reset! function
+
 function SolverCore.reset!(solver::R2NSolver{T}) where {T}
   fill!(solver.obj_vec, typemin(T))
   reset!(solver.H)
@@ -397,8 +365,10 @@ function SolverCore.reset!(solver::R2NSolver{T}) where {T}
   if solver.r2_subsolver isa CgWorkspace || solver.r2_subsolver isa CrWorkspace
     solver.A = ShiftedOperator(solver.H)
   end
-  solver
+  # No need to touch solver.h here; it is still valid for the current NLP
+  return solver
 end
+
 function SolverCore.reset!(solver::R2NSolver{T}, nlp::AbstractNLPModel) where {T}
   fill!(solver.obj_vec, typemin(T))
   reset!(solver.H)
@@ -406,7 +376,11 @@ function SolverCore.reset!(solver::R2NSolver{T}, nlp::AbstractNLPModel) where {T
   if solver.r2_subsolver isa CgWorkspace || solver.r2_subsolver isa CrWorkspace
     solver.A = ShiftedOperator(solver.H)
   end
-  solver
+
+  # We must create a new LineModel because the NLP has changed
+  solver.h = LineModel(nlp, solver.x, solver.s)
+
+  return solver
 end
 
 @doc (@doc R2NSolver) function R2N(
@@ -548,7 +522,7 @@ function SolverCore.solve!(
         :sub_status => "status",
       ),
     )
-    @info log_row([stats.iter, stats.objective, norm_∇fk, 0.0 ,σk, ρk, 0, " ", " "])
+    @info log_row([stats.iter, stats.objective, norm_∇fk, 0.0, σk, ρk, 0, " ", " "])
   end
 
   set_status!(
@@ -585,7 +559,7 @@ function SolverCore.solve!(
   γ_k = zero(T)
 
   # Initialize variables to avoid scope warnings (although not strictly necessary if logic is sound)
-  fck = f0
+  ft = f0
 
   while !done
     npcCount = 0
@@ -618,13 +592,13 @@ function SolverCore.solve!(
         force_sigma_increase = true #TODO Prof. Orban, for now we just increase sigma when we have zero eigenvalues
       end
 
-      # Check Indefinite (Negative Eigenvalues)
+      # Check Indefinite
       if !force_sigma_increase && num_neg > 0
-        # Curvature = s' (H+σI) s
+        # curv_s = s' (H+σI) s
         curv_s = dot(s, Hs)
 
         if curv_s < 0
-          npcCount = 1 # we need to set this for later use
+          npcCount = 1
           if npc_handler == :prev
             npc_handler = :gs  #Force the npc_handler to be gs and not :prev since we can not have that
           end
@@ -640,87 +614,33 @@ function SolverCore.solve!(
       if npc_handler == :gs # Goldstein Line Search
         npcCount = 0
 
-        # --- Goldstein Line Search --- 
-        # Logic: Find alpha such that function drop is bounded between 
-        # two linear slopes defined by parameter c (ls_c).
-
-        # 1. Initialization - Type Stable
-        α = one(T)
-        f0_val = stats.objective
-
-        # Retrieve direction
         if r2_subsolver isa HSLDirectSolver
-            dir = s
+          dir = s
         else
-            dir = r2_subsolver.npc_dir 
+          dir = r2_subsolver.npc_dir
         end
 
-        # grad_dir = ∇fᵀ d (Expected to be negative for descent/NPC)
-        # Note: ∇fk is currently -∇f, so we compute dot(-∇fk, dir)
-        grad_dir = dot(-∇fk, dir)
+        SolverTools.redirect!(solver.h, x, dir)
 
-        # Goldstein requires 0 < c < 0.5. 
-        # If user provided c >= 0.5, we cap it to ensure valid bounds.
-        c_goldstein = (ls_c >= 0.5) ? T(0.49) : ls_c
+        f0_val = stats.objective
+        # ∇fk is currently -∇f, so we negate it to get +∇f for the dot product
+        slope = -dot(∇fk, dir)
 
-        # Bracketing variables
-        α_min = zero(T)      # Lower bound of valid interval
-        α_max = T(Inf)       # Upper bound of valid interval
-        iter_ls = 0
-        max_iter_ls = 100    # Safety break #TODO Prof Orban?
-
-        while iter_ls < max_iter_ls
-            iter_ls += 1
-
-            # 2. Evaluate Candidate
-            xt .= x .+ α .* dir
-            fck = obj(nlp, xt)
-
-            # 3. Check Conditions
-            # A: Armijo (Upper Bound) - Is step too big?
-            armijo_pass = fck <= f0_val + c_goldstein * α * grad_dir
-
-            # B: Curvature (Lower Bound) - Is step too small?
-            # f(x+αd) >= f(x) + (1-c)αg'd
-            curvature_pass = fck >= f0_val + (1 - c_goldstein) * α * grad_dir
-
-            if !armijo_pass
-                # Fails Armijo: Step is too long. The valid point is to the LEFT.
-                α_max = α
-                α = 0.5 * (α_min + α_max) # Bisect
-
-            elseif !curvature_pass
-                # Fails Curvature: Step is too short. The valid point is to the RIGHT.
-                α_min = α
-                if isinf(α_max)
-                    # No upper bound found yet, expand step
-                    α = α * ls_increase
-                    # Safety clamp
-                    if α > ls_max_alpha
-                        α = ls_max_alpha
-                        break 
-                    end
-                else
-                    # Upper bound exists, bisect
-                    α = 0.5 * (α_min + α_max)
-                end
-            else
-                # Satisfies BOTH Goldstein conditions
-                break
-            end
-
-            # # Safety check for precision issues #TODO prof. Orban
-            # if !isinf(α_max) && abs(α_max - α_min) < 1e-12
-            #     break
-            # end
-        end
-
-        # 4. Store the final computed step
-        s .= α .* dir
-
-        # 5. Flag that we already have the objective value
-        fck_computed = true
-
+        α, ft, nbk, nbG = armijo_goldstein(
+          solver.h,
+          f0_val,
+          slope;
+          t = one(T),       # Initial step
+          τ₀ = ls_c,
+          τ₁ = 1 - ls_c,
+          γ₀ = ls_decrease, # Backtracking factor
+          γ₁ = ls_increase, # Look-ahead factor
+          bk_max = 100,     # Or add a param for this
+          bG_max = 100,
+          verbose = (verbose > 0),
+        )
+        @. s = α * dir
+        fck_computed = true # Set flag to indicate ft is already computed from line search
       elseif npc_handler == :prev #Cr and cg will return the last iteration s
         npcCount = 0
         s .= r2_subsolver.x
@@ -771,7 +691,7 @@ function SolverCore.solve!(
       σk = max(σmin, γ2 * σk)
       solver.σ = σk
       npcCount = 0 # reset for next iteration
-      ∇fk .*= -1 
+      ∇fk .*= -1
     else
       # Correctly compute curvature s' * B * s
       if solver.r2_subsolver isa HSLDirectSolver
@@ -790,27 +710,28 @@ function SolverCore.solve!(
       slope = dot(s, ∇fk) # = -∇fkᵀ s because we flipped the sign of ∇fk
 
       ΔTk = slope - curv / 2
-      xt .= x .+ s
+      @. xt = x + s
 
       # OPTIMIZATION: Only calculate obj if Goldstein didn't already do it
       if !fck_computed
-          fck = obj(nlp, xt)
+        ft = obj(nlp, xt)
       end
 
       if non_mono_size > 1  #non-monotone behaviour
         k = mod(stats.iter, non_mono_size) + 1
         solver.obj_vec[k] = stats.objective
         fck_max = maximum(solver.obj_vec)
-        ρk = (fck_max - fck) / (fck_max - stats.objective + ΔTk) #TODO Prof. Orban check if this is correct the denominator   
+        ρk = (fck_max - ft) / (fck_max - stats.objective + ΔTk) #TODO Prof. Orban check if this is correct the denominator   
       else
         # Avoid division by zero/negative. If ΔTk <= 0, the model is bad.
-        ρk = (ΔTk > 10 * eps(T)) ? (stats.objective - fck) / ΔTk : -one(T)
-        # ρk = (stats.objective - fck) / ΔTk
+        ρk = (ΔTk > 10 * eps(T)) ? (stats.objective - ft) / ΔTk : -one(T)
+        # ρk = (stats.objective - ft) / ΔTk
       end
 
       # Update regularization parameters and Acceptance of the new candidate
       step_accepted = ρk >= η1
       if step_accepted
+        # update H implicitly
         x .= xt
         grad!(nlp, x, ∇fk)
         if isa(nlp, QuasiNewtonModel)
@@ -819,20 +740,20 @@ function SolverCore.solve!(
           push!(nlp, s, ∇fn)
           ∇fn .= ∇fk
         end
-        set_objective!(stats, fck)
-        unbounded = fck < fmin
+        set_objective!(stats, ft)
+        unbounded = ft < fmin
         norm_∇fk = norm(∇fk)
         if ρk >= η2
           σk = max(σmin, γ3 * σk)
         else # η1 ≤ ρk < η2
-          σk = max(σmin, γ1 * σk)
+          σk = γ1 * σk
         end
         # we need to update H if we use Ma97 or ma57
         if solver.r2_subsolver isa HSLDirectSolver
           hess_coord!(nlp, x, view(solver.r2_subsolver.vals, 1:solver.r2_subsolver.nnzh))
         end
       else # η1 > ρk
-        σk = max(σmin, γ2 * σk)
+        σk = γ2 * σk
         ∇fk .*= -1
       end
     end
@@ -855,7 +776,17 @@ function SolverCore.solve!(
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       dir_stat = step_accepted ? "↘" : "↗"
-      @info log_row([stats.iter, stats.objective, norm_∇fk, norm(s) ,σk, ρk, subiter, dir_stat, sub_stats])
+      @info log_row([
+        stats.iter,
+        stats.objective,
+        norm_∇fk,
+        norm(s),
+        σk,
+        ρk,
+        subiter,
+        dir_stat,
+        sub_stats,
+      ])
     end
 
     if stats.status == :user

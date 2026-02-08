@@ -22,7 +22,7 @@ SparseMatricesCOO = "fa32481b-f100-4b48-8dc8-c62f61b13870"
 [compat]
 HSL = "0.5.2"
 Krylov = "0.10.1"
-LinearOperators = "2.11.0"
+LinearOperators = "2.12.0"
 NLPModels = "0.21"
 NLPModelsModifiers = "0.7"
 QRMumps = "0.3.2"
