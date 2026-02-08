@@ -5,20 +5,24 @@ using LinearOperators, LinearAlgebra
 using SparseArrays
 using HSL
 
+Julia
+
 """
     R2NParameterSet([T=Float64]; θ1, θ2, η1, η2, γ1, γ2, γ3, σmin, non_mono_size)
+
 Parameter set for the R2N solver. Controls algorithmic tolerances and step acceptance.
+
 # Keyword Arguments
 - `θ1 = T(0.5)`: Cauchy step parameter (0 < θ1 < 1).
-- `θ2 = eps(T)^(-1)`: Cauchy step parameter.
-- `η1 = eps(T)^(1/4)`: Step acceptance parameter (0 < η1 ≤ η2 < 1).
-- `η2 = T(0.95)`: Step acceptance parameter (0 < η1 ≤ η2 < 1).
-- `γ1 = T(1.5)`: Regularization update parameter (1 < γ1 ≤ γ2).
-- `γ2 = T(2.5)`: Regularization update parameter (γ1 ≤ γ2).
-- `γ3 = T(0.5)`: Regularization update parameter (0 < γ3 ≤ 1).
+- `θ2 = eps(T)^(-1)`: Maximum allowed ratio between the step and the Cauchy step (θ2 > 1).
+- `η1 = eps(T)^(1/4)`: Accept step if actual/predicted reduction ≥ η1 (0 < η1 ≤ η2 < 1).
+- `η2 = T(0.95)`: Step is very successful if reduction ≥ η2 (0 < η1 ≤ η2 < 1).
+- `γ1 = T(1.5)`: Regularization increase factor on successful (but not very successful) step (1 < γ1 ≤ γ2).
+- `γ2 = T(2.5)`: Regularization increase factor on rejected step (γ1 ≤ γ2).
+- `γ3 = T(0.5)`: Regularization decrease factor on very successful step (0 < γ3 ≤ 1).
 - `δ1 = T(0.5)`: Cauchy point calculation parameter.
-- `σmin = eps(T)`: Minimum step parameter. #TODO too small I need it to be 1
-- `non_mono_size = 1`: the size of the non-monotone behaviour. If > 1, the algorithm will use a non-monotone strategy to accept steps.
+- `σmin = eps(T)`: Minimum regularization parameter.
+- `non_mono_size = 1`: Window size for non-monotone acceptance.
 """
 struct R2NParameterSet{T} <: AbstractParameterSet
   θ1::Parameter{T, RealInterval{T}}
@@ -115,11 +119,15 @@ end
 abstract type AbstractMASolver end
 
 """
-HSLDirectSolver: Generic wrapper for HSL direct solvers (e.g., MA97, MA57).
-- hsl_obj: The HSL solver object (e.g., Ma97 or Ma57)
-- rows, cols, vals: COO format for the Hessian + shift
-- n: problem size
-- nnzh: number of Hessian nonzeros
+    HSLDirectSolver
+Generic wrapper for HSL direct solvers (e.g., MA97, MA57).
+
+# Fields
+- `hsl_obj`: The HSL solver object (e.g., Ma97 or Ma57).
+- `rows`, `cols`, `vals`: COO format for the Hessian + shift.
+- `n`: Problem size.
+- `nnzh`: Number of Hessian nonzeros.
+- `work`: Workspace for solves (used for MA57).
 """
 mutable struct HSLDirectSolver{T, S} <: AbstractMASolver
   hsl_obj::S
@@ -168,12 +176,19 @@ const R2N_allowed_subsolvers = [:cg, :cr, :minres, :minres_qlp, :shifted_lbfgs, 
 
 """
     R2N(nlp; kwargs...)
+
 A second-order quadratic regularization method for unconstrained optimization (with shifted L-BFGS or shifted Hessian operator).
+
+    min f(x)
+
 For advanced usage, first define a `R2NSolver` to preallocate the memory used in the algorithm, and then call `solve!`:
+
     solver = R2NSolver(nlp)
     solve!(solver, nlp; kwargs...)
+
 # Arguments
 - `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
+
 # Keyword arguments
 - `params::R2NParameterSet = R2NParameterSet(nlp)`: algorithm parameters, see [`R2NParameterSet`](@ref).
 - `η1::T = $(R2N_η1)`: step acceptance parameter, see [`R2NParameterSet`](@ref).
@@ -193,7 +208,7 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
-- `subsolver::Symbol  = :cg`: the subsolver to solve the shifted system. The `MinresWorkspace` which solves the shifted linear system exactly at each iteration. Using the exact solver is only possible if `nlp` is an `LBFGSModel`. See `JSOSolvers.R2N_allowed_subsolvers` for a list of available subsolvers.
+- `subsolver::Symbol = :cg`: the subsolver to solve the shifted system. 
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
 - `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
 - `npc_handler::Symbol = :gs`: the non_positive_curve handling strategy.
@@ -201,8 +216,7 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
   - `:sigma`: increase the regularization parameter σ.
   - `:prev`: if subsolver return after first iteration, increase the sigma, but if subsolver return after second iteration, set s_k = s_k^(t-1).
   - `:cp`: set s_k to Cauchy point.
-See `JSOSolvers.npc_handler_allowed` for a list of available `npc_handler` strategies.
-All algorithmic parameters (θ1, θ2, η1, η2, γ1, γ2, γ3, σmin) can be set via the `params` keyword or individually as shown above. If both are provided, individual keywords take precedence.
+
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 - `callback`: function called at each iteration, see [`Callback`](https://jso.dev/JSOSolvers.jl/stable/#Callback) section.
@@ -212,14 +226,6 @@ The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
 using JSOSolvers, ADNLPModels
 nlp = ADNLPModel(x -> sum(x.^2), ones(3))
 stats = R2N(nlp)
-# output
-"Execution stats: first-order stationary"
-```
-```jldoctest; output = false
-using JSOSolvers, ADNLPModels
-nlp = ADNLPModel(x -> sum(x.^2), ones(3))
-solver = R2NSolver(nlp);
-stats = solve!(solver, nlp)
 # output
 "Execution stats: first-order stationary"
 ```
@@ -233,21 +239,21 @@ mutable struct R2NSolver{
   Sub <: Union{KrylovWorkspace{T, T, V}, ShiftedLBFGSSolver, HSLDirectSolver{T, S} where S},
   M <: AbstractNLPModel{T, V},
 } <: AbstractOptimizationSolver
-  x::V
-  xt::V
-  gx::V
-  gn::V
-  H::Op
-  A::ShiftedOp
-  Hs::V
-  s::V
-  scp::V
-  obj_vec::V # used for non-monotone
-  r2_subsolver::Sub
-  subtol::T
-  σ::T
-  params::R2NParameterSet{T}
-  h::LineModel{T, V, M}
+  x::V              # Current iterate x_k
+  xt::V             # Trial iterate x_{k+1}
+  gx::V             # Gradient ∇f(x)
+  gn::V             # Gradient at new point (Quasi-Newton)
+  Hs::V             # Storage for H*s products
+  s::V              # Step direction
+  scp::V            # Cauchy point step
+  obj_vec::V        # History of objective values for non-monotone strategy
+  H::Op             # Hessian operator
+  A::ShiftedOp      # Shifted Operator (H + σI)
+  r2_subsolver::Sub # The subproblem solver
+  h::LineModel{T, V, M} # Line search model
+  subtol::T         # Current tolerance for the subproblem
+  σ::T              # Regularization parameter
+  params::R2NParameterSet{T} # Algorithmic parameters
 end
 
 function R2NSolver(
