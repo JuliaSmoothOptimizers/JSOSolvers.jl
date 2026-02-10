@@ -455,7 +455,7 @@ function SolverCore.solve!(
   set_dual_residual!(stats, norm_∇fk)
 
   if stationary
-    @info "Optimal point found at initial point"
+    @info "Stationary point found at initial point"
     @info log_header(
       [:iter, :resid_norm, :dual, :σ, :ρ],
       [Int, Float64, Float64, Float64, Float64],
