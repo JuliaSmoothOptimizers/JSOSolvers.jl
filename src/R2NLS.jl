@@ -1,8 +1,8 @@
-export R2NLS, R2NLSSolver, R2NLSParameterSet
-export QRMumpsSolver
-
-using LinearAlgebra, SparseArrays
 using QRMumps, SparseMatricesCOO
+
+export R2NLS, R2NLSSolver, R2NLSParameterSet
+export QRMumpsSubsolver, LSMRSubsolver, LSQRSubsolver, CGLSSubsolver
+export AbstractR2NLSSubsolver
 
 """
   R2NLSParameterSet([T=Float64]; η1, η2, θ1, θ2, γ1, γ2, γ3, δ1, σmin, non_mono_size)
@@ -17,9 +17,11 @@ Parameter set for the R2NLS solver. Controls algorithmic tolerances and step acc
 - `γ1 = T(1.5)`: Regularization increase factor on successful (but not very successful) step (1 < γ1 ≤ γ2).
 - `γ2 = T(2.5)`: Regularization increase factor on rejected step (γ1 ≤ γ2).
 - `γ3 = T(0.5)`: Regularization increase factor on very successful step (0 < γ3 ≤ 1).
-- `δ1 = T(0.5)`: Cauchy point scaling (0 < δ1 < 1).
+- `δ1 = T(0.5)`: Cauchy point scaling (0 < δ1 < 1). θ1 scales the step size when using the exact Cauchy point, while δ1 scales the step size inexact Cauchy point.
 - `σmin = eps(T)`: Smallest allowed regularization.
 - `non_mono_size = 1`: Window size for non-monotone acceptance.
+- `compute_cauchy_point = false`: Whether to compute the Cauchy point.
+- `inexact_cauchy_point = true`: Whether to use an inexact Cauchy point.
 """
 struct R2NLSParameterSet{T} <: AbstractParameterSet
   η1::Parameter{T, RealInterval{T}}
@@ -32,6 +34,8 @@ struct R2NLSParameterSet{T} <: AbstractParameterSet
   δ1::Parameter{T, RealInterval{T}}
   σmin::Parameter{T, RealInterval{T}}
   non_mono_size::Parameter{Int, IntegerRange{Int}}
+  compute_cauchy_point::Parameter{Bool, Any}
+  inexact_cauchy_point::Parameter{Bool, Any}
 end
 
 # Default parameter values
@@ -48,6 +52,8 @@ const R2NLS_γ3 = DefaultParameter(nls -> eltype(nls.meta.x0)(0.5), "T(0.5)")
 const R2NLS_δ1 = DefaultParameter(nls -> eltype(nls.meta.x0)(0.5), "T(0.5)")
 const R2NLS_σmin = DefaultParameter(nls -> eps(eltype(nls.meta.x0)), "eps(T)")
 const R2NLS_non_mono_size = DefaultParameter(1)
+const R2NLS_compute_cauchy_point = DefaultParameter(false)
+const R2NLS_inexact_cauchy_point = DefaultParameter(true)
 
 function R2NLSParameterSet(
   nls::AbstractNLSModel;
@@ -61,6 +67,8 @@ function R2NLSParameterSet(
   δ1::T = get(R2NLS_δ1, nls),
   σmin::T = get(R2NLS_σmin, nls),
   non_mono_size::Int = get(R2NLS_non_mono_size, nls),
+  compute_cauchy_point::Bool = get(R2NLS_compute_cauchy_point, nls),
+  inexact_cauchy_point::Bool = get(R2NLS_inexact_cauchy_point, nls),
 ) where {T}
   @assert zero(T) < θ1 < one(T) "θ1 must satisfy 0 < θ1 < 1"
   @assert θ2 > one(T) "θ2 must satisfy θ2 > 1"
@@ -68,6 +76,7 @@ function R2NLSParameterSet(
   @assert one(T) < γ1 <= γ2 "γ1, γ2 must satisfy 1 < γ1 ≤ γ2"
   @assert γ3 > zero(T) && γ3 <= one(T) "γ3 must satisfy 0 < γ3 ≤ 1"
   @assert zero(T) < δ1 < one(T) "δ1 must satisfy 0 < δ1 < 1"
+  @assert θ1 <= 2(one(T) - δ1) "θ1 must be ≤ 2(1 - δ1) to ensure sufficient decrease condition is compatible with Cauchy point scaling"
 
   R2NLSParameterSet{T}(
     Parameter(η1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
@@ -80,52 +89,73 @@ function R2NLSParameterSet(
     Parameter(δ1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(σmin, RealInterval(zero(T), T(Inf), lower_open = true, upper_open = true)),
     Parameter(non_mono_size, IntegerRange(1, typemax(Int))),
+    Parameter(compute_cauchy_point, Any),
+    Parameter(inexact_cauchy_point, Any),
   )
 end
 
-abstract type AbstractQRMumpsSolver end
+# ==============================================================================
+#  Abstract Subsolver Interface
+# ==============================================================================
+
+abstract type AbstractR2NLSSubsolver{T} end
 
 """
-    QRMumpsSolver
-A solver structure for handling the linear least-squares subproblems within R2NLS
-using the QRMumps package. This structure pre-allocates all necessary memory
-for the sparse matrix representation and the factorization.
+    initialize!(subsolver, nls, x)
+Initial setup for the subsolver.
 """
-mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
-  # QRMumps structures
+function initialize! end
+
+"""
+    update_subsolver!(subsolver, nls, x)
+Update the internal Jacobian representation at point `x`.
+"""
+function update_subsolver! end
+
+"""
+    solve_subproblem!(subsolver, s, rhs, σ, atol, rtol)
+Solve min || J*s - rhs ||² + σ ||s||².
+"""
+function solve_subproblem! end
+
+"""
+    get_jacobian(subsolver)
+Return the operator/matrix J for outer loop calculations (gradient, Cauchy point).
+"""
+function get_jacobian end
+
+# ==============================================================================
+#  QRMumps Subsolver
+# ==============================================================================
+
+mutable struct QRMumpsSubsolver{T} <: AbstractR2NLSSubsolver{T}
   spmat::qrm_spmat{T}
   spfct::qrm_spfct{T}
-
-  # COO storage for the augmented matrix [J; sqrt(σ) * I]
   irn::Vector{Int}
   jcn::Vector{Int}
   val::Vector{T}
-
-  # Augmented RHS vector
-  b_aug::Vector{T}
-
-  # Problem dimensions
+  b_aug::Vector{T} # Internal temp for RHS
   m::Int
   n::Int
   nnzj::Int
-  closed::Bool    # Avoid double-destroy
+  closed::Bool
+  Jx::SparseMatrixCOO{T, Int}
 
-  function QRMumpsSolver(nls::AbstractNLSModel{T}) where {T}
+  # Constructor
+  function QRMumpsSubsolver(nls::AbstractNLSModel{T}, x::AbstractVector{T}) where {T}
     qrm_init()
-
-    meta_nls = nls_meta(nls)
-    n = nls.nls_meta.nvar
-    m = nls.nls_meta.nequ
-    nnzj = meta_nls.nnzj
+    meta = nls.meta;
+    n = meta.nvar;
+    m = nls.nls_meta.nequ;
+    nnzj = nls.nls_meta.nnzj
 
     irn = Vector{Int}(undef, nnzj + n)
     jcn = Vector{Int}(undef, nnzj + n)
     val = Vector{T}(undef, nnzj + n)
 
     jac_structure_residual!(nls, view(irn, 1:nnzj), view(jcn, 1:nnzj))
-
     @inbounds for i = 1:n
-      irn[nnzj + i] = m + i
+      irn[nnzj + i] = m + i;
       jcn[nnzj + i] = i
     end
 
@@ -133,30 +163,112 @@ mutable struct QRMumpsSolver{T} <: AbstractQRMumpsSolver
     spfct = qrm_spfct_init(spmat)
     qrm_analyse!(spmat, spfct; transp = 'n')
 
-    b_aug = Vector{T}(undef, m+n)
-    solver = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, false)
+    b_aug = Vector{T}(undef, m + n)
 
-    function free_qrm(s::QRMumpsSolver)
-      if !s.closed
-        qrm_spfct_destroy!(s.spfct)
-        qrm_spmat_destroy!(s.spmat)
-        s.closed = true
-      end
-    end
+    # This view acts as our Jx operator
+    Jx_wrapper = SparseMatrixCOO(m, n, view(irn, 1:nnzj), view(jcn, 1:nnzj), view(val, 1:nnzj))
 
-    function destroy!(s::QRMumpsSolver) #for user use, in case they want to free memory before the finalizer runs
-      free_qrm(s)
-    end
-    finalizer(free_qrm, solver)
+    s = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, false, Jx_wrapper)
 
-    return solver
+    # Initialize values immediately using x
+    update_subsolver!(s, nls, x)
+
+    finalizer(free_qrm, s)
+    return s
   end
 end
 
-const R2NLS_allowed_subsolvers = (:cgls, :crls, :lsqr, :lsmr, :qrmumps)
+function free_qrm(s::QRMumpsSubsolver)
+  if !s.closed
+    qrm_spfct_destroy!(s.spfct)
+    qrm_spmat_destroy!(s.spmat)
+    s.closed = true
+  end
+end
+
+function update_subsolver!(s::QRMumpsSubsolver, nls, x)
+  jac_coord_residual!(nls, x, view(s.val, 1:s.nnzj))
+end
+
+function solve_subproblem!(ls::QRMumpsSubsolver{T}, s, rhs, σ, atol, rtol; verbose = 0) where {T}
+  sqrt_σ = sqrt(σ)
+  @inbounds for i = 1:ls.n
+    ls.val[ls.nnzj + i] = sqrt_σ
+  end
+  qrm_update!(ls.spmat, ls.val)
+
+  # b_aug = [-rhs; 0] (Assuming rhs passed is -r)
+  ls.b_aug[1:ls.m] .= rhs
+  ls.b_aug[(ls.m + 1):end] .= zero(T)
+
+  qrm_factorize!(ls.spmat, ls.spfct; transp = 'n')
+  qrm_apply!(ls.spfct, ls.b_aug; transp = 't')
+  qrm_solve!(ls.spfct, ls.b_aug, s; transp = 'n')
+
+  return true, "QRMumps", 1
+end
+
+get_jacobian(s::QRMumpsSubsolver) = s.Jx
+initialize!(s::QRMumpsSubsolver, nls, x) = update_subsolver!(s, nls, x)
+
+# ==============================================================================
+#   Krylov Subsolvers (LSMR, LSQR, CGLS)
+# ==============================================================================
+
+mutable struct GenericKrylovSubsolver{T, V, Op, W} <: AbstractR2NLSSubsolver{T}
+  workspace::W
+  Jx::Op
+  solver_name::Symbol
+
+  function GenericKrylovSubsolver(
+    nls::AbstractNLSModel{T, V},
+    x_init::V,
+    solver_name::Symbol,
+  ) where {T, V}
+    m = nls.nls_meta.nequ
+    n = nls.meta.nvar
+
+    # Jx and its buffers allocated here inside the subsolver
+    Jv = V(undef, m)
+    Jtv = V(undef, n)
+    Jx = jac_op_residual!(nls, x_init, Jv, Jtv)
+
+    workspace = krylov_workspace(Val(solver_name), m, n, V)
+    new{T, V, typeof(Jx), typeof(workspace)}(workspace, Jx, solver_name)
+  end
+end
+
+# Specific Constructors for Uniform Signature (nls, x)
+LSMRSubsolver(nls, x) = GenericKrylovSubsolver(nls, x, :lsmr)
+LSQRSubsolver(nls, x) = GenericKrylovSubsolver(nls, x, :lsqr)
+CGLSSubsolver(nls, x) = GenericKrylovSubsolver(nls, x, :cgls)
+
+function update_subsolver!(s::GenericKrylovSubsolver, nls, x)
+  # Implicitly updated because Jx holds reference to x.
+  # We just ensure x is valid.
+  nothing
+end
+
+function solve_subproblem!(ls::GenericKrylovSubsolver, s, rhs, σ, atol, rtol; verbose = 0)
+  # λ allocation/calculation happens here in the solve
+  krylov_solve!(
+    ls.workspace,
+    ls.Jx,
+    rhs,
+    atol = atol,
+    rtol = rtol,
+    λ = sqrt(σ), # λ allocated here
+    itmax = max(2 * (size(ls.Jx, 1) + size(ls.Jx, 2)), 50),
+    verbose = verbose,
+  )
+  s .= ls.workspace.x
+  return Krylov.issolved(ls.workspace), ls.workspace.stats.status, ls.workspace.stats.niter
+end
+
+get_jacobian(s::GenericKrylovSubsolver) = s.Jx
+initialize!(s::GenericKrylovSubsolver, nls, x) = nothing
 
 """
-
   R2NLS(nls; kwargs...)
 
 An implementation of the Levenberg-Marquardt method with regularization for nonlinear least-squares problems:
@@ -177,10 +289,10 @@ For advanced usage, first create a `R2NLSSolver` to preallocate the necessary me
 # Keyword Arguments
 
 - `x::V = nls.meta.x0`: the initial guess.
-- `atol::T = √eps(T)`: is the absolute stopping tolerance.
-- `rtol::T = √eps(T)`: is the relative stopping tolerance; the algorithm stops when ‖J(x)ᵀF(x)‖ ≤ atol + rtol * ‖J(x₀)ᵀF(x₀)‖.
-- `Fatol::T = zero(T)`: absolute tolerance for the residual.
-- `Frtol::T = zero(T)`: relative tolerance for the residual; the algorithm stops when ‖F(x)‖ ≤ Fatol + Frtol * ‖F(x₀)‖.
+- `atol::T = √eps(T)`: absolute stopping tolerance.
+- `rtol::T = √eps(T)`: relative stopping tolerance; the algorithm stops when ‖J(x)ᵀF(x)‖ ≤ atol + rtol * ‖J(x₀)ᵀF(x₀)‖.
+- `Fatol::T = √eps(T)`: absolute tolerance for the residual.
+- `Frtol::T = eps(T)`: relative tolerance for the residual; the algorithm stops when ‖F(x)‖ ≤ Fatol + Frtol * ‖F(x₀)‖.
 - `params::R2NLSParameterSet = R2NLSParameterSet()`: algorithm parameters, see [`R2NLSParameterSet`](@ref).
 - `η1::T = $(R2NLS_η1)`: step acceptance parameter, see [`R2NLSParameterSet`](@ref).
 - `η2::T = $(R2NLS_η2)`: step acceptance parameter, see [`R2NLSParameterSet`](@ref).
@@ -192,10 +304,10 @@ For advanced usage, first create a `R2NLSSolver` to preallocate the necessary me
 - `δ1::T = $(R2NLS_δ1)`: Cauchy point calculation parameter, see [`R2NLSParameterSet`](@ref).
 - `σmin::T = $(R2NLS_σmin)`: minimum step parameter, see [`R2NLSParameterSet`](@ref).
 - `non_mono_size::Int = $(R2NLS_non_mono_size)`: the size of the non-monotone history. If > 1, the algorithm will use a non-monotone strategy to accept steps.
-- `scp_flag::Bool = true`: if true, safeguards the step size by reverting to the Cauchy point `scp` if the calculated step `s` is too large relative to the Cauchy step (i.e., if `‖s‖ > θ2 * ‖scp‖`).
-- `scp_est::Bool = true`: if true and scp_flag is true, the scp is calculated using the Cauchy point formula, otherwise it is calculated using the operator norm of the Jacobian.
-- `subsolver::Symbol = :lsmr`: method used as subproblem solver, see `JSOSolvers.R2NLS_allowed_subsolvers` for a list.
-- `subsolver_verbose::Int = 0`: if > 0, display subsolver iteration details every `subsolver_verbose` iterations when a KrylovWorkspace type is selected.
+- `compute_cauchy_point::Bool = false`: if true, safeguards the step size by reverting to the Cauchy point `scp` if the calculated step `s` is too large relative to the Cauchy step (i.e., if `‖s‖ > θ2 * ‖scp‖`).
+- `inexact_cauchy_point::Bool = true`: if true and `compute_cauchy_point` is true, the Cauchy point is calculated using a computationally cheaper inexact formula; otherwise, it is calculated using the operator norm of the Jacobian.
+- `subsolver = QRMumpsSubsolver`: the subproblem solver type or instance. Pass a type (e.g., `QRMumpsSubsolver`, `LSMRSubsolver`, `LSQRSubsolver`, `CGLSSubsolver`) to let the solver instantiate it, or pass a pre-allocated instance of `AbstractR2NLSSubsolver`.
+- `subsolver_verbose::Int = 0`: if > 0, display subsolver iteration details every `subsolver_verbose` iterations (only applicable for iterative subsolvers).
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum allowed time in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
@@ -218,20 +330,16 @@ stats = solve!(solver, model)
 # output
 "Execution stats: first-order stationary"
 ```
-
 """
-mutable struct R2NLSSolver{T, V, Op, Sub <: Union{KrylovWorkspace{T, T, V}, QRMumpsSolver{T}}} <:
-               AbstractOptimizationSolver
+
+mutable struct R2NLSSolver{T, V, Sub <: AbstractR2NLSSubsolver{T}} <: AbstractOptimizationSolver
   x::V         # Current iterate x_k
   xt::V        # Trial iterate x_{k+1}
-  temp::V      # Temporary vector for intermediate calculations (e.g. J*v)
   gx::V        # Gradient of the objective function: J' * F(x)
   r::V        # Residual vector F(x)
   rt::V        # Residual vector at trial point F(xt)
-  Jv::V        # Storage for Jacobian-vector products (J * v)
-  Jtv::V       # Storage for Jacobian-transpose-vector products (J' * v)
-  Jx::Op       # The Jacobian operator J(x)
-  ls_subsolver::Sub # The solver for the linear least-squares subproblem
+  temp::V      # Temporary vector for intermediate calculations (e.g. J*v)
+  subsolver::Sub # The solver for the linear least-squares subproblem
   obj_vec::V   # History of objective values for non-monotone strategy
   subtol::T    # Current tolerance for the subproblem solver
   s::V         # The calculated step direction
@@ -242,6 +350,7 @@ end
 
 function R2NLSSolver(
   nls::AbstractNLSModel{T, V};
+  subsolver = QRMumpsSubsolver, # Default is the TYPE QRMumpsSubsolver
   η1::T = get(R2NLS_η1, nls),
   η2::T = get(R2NLS_η2, nls),
   θ1::T = get(R2NLS_θ1, nls),
@@ -252,7 +361,8 @@ function R2NLSSolver(
   δ1::T = get(R2NLS_δ1, nls),
   σmin::T = get(R2NLS_σmin, nls),
   non_mono_size::Int = get(R2NLS_non_mono_size, nls),
-  subsolver::Symbol = :lsmr,
+  compute_cauchy_point::Bool = get(R2NLS_compute_cauchy_point, nls),
+  inexact_cauchy_point::Bool = get(R2NLS_inexact_cauchy_point, nls),
 ) where {T, V}
   params = R2NLSParameterSet(
     nls;
@@ -266,60 +376,38 @@ function R2NLSSolver(
     δ1 = δ1,
     σmin = σmin,
     non_mono_size = non_mono_size,
+    compute_cauchy_point = compute_cauchy_point,
+    inexact_cauchy_point = inexact_cauchy_point,
   )
-  subsolver in R2NLS_allowed_subsolvers ||
-    error("subproblem solver must be one of $(R2NLS_allowed_subsolvers)")
+
   value(params.non_mono_size) >= 1 || error("non_mono_size must be greater than or equal to 1")
 
   nvar = nls.meta.nvar
   nequ = nls.nls_meta.nequ
   x = V(undef, nvar)
   xt = V(undef, nvar)
-  temp = V(undef, nequ)
   gx = V(undef, nvar)
   r = V(undef, nequ)
   rt = V(undef, nequ)
-  Jv = V(undef, subsolver == :qrmumps ? 0 : nequ)
-  Jtv = V(undef, subsolver == :qrmumps ? 0 : nvar)
+  temp = V(undef, nequ)
   s = V(undef, nvar)
   scp = V(undef, nvar)
-  σ = eps(T)^(1 / 5)
-  if subsolver == :qrmumps
-    ls_subsolver = QRMumpsSolver(nls)
-    Jx = SparseMatrixCOO(
-      nequ,
-      nvar,
-      view(ls_subsolver.irn, 1:ls_subsolver.nnzj),
-      view(ls_subsolver.jcn, 1:ls_subsolver.nnzj),
-      view(ls_subsolver.val, 1:ls_subsolver.nnzj),
-    )
-  else
-    ls_subsolver = krylov_workspace(Val(subsolver), nequ, nvar, V)
-    Jx = jac_op_residual!(nls, x, Jv, Jtv)
-  end
-  Sub = typeof(ls_subsolver)
-  Op = typeof(Jx)
-
-  subtol = one(T) # must be ≤ 1.0
   obj_vec = fill(typemin(T), value(params.non_mono_size))
+  
+  x .= nls.meta.x0 
 
-  return R2NLSSolver{T, V, Op, Sub}(
-    x,
-    xt,
-    temp,
-    gx,
-    r,
-    rt,
-    Jv,
-    Jtv,
-    Jx,
-    ls_subsolver,
-    obj_vec,
-    subtol,
-    s,
-    scp,
-    σ,
-    params,
+  # Instantiate Subsolver
+  # Strictly checks for Type or AbstractR2NLSSubsolver instance
+  if subsolver isa Type
+      sub_inst = subsolver(nls, x)
+  elseif subsolver isa AbstractR2NLSSubsolver
+      sub_inst = subsolver
+  else
+      error("subsolver must be a Type or an AbstractR2NLSSubsolver instance")
+  end
+
+  R2NLSSolver(
+    x, xt, gx, r, rt, temp, sub_inst, obj_vec, one(T), s, scp, eps(T)^(1/5), params
   )
 end
 
@@ -349,7 +437,9 @@ end
   δ1::Real = get(R2NLS_δ1, nls),
   σmin::Real = get(R2NLS_σmin, nls),
   non_mono_size::Int = get(R2NLS_non_mono_size, nls),
-  subsolver::Symbol = :lsmr,
+  compute_cauchy_point::Bool = get(R2NLS_compute_cauchy_point, nls),
+  inexact_cauchy_point::Bool = get(R2NLS_inexact_cauchy_point, nls),
+  subsolver = QRMumpsSubsolver,
   kwargs...,
 ) where {T, V}
   solver = R2NLSSolver(
@@ -364,6 +454,8 @@ end
     δ1 = convert(T, δ1),
     σmin = convert(T, σmin),
     non_mono_size = non_mono_size,
+    compute_cauchy_point = compute_cauchy_point,
+    inexact_cauchy_point = inexact_cauchy_point,
     subsolver = subsolver,
   )
   return solve!(solver, nls; kwargs...)
@@ -374,11 +466,11 @@ function SolverCore.solve!(
   nls::AbstractNLSModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
-  x::V = nls.meta.x0,
+  x::V = nls.meta.x0, # user can reset the initial point here, but it will also be reset in the solver
   atol::T = √eps(T),
   rtol::T = √eps(T),
-  Fatol::T = zero(T),
-  Frtol::T = zero(T),
+  Fatol::T = √eps(T),
+  Frtol::T = eps(T),
   max_time::Float64 = 30.0,
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
@@ -409,42 +501,42 @@ function SolverCore.solve!(
 
   n = nls.nls_meta.nvar
   m = nls.nls_meta.nequ
+  
   x = solver.x .= x
   xt = solver.xt
-  ∇f = solver.gx
-  ls_subsolver = solver.ls_subsolver
   r, rt = solver.r, solver.rt
   s = solver.s
   scp = solver.scp
-  subtol = solver.subtol
+  ∇f = solver.gx
 
-  σk = solver.σ
-  Jx = solver.Jx
+  # Ensure subsolver is up to date with initial x
+  initialize!(solver.subsolver, nls, x)
+  
+  # Get accessor for Jacobian (abstracted away from solver details)
+  Jx = get_jacobian(solver.subsolver)
 
-  if Jx isa SparseMatrixCOO
-    jac_coord_residual!(nls, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
-    Jx.vals .= view(ls_subsolver.val, 1:ls_subsolver.nnzj)
-  end
-
+  # Initial Eval
   residual!(nls, x, r)
   resid_norm = norm(r)
   f = resid_norm^2 / 2
-
-  mul!(∇f, Jx', r)
-
+  mul!(∇f, Jx', r) 
   norm_∇fk = norm(∇f)
-  ρk = zero(T)
+  
+  # Heuristic for initial σ
+  #TODO check with prof Orban
+  if Jx isa AbstractMatrix
+      solver.σ = max(T(1e-6), T(1e-4) * maximum(sum(abs2, Jx, dims = 1)))
+  else
+      solver.σ = 2^round(log2(norm_∇fk + 1)) / norm_∇fk
+  end
 
   # Stopping criterion: 
   unbounded = false
+  ρk = zero(T)
 
-  # σk = 2^round(log2(norm_∇fk + 1)) / norm_∇fk
-  # max(diagonal(J'J)) is a good proxy for the scale of the problem
-  σk = max(T(1e-6), T(1e-4) * maximum(sum(abs2, Jx, dims = 1)))  #TODO check if this is better init for σk than the one based on the gradient norm
   ϵ = atol + rtol * norm_∇fk
   ϵF = Fatol + Frtol * resid_norm
 
-  xt = solver.xt
   temp = solver.temp
 
   stationary = norm_∇fk ≤ ϵ
@@ -461,7 +553,7 @@ function SolverCore.solve!(
       [Int, Float64, Float64, Float64, Float64],
       hdr_override = Dict(:resid_norm => "‖F(x)‖", :dual => "‖∇f‖"),
     )
-    @info log_row([stats.iter, resid_norm, norm_∇fk, σk, ρk])
+    @info log_row([stats.iter, resid_norm, norm_∇fk, solver.σ, ρk])
   end
 
   if verbose > 0 && mod(stats.iter, verbose) == 0
@@ -471,12 +563,12 @@ function SolverCore.solve!(
       hdr_override = Dict(
         :resid_norm => "‖F(x)‖",
         :dual => "‖∇f‖",
-        :sub_iter => "subiter",
+        :sub_iter => "sub_iter",
         :dir => "dir",
         :sub_status => "status",
       ),
     )
-    @info log_row([stats.iter, stats.objective, norm_∇fk, σk, ρk, 0, " ", " "])
+    @info log_row([stats.iter, stats.objective, norm_∇fk, solver.σ, ρk, 0, " ", " "])
   end
 
   set_status!(
@@ -494,108 +586,105 @@ function SolverCore.solve!(
     ),
   )
 
-  subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * subtol))
-  solver.σ = σk
-  solver.subtol = subtol
+  solver.subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * solver.subtol))
 
   callback(nls, solver, stats)
 
   # retrieve values again in case the user changed them in the callback
-  subtol = solver.subtol
-  σk = solver.σ
 
   done = stats.status != :unknown
+  compute_cauchy_point = value(params.compute_cauchy_point)
+  inexact_cauchy_point = value(params.inexact_cauchy_point)
 
   while !done
-    # Compute the step s.
-    solver.σ = σk
-    subsolver_solved, sub_stats, subiter =
-      subsolve!(ls_subsolver, solver, nls, s, atol, n, m, max_time, subsolver_verbose)
+    
+    # 1. Solve Subproblem
+    # We pass -r as RHS. Subsolver handles its own temp/workspace for this.
+    @. temp = -r 
 
-    if scp_flag
-      if scp_est # Compute the Cauchy step.
-        mul!(temp, Jx, ∇f)
-        curvature_gn = dot(temp, temp) # curvature_gn = ∇f' Jx' Jx ∇f
-        γ_k = curvature_gn / norm_∇fk^2 + σk
-        @. temp = - r
-        ν_k = 2*(1-δ1) / (γ_k)
-      else
-        λmax, found_λ = opnorm(Jx)
-        found_λ || error("operator norm computation failed")
-        ν_k = θ1 / (λmax + σk)
-      end
+    sub_solved, sub_stats, sub_iter = solve_subproblem!(
+        solver.subsolver, 
+        s, 
+        temp, 
+        solver.σ, 
+        atol, 
+        solver.subtol,
+        verbose = subsolver_verbose
+    )
 
-      @. scp = -ν_k * ∇f
-      if norm(s) > θ2 * norm(scp)
-        s .= scp
-      end
+    # 2. Cauchy Point
+    if compute_cauchy_point
+        if inexact_cauchy_point
+            mul!(temp, Jx, ∇f) 
+            curvature_gn = dot(temp, temp)
+            γ_k = curvature_gn / norm_∇fk^2 + solver.σ
+            ν_k = 2 * (1 - δ1) / γ_k
+        else
+            λmax, found_λ = opnorm(Jx)
+            !found_λ && error("operator norm computation failed")
+            ν_k = θ1 / (λmax + solver.σ)
+        end
+
+        @. scp = -ν_k * ∇f
+        if norm(s) > θ2 * norm(scp)
+            s .= scp
+        end
     end
 
-    # Compute actual vs. predicted reduction.
+    # 3. Acceptance
     xt .= x .+ s
-    # pred = 0.5*||F(x)||^2 - 0.5*||F(x) + J(x)s||^2
-    mul!(temp, Jx, s)       # temp = J(x) * s
-    axpy!(one(T), r, temp)  # temp = F(x) + J(x) * s
+    mul!(temp, Jx, s)
+    axpy!(one(T), r, temp)
     pred_f = norm(temp)^2 / 2
-
-    # stats.objective is already 0.5 * ||F(x)||^2
     ΔTk = stats.objective - pred_f
 
     residual!(nls, xt, rt)
     resid_norm_t = norm(rt)
     ft = resid_norm_t^2 / 2
 
-    if non_mono_size > 1  #non-monotone behaviour
-      k = mod(stats.iter, non_mono_size) + 1
-      solver.obj_vec[k] = stats.objective
-      ft_max = maximum(solver.obj_vec)
-      ρk = (ft_max - ft) / (ft_max - stats.objective + ΔTk)
+    if non_mono_size > 1
+        k = mod(stats.iter, non_mono_size) + 1
+        solver.obj_vec[k] = stats.objective
+        ft_max = maximum(solver.obj_vec)
+        ρk = (ft_max - ft) / (ft_max - stats.objective + ΔTk)
     else
-      ρk = (stats.objective - ft) / ΔTk
+        ρk = (stats.objective - ft) / ΔTk
     end
-
-    # Update regularization parameters and determine acceptance of the new candidate
+ 
+    # 4. Update regularization parameters and determine acceptance of the new candidate
     step_accepted = ρk >= η1
 
-    if step_accepted
+    if step_accepted # Step Accepted
+        x .= xt
+        r .= rt
+        f = ft
+        
+        # Update Subsolver Jacobian
+        update_subsolver!(solver.subsolver, nls, x)
+        
+        resid_norm = resid_norm_t
+        mul!(∇f, Jx', r) 
+        norm_∇fk = norm(∇f)
+        set_objective!(stats, f)
 
-      # update Jx implicitly for other solvers
-      x .= xt
-      r .= rt
-      f = ft
-
-      # Now calculate Jacobian at the NEW point x_{k+1} for QRMumps, since it needs to update the values in place. For Krylov solvers, the Jacobian will be updated implicitly through the operator.
-      if Jx isa SparseMatrixCOO
-        jac_coord_residual!(nls, x, view(ls_subsolver.val, 1:ls_subsolver.nnzj))
-      end
-
-      resid_norm = resid_norm_t
-      mul!(∇f, Jx', r) # ∇f = Jx' * r
-      set_objective!(stats, f)
-      norm_∇fk = norm(∇f)
-
-      if ρk >= η2
-        σk = max(σmin, γ3 * σk)
-      else # η1 ≤ ρk < η2
-        σk = γ1 * σk
-      end
-    else # η1 > ρk
-      σk = γ2 * σk
+        if ρk >= η2
+            solver.σ = max(σmin, γ3 * solver.σ)
+        else
+            solver.σ = γ1 * solver.σ
+        end
+    else
+        solver.σ = γ2 * solver.σ
     end
 
     set_iter!(stats, stats.iter + 1)
     set_time!(stats, time() - start_time)
 
-    subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * subtol))
+    solver.subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * solver.subtol))
 
-    solver.σ = σk
-    solver.subtol = subtol
     set_dual_residual!(stats, norm_∇fk)
 
     callback(nls, solver, stats)
 
-    σk = solver.σ
-    subtol = solver.subtol
     norm_∇fk = stats.dual_feas
 
     stationary = norm_∇fk ≤ ϵ
@@ -603,7 +692,7 @@ function SolverCore.solve!(
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       dir_stat = step_accepted ? "↘" : "↗"
-      @info log_row([stats.iter, resid_norm, norm_∇fk, σk, ρk, subiter, dir_stat, sub_stats])
+      @info log_row([stats.iter, resid_norm, norm_∇fk, solver.σ, ρk, sub_iter, dir_stat, sub_stats])
     end
 
     if stats.status == :user
@@ -630,72 +719,4 @@ function SolverCore.solve!(
 
   set_solution!(stats, x)
   return stats
-end
-
-# Dispatch for KrylovWorkspace
-function subsolve!(
-  ls_subsolver::KrylovWorkspace,
-  R2NLS::R2NLSSolver,
-  nls,
-  s,
-  atol,
-  n,
-  m,
-  max_time,
-  subsolver_verbose,
-)
-  krylov_solve!(
-    ls_subsolver,
-    R2NLS.Jx,
-    R2NLS.temp,
-    atol = atol,
-    rtol = R2NLS.subtol,
-    λ = √(R2NLS.σ),  # λ ≥ 0 is a regularization parameter.
-    itmax = max(2 * (n + m), 50),
-    # timemax = max_time - R2NLSSolver.stats.elapsed_time,
-    verbose = subsolver_verbose,
-  )
-  s .= ls_subsolver.x
-  return Krylov.issolved(ls_subsolver), ls_subsolver.stats.status, ls_subsolver.stats.niter
-end
-
-# Dispatch for QRMumpsSolver
-function subsolve!(
-  ls::QRMumpsSolver,
-  R2NLS::R2NLSSolver,
-  nls,
-  s,
-  atol,
-  n,
-  m,
-  max_time,
-  subsolver_verbose,
-)
-
-  # 1. Update Jacobian values at the current point x
-  # jac_coord_residual!(nls, R2NLS.x, view(ls.val, 1:ls.nnzj))
-
-  # 2. Update regularization parameter σ
-  sqrt_σ = sqrt(R2NLS.σ)
-  @inbounds for i = 1:n
-    ls.val[ls.nnzj + i] = sqrt_σ
-  end
-
-  # 3. Build the augmented right-hand side vector: b_aug = [-F(x); 0]
-  ls.b_aug[1:m] .= R2NLS.temp # -F(x)
-  # Zero out the regularization part without allocating a view we have to do this, Applying all of its Householder (or Givens) transforms to the entire RHS vector b_aug—i.e. computing QTbQTb.
-  @inbounds for i = (m + 1):(m + n)
-    ls.b_aug[i] = zero(eltype(ls.b_aug))
-  end
-
-  # Update spmat
-  qrm_update!(ls.spmat, ls.val)
-
-  # 4. Solve the least-squares system
-  qrm_factorize!(ls.spmat, ls.spfct; transp = 'n')
-  qrm_apply!(ls.spfct, ls.b_aug; transp = 't')
-  qrm_solve!(ls.spfct, ls.b_aug, s; transp = 'n')
-
-  # 5. Return status. For a direct solver, we assume success.
-  return true, "QRMumps", 1
 end
