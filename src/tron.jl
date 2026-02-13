@@ -76,7 +76,8 @@ The keyword arguments may include
 - `cgtol::T = T(0.1)`: subproblem tolerance.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖x - Proj(x - ∇f(xᵏ))‖ ≤ atol + rtol * ‖∇f(x⁰)‖. Proj denotes here the projection over the bounds.
-- `callback`: function called at each iteration, see [`Callback`](https://jso.dev/JSOSolvers.jl/stable/#Callback) section.
+- `callback`: function called at each iteration, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
+- `callback_quasi_newton`: function called at each iteration, specifically to update the Hessian approximation of quasi-Newton models, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver.
 
@@ -126,7 +127,6 @@ mutable struct TronSolver{
   temp::V
   gx::V
   gt::V
-  gn::V
   gpx::V
   pfeas::V
   s::V
@@ -161,7 +161,6 @@ function TronSolver(
   temp = V(undef, nvar)
   gx = V(undef, nvar)
   gt = V(undef, nvar)
-  gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
   gpx = V(undef, nvar)
   pfeas = V(undef, nvar)
   s = V(undef, nvar)
@@ -184,7 +183,6 @@ function TronSolver(
     temp,
     gx,
     gt,
-    gn,
     gpx,
     pfeas,
     s,
@@ -207,7 +205,6 @@ function SolverCore.reset!(solver::TronSolver)
 end
 
 function SolverCore.reset!(solver::TronSolver, nlp::AbstractNLPModel)
-  @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
   solver.H = hess_op!(nlp, solver.xc, solver.Hs)
   solver.ZHZ = solver.cg_op' * solver.H * solver.cg_op
   solver.tr.good_grad = false
@@ -238,6 +235,7 @@ function SolverCore.solve!(
   nlp::AbstractNLPModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
+  callback_quasi_newton = callback_quasi_newton,
   x::V = nlp.meta.x0,
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
@@ -279,7 +277,6 @@ function SolverCore.solve!(
   xc = solver.xc
   gx = solver.gx
   gt = solver.gt
-  gn = solver.gn
   gpx = solver.gpx
   pfeas = solver.pfeas
   s = solver.s
@@ -306,10 +303,6 @@ function SolverCore.solve!(
   set_dual_residual!(stats, πx)
   set_primal_residual!(stats, pfeasNorm)
 
-  if isa(nlp, QuasiNewtonModel)
-    gn .= gx
-  end
-
   αC = one(T)
   tr = solver.tr
   tr.radius = tr.initial_radius = min(max(one(T), πx / 10), tr.max_radius)
@@ -335,6 +328,7 @@ function SolverCore.solve!(
   )
 
   callback(nlp, solver, stats)
+  callback_quasi_newton(nlp, solver, stats)
 
   done = stats.status != :unknown
 
@@ -393,18 +387,13 @@ function SolverCore.solve!(
       end
       project_step!(gpx, x, gx, ℓ, u, -one(T))
       πx = nrm2(n, gpx)
-
-      if isa(nlp, QuasiNewtonModel)
-        gn .-= gx
-        gn .*= -1  # gn = ∇f(xₖ₊₁) - ∇f(xₖ)
-        push!(nlp, s, gn)
-        gn .= gx
-      end
+      set_step_status!(stats, :accepted)
     end
 
     if !acceptable(tr)
       fx = fc
       x .= xc
+      set_step_status!(stats, :rejected)
     end
 
     pfeas .= max.(zero(T), ℓ .- x, x .- u)
@@ -447,6 +436,7 @@ function SolverCore.solve!(
     )
 
     callback(nlp, solver, stats)
+    callback_quasi_newton(nlp, solver, stats)
 
     done = stats.status != :unknown
   end
