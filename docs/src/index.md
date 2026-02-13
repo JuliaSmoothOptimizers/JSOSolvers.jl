@@ -8,6 +8,7 @@
     \text{s.t.}\; & \ell \leq x \leq u
 \end{aligned}
 ```
+
 where $f:\mathbb{R}^n \rightarrow \mathbb{R}$ is a continuously differentiable function, with  $\ell \in \left(\mathbb{R} \cup \{-\infty\} \right)^n$, and  $u \in \left(\mathbb{R} \cup \{+\infty\} \right)^n$.
 The algorithms implemented here are iterative methods that aim to compute a stationary point of \eqref{eq:nlp} using first and, if possible, second-order derivatives.
 
@@ -38,13 +39,16 @@ The test suite is run automatically in continuous integration for every pull req
 ### What the tests cover
 
 The test suite is composed of two layers:
+
 1. Unit tests and regression tests (solver-specific);
 1. Convergence tests using SolverTest.jl (problem-specific);
 
 #### Unit and regression tests
+
 Together, these ensure correctness, robustness, API stability, and compatibility with the JSO ecosystem.
 
 The tests cover, for all solvers:
+
 - Allocation behaviour of the implemented solvers (to detect unnecessary allocations and regressions);
 - The callback parameter and how it is invoked during the iterations;
 - Consistency of keyword arguments, to confirm that all solvers accept a common base set of options;
@@ -59,6 +63,7 @@ These unit tests also act as regression tests: they serve to detect accidental b
 
 We use `SolverTest.jl` to run solvers on a collection of small analytic academic problems (unconstrained and bound-constrained) with different precision settings.
 These are black-box tests focused solely on:
+
 - reaching a first-order stationary point,
 - producing a valid solver status,
 - and respecting tolerances on optimality and feasibility.
@@ -97,7 +102,7 @@ All solvers here are _JSO-Compliant_, in the sense that they accept NLPModels an
 This allows [benchmark them easily](https://jso.dev/tutorials/introduction-to-solverbenchmark/).
 See the full list of [Solvers](@ref).
 
-All solvers can be called like the following:
+All solvers can be called as follows:
 
 ```julia
 stats = solver_name(nlp; kwargs...)
@@ -110,16 +115,18 @@ where `nlp` is an AbstractNLPModel or some specialization, such as an `AbstractN
 - `rtol` is the relative stopping tolerance (default: `rtol = √ϵ`);
 - `max_eval` is the maximum number of objective and constraints function evaluations (default: `-1`, which means no limit);
 - `max_time` is the maximum allowed elapsed time (default: `30.0`);
-- `callback` is a function that is called at each iteration.
+- `callback` is a function that is called at each iteration;
+- `callback_quasi_newton` is a function that is called at each iteration to perform quasi-Newton updates, if appropriate;
 - `stats` is a `SolverTools.GenericExecutionStats` with the output of the solver.
 
-### Callback
+### Callbacks
 
 The expected signature of the callback is `callback(nlp, solver, stats)`, and its output is ignored.
 Changing any of the input arguments will affect the subsequent iterations.
 In particular, setting `stats.status = :user` will stop the algorithm.
 All relevant information should be available in `nlp` and `solver`.
 Notably, you can access, and modify, the following:
+
 - `solver.x`: current iterate;
 - `solver.gx`: current gradient;
 - `stats`: structure holding the output of the algorithm (`GenericExecutionStats`), which contains, among other things:
@@ -128,3 +135,15 @@ Notably, you can access, and modify, the following:
   - `stats.objective`: current objective function value;
   - `stats.status`: current status of the algorithm. Should be `:unknown` unless the algorithm attained a stopping criterion. Changing this to anything will stop the algorithm, but you should use `:user` to properly indicate the intention.
   - `stats.elapsed_time`: elapsed time in seconds.
+
+The expected signature of the `callback_quasi_newton` is `callback_quasi_newton(nlp, solver, stats)`, and its output is ignored.
+A default implementation is provided, that performs the expected update on quasi-Newton models.
+The relevant fields of the input arguments are:
+
+- `solver.gx`: current gradient;
+- `solver.s`: current step;
+- `model.v`: temporary vector used to store the difference between two consecutive gradients;
+- `stats.iter`: iteration counter;
+- `stats.iter_reliable`: flag indicating whether the iteration counter has been reliably set by the solver;
+- `stats.step_status`: the status of the most recent step (`:unknown`, `:rejected`, or `:accepted`);
+- `stats.ste_status_reliable`: flag indicating whether the step status has been reliably set by the solver.

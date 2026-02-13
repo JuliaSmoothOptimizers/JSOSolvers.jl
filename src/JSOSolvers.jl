@@ -25,6 +25,41 @@ function normM!(n, x, M, z)
   end
 end
 
+"""
+    callback_quasi_newton(model, solver, stats)
+
+A default callback for solvers to update the Hessian approximation in quasi-Newton models.
+If a user calls a solver with a quasi-Mewton model, this will be the default callback.
+See https://jso.dev/JSOSolvers.jl/stable/#Callbacks
+"""
+function callback_quasi_newton(
+  model::AbstractNLPModel,
+  solver::AbstractSolver,
+  stats::GenericExecutionStats,
+)
+  @debug "in callback_quasi_newton"
+  isa(model, NLPModelsModifiers.QuasiNewtonModel) || return
+  if !stats.iter_reliable
+    @error "iteration counter is not reliable, skipping Hessian approximation update"
+    return
+  end
+  if stats.iter == 0
+    # save current gradient for future update
+    model.v .= solver.gx
+  else
+    if !stats.step_status_reliable
+      @error "step status is not reliable, skipping Hessian approximation update"
+      return
+    end
+    if stats.step_status == :accepted
+      model.v .-= solver.gx
+      model.v .*= -1  # v = ∇ₖ₊₁ - ∇ₖ
+      push!(model, solver.s, model.v)
+      model.v .= solver.gx  # save gradient for next update
+    end
+  end
+end
+
 # Unconstrained solvers
 include("lbfgs.jl")
 include("trunk.jl")

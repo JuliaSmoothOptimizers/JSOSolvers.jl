@@ -63,7 +63,8 @@ The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
-- `callback`: function called at each iteration, see [`Callback`](https://jso.dev/JSOSolvers.jl/stable/#Callback) section.
+- `callback`: function called at each iteration, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
+- `callback_quasi_newton`: function called at each iteration, specifically to update the Hessian approximation of quasi-Newton models, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
@@ -121,7 +122,7 @@ mutable struct TrunkSolver{
   xt::V
   gx::V
   gt::V
-  gn::V
+  s::V
   Hs::V
   krylov_subsolver::Sub
   H::Op
@@ -142,14 +143,14 @@ function TrunkSolver(
   xt = V(undef, nvar)
   gx = V(undef, nvar)
   gt = V(undef, nvar)
-  gn = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
+  s = V(undef, nvar)
   Hs = V(undef, nvar)
   krylov_subsolver = krylov_workspace(Val(subsolver), nvar, nvar, V)
   Sub = typeof(krylov_subsolver)
   H = hess_op!(nlp, x, Hs)
   Op = typeof(H)
   tr = TrustRegion(gt, one(T))
-  return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, gn, Hs, krylov_subsolver, H, tr, params)
+  return TrunkSolver{T, V, Sub, Op}(x, xt, gx, gt, s, Hs, krylov_subsolver, H, tr, params)
 end
 
 function SolverCore.reset!(solver::TrunkSolver)
@@ -159,7 +160,6 @@ function SolverCore.reset!(solver::TrunkSolver)
 end
 
 function SolverCore.reset!(solver::TrunkSolver, nlp::AbstractNLPModel)
-  @assert (length(solver.gn) == 0) || isa(nlp, QuasiNewtonModel)
   solver.H = hess_op!(nlp, solver.x, solver.Hs)
   solver.tr.good_grad = false
   solver.tr.radius = solver.tr.initial_radius
@@ -191,6 +191,7 @@ function SolverCore.solve!(
   nlp::AbstractNLPModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
+  callback_quasi_newton = callback_quasi_newton,
   subsolver_logger::AbstractLogger = NullLogger(),
   x::V = nlp.meta.x0,
   atol::T = √eps(T),
@@ -224,7 +225,7 @@ function SolverCore.solve!(
   x = solver.x
   xt = solver.xt
   ∇f = solver.gx
-  ∇fn = solver.gn
+  s = solver.s
   Hs = solver.Hs
   krylov_subsolver = solver.krylov_subsolver
   H = solver.H
@@ -237,7 +238,6 @@ function SolverCore.solve!(
 
   f = obj(nlp, x)
   grad!(nlp, x, ∇f)
-  isa(nlp, QuasiNewtonModel) && (∇fn .= ∇f)
   ∇fNorm2 = norm(∇f)
   ∇fNormM = normM!(n, ∇f, M, Hs)
   ϵ = atol + rtol * ∇fNorm2
@@ -282,6 +282,7 @@ function SolverCore.solve!(
   )
 
   callback(nlp, solver, stats)
+  callback_quasi_newton(nlp, solver, stats)
 
   done = stats.status != :unknown
 
@@ -303,7 +304,8 @@ function SolverCore.solve!(
       verbose = subsolver_verbose,
       M = M,
     )
-    s, cg_stats = krylov_subsolver.x, krylov_subsolver.stats
+    s .= krylov_subsolver.x
+    cg_stats = krylov_subsolver.stats
 
     # Compute actual vs. predicted reduction.
     sNorm = nrm2(n, s)
@@ -382,6 +384,7 @@ function SolverCore.solve!(
     set_iter!(stats, stats.iter + 1)
 
     if acceptable(tr)
+      set_step_status!(stats, :accepted)
       # Update non-monotone mode parameters.
       if !monotone
         σref = σref + Δq
@@ -419,29 +422,24 @@ function SolverCore.solve!(
       ∇fNormM = normM!(n, ∇f, M, Hs)
 
       set_objective!(stats, f)
-      set_time!(stats, time() - start_time)
       set_dual_residual!(stats, ∇fNorm2)
-
-      if isa(nlp, QuasiNewtonModel)
-        ∇fn .-= ∇f
-        ∇fn .*= -1  # = ∇f(xₖ₊₁) - ∇f(xₖ)
-        push!(nlp, s, ∇fn)
-        ∇fn .= ∇f
-      end
-
-      verbose > 0 &&
-        mod(stats.iter, verbose) == 0 &&
-        @info log_row([
-          stats.iter,
-          f,
-          ∇fNorm2,
-          tr.radius,
-          tr.ratio,
-          cg_stats.niter,
-          bk,
-          cg_stats.status,
-        ])
+    else
+      set_step_status!(stats, :rejected)
     end
+    set_time!(stats, time() - start_time)
+
+    verbose > 0 &&
+      mod(stats.iter, verbose) == 0 &&
+      @info log_row([
+        stats.iter,
+        f,
+        ∇fNorm2,
+        tr.radius,
+        tr.ratio,
+        cg_stats.niter,
+        bk,
+        cg_stats.status,
+      ])
 
     # Move on.
     update!(tr, sNorm)
@@ -464,6 +462,7 @@ function SolverCore.solve!(
     )
 
     callback(nlp, solver, stats)
+    callback_quasi_newton(nlp, solver, stats)
 
     done = stats.status != :unknown
   end
