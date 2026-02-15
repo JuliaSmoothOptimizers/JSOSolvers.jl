@@ -29,7 +29,7 @@ end
     callback_quasi_newton(model, solver, stats)
 
 A default callback for solvers to update the Hessian approximation in quasi-Newton models.
-If a user calls a solver with a quasi-Mewton model, this will be the default callback.
+If a user calls a solver with a quasi-Newton model, this will be the default callback.
 See https://jso.dev/JSOSolvers.jl/stable/#Callbacks
 """
 function callback_quasi_newton(
