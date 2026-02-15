@@ -146,4 +146,4 @@ The relevant fields of the input arguments are:
 - `stats.iter`: iteration counter;
 - `stats.iter_reliable`: flag indicating whether the iteration counter has been reliably set by the solver;
 - `stats.step_status`: the status of the most recent step (`:unknown`, `:rejected`, or `:accepted`);
-- `stats.ste_status_reliable`: flag indicating whether the step status has been reliably set by the solver.
+- `stats.step_status_reliable`: flag indicating whether the step status has been reliably set by the solver.
