@@ -58,6 +58,20 @@ end
   @test stats.iter == 8
 end
 
+@testset "Test quasi-Newton callback" begin
+  f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
+  nlp = ADNLPModel(f, [-1.2; 1.0])
+  nb_callback_calls = 0
+  function qn_cb(nlp, solver, stats)
+    nb_callback_calls += 1
+    default_callback_quasi_newton(nlp, solver, stats)
+  end
+  stats = with_logger(NullLogger()) do
+    trunk(nlp, callback_quasi_newton = qn_cb)
+  end
+  @test nb_callback_calls > 0
+end
+
 @testset "Testing Solver Values" begin
   f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
   nlp = ADNLPModel(f, [-1.2; 1.0])

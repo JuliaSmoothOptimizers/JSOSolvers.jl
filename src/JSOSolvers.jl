@@ -9,7 +9,7 @@ using Krylov,
 
 import SolverTools.reset!
 import SolverCore.solve!
-export solve!
+export default_callback_quasi_newton, solve!
 
 """
     normM!(n, x, M, z)
@@ -26,21 +26,21 @@ function normM!(n, x, M, z)
 end
 
 """
-    callback_quasi_newton(model, solver, stats)
+    default_callback_quasi_newton(model, solver, stats)
 
 A default callback for solvers to update the Hessian approximation in quasi-Newton models.
 If a user calls a solver with a quasi-Newton model, this will be the default callback.
 See https://jso.dev/JSOSolvers.jl/stable/#Callbacks
 """
-function callback_quasi_newton(
+function default_callback_quasi_newton(
   model::AbstractNLPModel,
   solver::AbstractSolver,
   stats::GenericExecutionStats,
 )
-  @debug "in callback_quasi_newton"
+  @debug "in default_callback_quasi_newton"
   isa(model, NLPModelsModifiers.QuasiNewtonModel) || return
   if !stats.iter_reliable
-    @error "iteration counter is not reliable, skipping Hessian approximation update"
+    @warn "iteration counter is not reliable, skipping Hessian approximation update"
     return
   end
   if stats.iter == 0
@@ -48,7 +48,7 @@ function callback_quasi_newton(
     model.v .= solver.gx
   else
     if !stats.step_status_reliable
-      @error "step status is not reliable, skipping Hessian approximation update"
+      @warn "step status is not reliable, skipping Hessian approximation update"
       return
     end
     if stats.step_status == :accepted

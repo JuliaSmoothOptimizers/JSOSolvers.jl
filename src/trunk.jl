@@ -191,7 +191,7 @@ function SolverCore.solve!(
   nlp::AbstractNLPModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
-  callback_quasi_newton = callback_quasi_newton,
+  callback_quasi_newton = default_callback_quasi_newton,
   subsolver_logger::AbstractLogger = NullLogger(),
   x::V = nlp.meta.x0,
   atol::T = √eps(T),
