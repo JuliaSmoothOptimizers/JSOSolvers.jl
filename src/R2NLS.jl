@@ -101,25 +101,32 @@ end
 abstract type AbstractR2NLSSubsolver{T} end
 
 """
-    initialize!(subsolver, nls, x)
+    initialize_subsolver!(subsolver, nls, x)
+
 Initial setup for the subsolver.
 """
-function initialize! end
+function initialize_subsolver! end
 
 """
-    update_subsolver!(subsolver, nls, x)
+    update_jacobian!(subsolver, nls, x)
+
 Update the internal Jacobian representation at point `x`.
 """
-function update_subsolver! end
+function update_jacobian! end
 
 """
     solve_subproblem!(subsolver, s, rhs, σ, atol, rtol)
+
 Solve min || J*s - rhs ||² + σ ||s||².
+
+# Notes
+- Assuming `rhs` passed as `-r`.
 """
 function solve_subproblem! end
 
 """
     get_jacobian(subsolver)
+
 Return the operator/matrix J for outer loop calculations (gradient, Cauchy point).
 """
 function get_jacobian end
@@ -154,14 +161,6 @@ mutable struct QRMumpsSubsolver{T} <: AbstractR2NLSSubsolver{T}
     val = Vector{T}(undef, nnzj + n)
 
     jac_structure_residual!(nls, view(irn, 1:nnzj), view(jcn, 1:nnzj))
-    @inbounds for i = 1:n
-      irn[nnzj + i] = m + i;
-      jcn[nnzj + i] = i
-    end
-
-    spmat = qrm_spmat_init(m + n, n, irn, jcn, val; sym = false)
-    spfct = qrm_spfct_init(spmat)
-    qrm_analyse!(spmat, spfct; transp = 'n')
 
     b_aug = Vector{T}(undef, m + n)
 
@@ -170,9 +169,6 @@ mutable struct QRMumpsSubsolver{T} <: AbstractR2NLSSubsolver{T}
 
     s = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, false, Jx_wrapper)
 
-    # Initialize values immediately using x
-    update_subsolver!(s, nls, x)
-
     finalizer(free_qrm, s)
     return s
   end
@@ -180,36 +176,63 @@ end
 
 function free_qrm(s::QRMumpsSubsolver)
   if !s.closed
-    qrm_spfct_destroy!(s.spfct)
-    qrm_spmat_destroy!(s.spmat)
+    # Check isdefined because constructor doesn't create them
+    if isdefined(s, :spfct)
+        qrm_spfct_destroy!(s.spfct)
+    end
+    if isdefined(s, :spmat)
+        qrm_spmat_destroy!(s.spmat)
+    end
     s.closed = true
   end
 end
 
-function update_subsolver!(s::QRMumpsSubsolver, nls, x)
-  jac_coord_residual!(nls, x, view(s.val, 1:s.nnzj))
+function initialize_subsolver!(sub::QRMumpsSubsolver, nls, x)
+    # 1. Fill regularization indices
+    m, n, nnzj = sub.m, sub.n, sub.nnzj
+    irn, jcn = sub.irn, sub.jcn
+    
+    @inbounds for i = 1:n
+        irn[nnzj + i] = m + i
+        jcn[nnzj + i] = i
+    end
+   
+    # Initialize spmat and spfct
+    sub.spmat = qrm_spmat_init(m + n, n, irn, jcn, sub.val; sym = false)
+    sub.spfct = qrm_spfct_init(sub.spmat)
+    
+    # Analyze
+    qrm_analyse!(sub.spmat, sub.spfct; transp = 'n')
+    
+    # 2. Initialize QRMumps 
+    update_jacobian!(sub, nls, x)
+    
+    return nothing
 end
 
-function solve_subproblem!(ls::QRMumpsSubsolver{T}, s, rhs, σ, atol, rtol; verbose = 0) where {T}
+function update_jacobian!(sub::QRMumpsSubsolver, nls, x)
+  jac_coord_residual!(nls, x, view(sub.val, 1:sub.nnzj))
+end
+
+function solve_subproblem!(sub::QRMumpsSubsolver{T}, s, rhs, σ, atol, rtol; verbose = 0) where {T}
   sqrt_σ = sqrt(σ)
-  @inbounds for i = 1:ls.n
-    ls.val[ls.nnzj + i] = sqrt_σ
+  @inbounds for i = 1:sub.n
+    sub.val[sub.nnzj + i] = sqrt_σ
   end
-  qrm_update!(ls.spmat, ls.val)
+  qrm_update!(sub.spmat, sub.val)
 
-  # b_aug = [-rhs; 0] (Assuming rhs passed is -r)
-  ls.b_aug[1:ls.m] .= rhs
-  ls.b_aug[(ls.m + 1):end] .= zero(T)
+  
+  sub.b_aug[1:sub.m] .= rhs
+  sub.b_aug[(sub.m + 1):end] .= zero(T)
 
-  qrm_factorize!(ls.spmat, ls.spfct; transp = 'n')
-  qrm_apply!(ls.spfct, ls.b_aug; transp = 't')
-  qrm_solve!(ls.spfct, ls.b_aug, s; transp = 'n')
+  qrm_factorize!(sub.spmat, sub.spfct; transp = 'n')
+  qrm_apply!(sub.spfct, sub.b_aug; transp = 't')
+  qrm_solve!(sub.spfct, sub.b_aug, s; transp = 'n')
 
   return true, "QRMumps", 1
 end
 
-get_jacobian(s::QRMumpsSubsolver) = s.Jx
-initialize!(s::QRMumpsSubsolver, nls, x) = update_subsolver!(s, nls, x)
+get_jacobian(sub::QRMumpsSubsolver) = sub.Jx
 
 # ==============================================================================
 #   Krylov Subsolvers (LSMR, LSQR, CGLS)
@@ -243,30 +266,30 @@ LSMRSubsolver(nls, x) = GenericKrylovSubsolver(nls, x, :lsmr)
 LSQRSubsolver(nls, x) = GenericKrylovSubsolver(nls, x, :lsqr)
 CGLSSubsolver(nls, x) = GenericKrylovSubsolver(nls, x, :cgls)
 
-function update_subsolver!(s::GenericKrylovSubsolver, nls, x)
+function update_jacobian!(sub::GenericKrylovSubsolver, nls, x)
   # Implicitly updated because Jx holds reference to x.
   # We just ensure x is valid.
   nothing
 end
 
-function solve_subproblem!(ls::GenericKrylovSubsolver, s, rhs, σ, atol, rtol; verbose = 0)
+function solve_subproblem!(sub::GenericKrylovSubsolver, s, rhs, σ, atol, rtol; verbose = 0)
   # λ allocation/calculation happens here in the solve
   krylov_solve!(
-    ls.workspace,
-    ls.Jx,
+    sub.workspace,
+    sub.Jx,
     rhs,
     atol = atol,
     rtol = rtol,
     λ = sqrt(σ), # λ allocated here
-    itmax = max(2 * (size(ls.Jx, 1) + size(ls.Jx, 2)), 50),
+    itmax = max(2 * (size(sub.Jx, 1) + size(sub.Jx, 2)), 50),
     verbose = verbose,
   )
-  s .= ls.workspace.x
-  return Krylov.issolved(ls.workspace), ls.workspace.stats.status, ls.workspace.stats.niter
+  s .= sub.workspace.x
+  return Krylov.issolved(sub.workspace), sub.workspace.stats.status, sub.workspace.stats.niter
 end
 
-get_jacobian(s::GenericKrylovSubsolver) = s.Jx
-initialize!(s::GenericKrylovSubsolver, nls, x) = nothing
+get_jacobian(sub::GenericKrylovSubsolver) = sub.Jx
+initialize_subsolver!(sub::GenericKrylovSubsolver, nls, x) = nothing
 
 """
   R2NLS(nls; kwargs...)
@@ -510,7 +533,7 @@ function SolverCore.solve!(
   ∇f = solver.gx
 
   # Ensure subsolver is up to date with initial x
-  initialize!(solver.subsolver, nls, x)
+  initialize_subsolver!(solver.subsolver, nls, x)
   
   # Get accessor for Jacobian (abstracted away from solver details)
   Jx = get_jacobian(solver.subsolver)
@@ -660,7 +683,7 @@ function SolverCore.solve!(
         f = ft
         
         # Update Subsolver Jacobian
-        update_subsolver!(solver.subsolver, nls, x)
+        update_jacobian!(solver.subsolver, nls, x)
         
         resid_norm = resid_norm_t
         mul!(∇f, Jx', r) 
