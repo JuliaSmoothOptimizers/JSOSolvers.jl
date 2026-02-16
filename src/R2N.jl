@@ -480,6 +480,11 @@ stats = R2N(nlp)
 ```
 
 """
+mutable struct R2NSolver{
+  T,
+  V,
+  Sub <: AbstractR2NSubsolver{T},
+  M <: AbstractNLPModel{T, V},
 } <: AbstractOptimizationSolver
   x::V              # Current iterate x_k
   xt::V             # Trial iterate x_{k+1}
