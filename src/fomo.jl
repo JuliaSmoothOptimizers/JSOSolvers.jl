@@ -466,8 +466,6 @@ function SolverCore.solve!(
   obj_mem[mem_ind + 1] = stats.objective
   max_obj_mem = stats.objective
 
-  oneT = T(1)
-
   grad!(nlp, x, g)
   norm_∇fk = norm(g)
   d .= -g
@@ -533,7 +531,7 @@ function SolverCore.solve!(
   siter::Int = 0
   mdot∇f = T(0) # dot(momentum,∇fk)
   norm_m = T(0)
-  κ = oneT
+  κ = T(1)
   while !done
     μk = step_mult(solver.α, norm_d, step_backend)
     c .= x .+ μk .* d
@@ -721,7 +719,7 @@ function find_beta_tilde(
       βktilde = sign(r31)*min(abs(r31),abs(r32))
     end
   end
-  βktilde
+  max(T(0),βktilde) # PR might return negative value. Doesn't break convergence in theory, but reduces performance in practice.
 end
 
 function find_beta_tilde(
