@@ -151,9 +151,9 @@ mutable struct QRMumpsSubsolver{T} <: AbstractR2NLSSubsolver{T}
   # Constructor
   function QRMumpsSubsolver(nls::AbstractNLSModel{T}, x::AbstractVector{T}) where {T}
     qrm_init()
-    meta = nls.meta;
-    n = meta.nvar;
-    m = nls.nls_meta.nequ;
+    meta = nls.meta
+    n = meta.nvar
+    m = nls.nls_meta.nequ
     nnzj = nls.nls_meta.nnzj
 
     irn = Vector{Int}(undef, nnzj + n)
