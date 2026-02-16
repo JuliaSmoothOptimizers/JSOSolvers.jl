@@ -235,7 +235,7 @@ function SolverCore.solve!(
   nlp::AbstractNLPModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
-  callback_quasi_newton = callback_quasi_newton,
+  callback_quasi_newton = default_callback_quasi_newton,
   x::V = nlp.meta.x0,
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
@@ -388,9 +388,7 @@ function SolverCore.solve!(
       project_step!(gpx, x, gx, ℓ, u, -one(T))
       πx = nrm2(n, gpx)
       set_step_status!(stats, :accepted)
-    end
-
-    if !acceptable(tr)
+    else
       fx = fc
       x .= xc
       set_step_status!(stats, :rejected)
