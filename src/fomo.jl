@@ -244,8 +244,8 @@ end
   M::Int = get(FOMO_M, nlp),
   step_backend::AbstractFOMethod = get(FOMO_step_backend, nlp),
   momentum_backend::AbstractMomentumMethod = get(FOMO_momentum_backend, nlp),
-  θ1::T = get(FOMO_θ1, nlp),
-  θ2::T = get(FOMO_θ2, nlp),
+  θ1::T = get_θ1(momentum_backend, nlp),
+  θ2::T = get_θ2(momentum_backend, nlp),
   kwargs...,
 ) where {T, V}
   solver = FomoSolver(
