@@ -34,8 +34,8 @@ struct R2NLSParameterSet{T} <: AbstractParameterSet
   δ1::Parameter{T, RealInterval{T}}
   σmin::Parameter{T, RealInterval{T}}
   non_mono_size::Parameter{Int, IntegerRange{Int}}
-  compute_cauchy_point::Parameter{Bool, Any}
-  inexact_cauchy_point::Parameter{Bool, Any}
+  compute_cauchy_point::Parameter{Bool, BinaryRange{Bool}}
+  inexact_cauchy_point::Parameter{Bool, BinaryRange{Bool}}
 end
 
 # Default parameter values
@@ -89,8 +89,8 @@ function R2NLSParameterSet(
     Parameter(δ1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(σmin, RealInterval(zero(T), T(Inf), lower_open = true, upper_open = true)),
     Parameter(non_mono_size, IntegerRange(1, typemax(Int))),
-    Parameter(compute_cauchy_point, Any),
-    Parameter(inexact_cauchy_point, Any),
+    Parameter(compute_cauchy_point, BinaryRange{Bool}),
+    Parameter(inexact_cauchy_point, BinaryRange{Bool}),
   )
 end
 
