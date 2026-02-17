@@ -34,7 +34,7 @@ const FOMO_θ2_HB =
 const FOMO_θ1_PR = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1e-4), "T(1e-4)")
 const FOMO_θ2_PR =
   DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1e3), "T(1e3)")
-const FOMO_θ1_FR = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1//2), "T(1/2)")
+const FOMO_θ1_FR = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1//2), "T(2/3)")
 const FOMO_θ2_FR =
   DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1e2), "T(1e2)")
 const FOMO_M = DefaultParameter(1)
