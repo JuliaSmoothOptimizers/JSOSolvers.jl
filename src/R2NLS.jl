@@ -117,7 +117,15 @@ function update_jacobian! end
 """
     solve_subproblem!(subsolver, s, rhs, σ, atol, rtol)
 
-Solve min ‖ J*s - rhs ‖² + σ ‖ s ‖².
+Solve the regularized linear least-squares subproblem:
+    min ‖ J*s - rhs ‖² + σ ‖ s ‖²
+
+where `J` is the Jacobian matrix stored within the `subsolver`.
+
+# Returns
+- `solved::Bool`: `true` if the solve was successful.
+- `status::Symbol`: A status code (e.g., `:solved`, `:first_order`, `:unknown`).
+- `niter::Int`: Number of iterations used (1 for direct solvers).
 """
 function solve_subproblem! end
 
@@ -138,73 +146,72 @@ mutable struct QRMumpsSubsolver{T} <: AbstractR2NLSSubsolver{T}
   irn::Vector{Int}
   jcn::Vector{Int}
   val::Vector{T}
-  b_aug::Vector{T} # Internal temp for RHS
+  b_aug::Vector{T}
   m::Int
   n::Int
   nnzj::Int
   closed::Bool
-  Jx::SparseMatrixCOO{T, Int}
+  Jx::SparseMatrixCOO{T, Int} # The Jacobian matrix J(x) as a view into the QRMumps arrays.
+  
 
-  # Constructor
   function QRMumpsSubsolver(nls::AbstractNLSModel{T}, x::AbstractVector{T}) where {T}
     qrm_init()
-    meta = nls.meta
-    n = meta.nvar
-    m = nls.nls_meta.nequ
+    meta = nls.meta; 
+    n = meta.nvar; 
+    m = nls.nls_meta.nequ; 
     nnzj = nls.nls_meta.nnzj
 
-    irn = Vector{Int}(undef, nnzj + n)
-    jcn = Vector{Int}(undef, nnzj + n)
+    # 1. Allocate memory
+    irn = ones(Int, nnzj + n)
+    jcn = ones(Int, nnzj + n)
     val = Vector{T}(undef, nnzj + n)
 
-    jac_structure_residual!(nls, view(irn, 1:nnzj), view(jcn, 1:nnzj))
+    # 2. Initialize QRMumps structures
+    # Note: We pass the arrays here, but they contain dummy/empty data until initialize! is called.
+    spmat = qrm_spmat_init(m + n, n, irn, jcn, val; sym = false)
+    spfct = qrm_spfct_init(spmat)
 
     b_aug = Vector{T}(undef, m + n)
-
-    # This view acts as our Jx operator
+    
+    # Create the Jx view (points to the same memory)
     Jx_wrapper = SparseMatrixCOO(m, n, view(irn, 1:nnzj), view(jcn, 1:nnzj), view(val, 1:nnzj))
-
-    s = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, false, Jx_wrapper)
-
-    finalizer(free_qrm, s)
-    return s
-  end
-end
-
-function free_qrm(s::QRMumpsSubsolver)
-  if !s.closed
-    # Check isdefined because constructor doesn't create them
-    if isdefined(s, :spfct)
-        qrm_spfct_destroy!(s.spfct)
-    end
-    if isdefined(s, :spmat)
-        qrm_spmat_destroy!(s.spmat)
-    end
-    s.closed = true
+    
+    sub = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, false, Jx_wrapper)
+    finalizer(free_qrm, sub)
+    return sub
   end
 end
 
 function initialize_subsolver!(sub::QRMumpsSubsolver, nls, x)
-    # 1. Fill regularization indices
-    m, n, nnzj = sub.m, sub.n, sub.nnzj
-    irn, jcn = sub.irn, sub.jcn
-    
-    @inbounds for i = 1:n
-        irn[nnzj + i] = m + i
-        jcn[nnzj + i] = i
+  # 1. Fill Jacobian Structure
+  jac_structure_residual!(nls, view(sub.irn, 1:sub.nnzj), view(sub.jcn, 1:sub.nnzj))
+  
+  # 2. Fill Regularization Structure 
+  # We do this once here, as the structure (indices) of the regularization terms doesn't change
+  @inbounds for i = 1:sub.n
+    sub.irn[sub.nnzj + i] = sub.m + i
+    sub.jcn[sub.nnzj + i] = i
+  end
+
+  # 3. Analyze sparsity pattern (Symbolic Factorization)
+  # This must happen after irn/jcn are populated
+  qrm_analyse!(sub.spmat, sub.spfct; transp = 'n')
+  
+  # 4. Fill values
+  update_subsolver!(sub, nls, x)
+end
+
+function free_qrm(sub::QRMumpsSubsolver)
+  if !s.closed
+    # Check isdefined because constructor doesn't create them
+    if isdefined(sub, :spfct)
+        qrm_spfct_destroy!(sub.spfct)
     end
-   
-    # Initialize spmat and spfct
-    sub.spmat = qrm_spmat_init(m + n, n, irn, jcn, sub.val; sym = false)
-    sub.spfct = qrm_spfct_init(sub.spmat)
-    
-    # Analyze
-    qrm_analyse!(sub.spmat, sub.spfct; transp = 'n')
-    
-    # 2. Initialize QRMumps 
-    update_jacobian!(sub, nls, x)
-    
-    return nothing
+    if isdefined(sub, :spmat)
+        qrm_spmat_destroy!(sub.spmat)
+    end
+    sub.closed = true
+  end
 end
 
 function update_jacobian!(sub::QRMumpsSubsolver, nls, x)
@@ -226,7 +233,7 @@ function solve_subproblem!(sub::QRMumpsSubsolver{T}, s, rhs, σ, atol, rtol; ver
   qrm_apply!(sub.spfct, sub.b_aug; transp = 't')
   qrm_solve!(sub.spfct, sub.b_aug, s; transp = 'n')
 
-  return true, "QRMumps", 1
+  return true, :solved, 1
 end
 
 get_jacobian(sub::QRMumpsSubsolver) = sub.Jx
