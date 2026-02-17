@@ -151,32 +151,62 @@ mutable struct QRMumpsSubsolver{T} <: AbstractR2NLSSubsolver{T}
   n::Int
   nnzj::Int
   closed::Bool
-  Jx::SparseMatrixCOO{T, Int} # The Jacobian matrix J(x) as a view into the QRMumps arrays.
   
+  # We use LinearOperator because it allows us to use "Views" 
+  # of the arrays without allocating new memory.
+  Jx::LinearOperator{T} 
 
   function QRMumpsSubsolver(nls::AbstractNLSModel{T}, x::AbstractVector{T}) where {T}
     qrm_init()
-    meta = nls.meta; 
-    n = meta.nvar; 
-    m = nls.nls_meta.nequ; 
+    meta = nls.meta
+    n = meta.nvar
+    m = nls.nls_meta.nequ
     nnzj = nls.nls_meta.nnzj
 
-    # 1. Allocate memory
+    # 1. Allocate the master arrays ONCE
     irn = ones(Int, nnzj + n)
     jcn = ones(Int, nnzj + n)
     val = Vector{T}(undef, nnzj + n)
 
-    # 2. Initialize QRMumps structures
-    # Note: We pass the arrays here, but they contain dummy/empty data until initialize! is called.
     spmat = qrm_spmat_init(m + n, n, irn, jcn, val; sym = false)
     spfct = qrm_spfct_init(spmat)
-
     b_aug = Vector{T}(undef, m + n)
+
+    # 2. Defining High-Performance Matrix-Vector Products
+    # These access the 'val', 'irn', 'jcn' arrays directly by closure.
+    # No copying, no syncing needed.
     
-    # Create the Jx view (points to the same memory)
-    Jx_wrapper = SparseMatrixCOO(m, n, view(irn, 1:nnzj), view(jcn, 1:nnzj), view(val, 1:nnzj))
-    
-    sub = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, false, Jx_wrapper)
+    function j_prod!(res, v, α, β)
+      # Computes: res = β*res + α * J * v
+      if β == zero(T)
+        fill!(res, zero(T))
+      elseif β != one(T)
+        rmul!(res, β)
+      end
+      @inbounds for k = 1:nnzj
+        # Direct access to raw QRMumps arrays
+        res[irn[k]] += α * val[k] * v[jcn[k]]
+      end
+      return res
+    end
+
+    function j_tprod!(res, v, α, β)
+      # Computes: res = β*res + α * J' * v
+      if β == zero(T)
+        fill!(res, zero(T))
+      elseif β != one(T)
+        rmul!(res, β)
+      end
+      @inbounds for k = 1:nnzj
+        res[jcn[k]] += α * val[k] * v[irn[k]]
+      end
+      return res
+    end
+
+    # 3. Create the Operator wrapper (Allocates almost nothing)
+    Jx_op = LinearOperator{T}(m, n, false, false, j_prod!, j_tprod!, j_tprod!)
+
+    sub = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, false, Jx_op)
     finalizer(free_qrm, sub)
     return sub
   end
@@ -187,29 +217,22 @@ function initialize_subsolver!(sub::QRMumpsSubsolver, nls, x)
   jac_structure_residual!(nls, view(sub.irn, 1:sub.nnzj), view(sub.jcn, 1:sub.nnzj))
   
   # 2. Fill Regularization Structure 
-  # We do this once here, as the structure (indices) of the regularization terms doesn't change
   @inbounds for i = 1:sub.n
     sub.irn[sub.nnzj + i] = sub.m + i
     sub.jcn[sub.nnzj + i] = i
   end
 
   # 3. Analyze sparsity pattern (Symbolic Factorization)
-  # This must happen after irn/jcn are populated
   qrm_analyse!(sub.spmat, sub.spfct; transp = 'n')
   
   # 4. Fill values
-  update_subsolver!(sub, nls, x)
+  update_jacobian!(sub, nls, x)
 end
 
 function free_qrm(sub::QRMumpsSubsolver)
-  if !s.closed
-    # Check isdefined because constructor doesn't create them
-    if isdefined(sub, :spfct)
-        qrm_spfct_destroy!(sub.spfct)
-    end
-    if isdefined(sub, :spmat)
-        qrm_spmat_destroy!(sub.spmat)
-    end
+  if !sub.closed
+    qrm_spfct_destroy!(sub.spfct)
+    qrm_spmat_destroy!(sub.spmat)
     sub.closed = true
   end
 end
@@ -425,7 +448,7 @@ function R2NLSSolver(
 
   # Instantiate Subsolver
   # Strictly checks for Type or AbstractR2NLSSubsolver instance
-  if subsolver isa Type
+  if subsolver isa Type || subsolver isa Function
       sub_inst = subsolver(nls, x)
   elseif subsolver isa AbstractR2NLSSubsolver
       sub_inst = subsolver
@@ -510,7 +533,7 @@ function SolverCore.solve!(
     error("R2NLS only works for minimization problem")
   end
 
-  reset!(stats)
+  SolverCore.reset!(stats)
   params = solver.params
   η1 = value(params.η1)
   η2 = value(params.η2)
@@ -661,7 +684,7 @@ function SolverCore.solve!(
     # 3. Acceptance
     xt .= x .+ s
     mul!(temp, Jx, s)
-    axpy!(one(T), r, temp)
+    @. temp += r
     pred_f = norm(temp)^2 / 2
     ΔTk = stats.objective - pred_f
 
