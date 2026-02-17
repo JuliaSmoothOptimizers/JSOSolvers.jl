@@ -117,10 +117,7 @@ function update_jacobian! end
 """
     solve_subproblem!(subsolver, s, rhs, σ, atol, rtol)
 
-Solve min || J*s - rhs ||² + σ ||s||².
-
-# Notes
-- Assuming `rhs` passed as `-r`.
+Solve min ‖ J*s - rhs ‖² + σ ‖ s ‖².
 """
 function solve_subproblem! end
 
