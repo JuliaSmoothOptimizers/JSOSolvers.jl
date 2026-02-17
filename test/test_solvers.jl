@@ -14,7 +14,7 @@ function tests()
         ("fomo_tr_nesterov_HB", (nlp; kwargs...) -> fomo(nlp, momentum_backend = JSOSolvers.cg_PR(), step_backend = JSOSolvers.tr_step(); kwargs...)),
         ("fomo_r2_cg_PR", (nlp; kwargs...) -> fomo(nlp, momentum_backend = JSOSolvers.cg_PR(); kwargs...)),
         ("fomo_tr_cg_PR", (nlp; kwargs...) -> fomo(nlp, momentum_backend = JSOSolvers.cg_PR(), step_backend = JSOSolvers.tr_step(); kwargs...)),
-        #("fomo_r2_cg_FR", (nlp; kwargs...) -> fomo(nlp, momentum_backend = JSOSolvers.cg_FR(); kwargs...)),
+        ("fomo_r2_cg_FR", (nlp; kwargs...) -> fomo(nlp, momentum_backend = JSOSolvers.cg_FR(); kwargs...)),
         ("fomo_tr_cg_FR", (nlp; kwargs...) -> fomo(nlp, step_backend = JSOSolvers.tr_step(), momentum_backend = JSOSolvers.cg_FR(); kwargs...)),
       ]
         unconstrained_nlp(solver)
@@ -37,7 +37,7 @@ function tests()
           "fomo_tr_cg_PR",
           (nlp; kwargs...) -> fomo(nlp, M = 2, step_backend = JSOSolvers.tr_step(), momentum_backend = JSOSolvers.cg_PR(); kwargs...),
         ),
-        #("fomo_r2_cg_FR", (nlp; kwargs...) -> fomo(nlp, M = 2, momentum_backend = JSOSolvers.cg_FR(); kwargs...)),
+        ("fomo_r2_cg_FR", (nlp; kwargs...) -> fomo(nlp, M = 2, momentum_backend = JSOSolvers.cg_FR(); kwargs...)),
         (
           "fomo_tr_cg_FR",
           (nlp; kwargs...) -> fomo(nlp, M = 2, step_backend = JSOSolvers.tr_step(), momentum_backend = JSOSolvers.cg_FR(); kwargs...),
