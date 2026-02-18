@@ -150,7 +150,7 @@ mutable struct QRMumpsSubsolver{T} <: AbstractR2NLSSubsolver{T}
     qrm_analyse!(spmat, spfct; transp = 'n')
 
     sub = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, false, Jx)
-    finalizer(free_qrm, sub)
+    # finalizer(free_qrm, sub) # we don't need, will cuase error but in the server the user may need to call free_qrm manually to free the memory,  
 
     # 7. Initial Value Update
     # Ensure Jx.vals and sub.val are populated before returning
