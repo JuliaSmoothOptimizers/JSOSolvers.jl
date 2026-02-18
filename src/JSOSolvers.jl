@@ -25,6 +25,9 @@ function normM!(n, x, M, z)
   end
 end
 
+# subsolver interface
+include("sub_solver_common.jl")
+
 # Unconstrained solvers
 include("lbfgs.jl")
 include("trunk.jl")
