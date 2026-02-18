@@ -30,17 +30,26 @@ end
 
 if Sys.isunix()
   @testset "Allocation tests" begin
-    @testset "$symsolver" for symsolver in
-                              (:LBFGSSolver, :FoSolver, :FomoSolver, :TrunkSolver, :TronSolver)
+    @testset "$name" for (name, symsolver) in (
+      (:R2N, :R2NSolver),
+      (:R2N_exact, :R2NSolver),
+      (:R2, :FoSolver),
+      (:fomo, :FomoSolver),
+      (:lbfgs, :LBFGSSolver),
+      (:tron, :TronSolver),
+      (:trunk, :TrunkSolver),
+    )
       for model in NLPModelsTest.nlp_problems
         nlp = eval(Meta.parse(model))()
-        if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolver))
-          if (symsolver == :FoSolver || symsolver == :FomoSolver)
+        if unconstrained(nlp) || (bound_constrained(nlp) && (name == :TronSolver))
+          if (name == :FoSolver || name == :FomoSolver)
             solver = eval(symsolver)(nlp; M = 2) # nonmonotone configuration allocates extra memory
+          elseif name == :R2N_exact
+            solver = eval(symsolver)(LBFGSModel(nlp), subsolver= :shifted_lbfgs)
           else
             solver = eval(symsolver)(nlp)
           end
-          if symsolver == :FomoSolver
+          if name == :FomoSolver
             T = eltype(nlp.meta.x0)
             stats = GenericExecutionStats(nlp, solver_specific = Dict(:avgβmax => T(0)))
           else
@@ -48,8 +57,8 @@ if Sys.isunix()
           end
           with_logger(NullLogger()) do
             SolverCore.solve!(solver, nlp, stats)
-            SolverCore.reset!(solver)
-            NLPModels.reset!(nlp)
+            reset!(solver)
+            reset!(nlp)
             al = @wrappedallocs SolverCore.solve!(solver, nlp, stats)
             @test al == 0
           end
@@ -57,11 +66,21 @@ if Sys.isunix()
       end
     end
 
-    @testset "$symsolver" for symsolver in (:TrunkSolverNLS, :TronSolverNLS)
+    @testset "$name" for (name, symsolver) in (
+      (:TrunkSolverNLS, :TrunkSolverNLS),
+      (:R2NLSSolver, :R2NLSSolver),
+      (:R2NLSSolver_QRMumps, :R2NLSSolver),
+      (:TronSolverNLS, :TronSolverNLS),
+    )
       for model in NLPModelsTest.nls_problems
         nlp = eval(Meta.parse(model))()
         if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolverNLS))
-          solver = eval(symsolver)(nlp)
+          if name == :R2NLSSolver_QRMumps
+            solver = eval(symsolver)(nlp, subsolver = :qrmumps)
+          else
+            solver = eval(symsolver)(nlp)
+          end
+
           stats = GenericExecutionStats(nlp)
           with_logger(NullLogger()) do
             SolverCore.solve!(solver, nlp, stats)

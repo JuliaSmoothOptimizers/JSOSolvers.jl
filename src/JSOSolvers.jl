@@ -1,7 +1,7 @@
 module JSOSolvers
 
 # stdlib
-using LinearAlgebra, Logging, Printf
+using LinearAlgebra, Logging, Printf, SparseArrays
 
 # JSO packages
 using Krylov,
@@ -25,13 +25,18 @@ function normM!(n, x, M, z)
   end
 end
 
+# subsolver interface
+include("sub_solver_common.jl")
+
 # Unconstrained solvers
 include("lbfgs.jl")
 include("trunk.jl")
 include("fomo.jl")
+include("R2N.jl")
 
 # Unconstrained solvers for NLS
 include("trunkls.jl")
+include("R2Nls.jl")
 
 # List of keywords accepted by TRONTrustRegion
 const tron_keys = (
