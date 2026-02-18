@@ -1,0 +1,11 @@
+[deps]
+ADNLPModels = "54578032-b7ea-4c30-94aa-7cbd1cce6c9a"
+HSL_jll = "017b0a0e-03f4-516a-9b91-836bbd1904dd"
+JSOSolvers = "10dff2fc-5484-5881-a0e0-c90441020f8a"
+Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
+LinearOperators = "5c8ed15e-5a4c-59e4-a42b-c7e8811fb125"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+QRMumps = "422b30a1-cc69-4d85-abe7-cc07b540c444"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
+SolverCore = "ff4d7338-4cf1-434d-91df-b86cb86fb843"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
