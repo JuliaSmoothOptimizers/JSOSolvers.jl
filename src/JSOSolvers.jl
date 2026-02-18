@@ -58,6 +58,8 @@ function default_callback_quasi_newton(
     end
   end
 end
+# subsolver interface
+include("sub_solver_common.jl")
 
 # Unconstrained solvers
 include("lbfgs.jl")

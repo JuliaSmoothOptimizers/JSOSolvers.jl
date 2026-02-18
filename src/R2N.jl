@@ -113,67 +113,6 @@ end
 const npc_handler_allowed = [:gs, :sigma, :prev, :cp]
 
 # ==============================================================================
-#  Abstract Subsolver Interface
-# ==============================================================================
-
-abstract type AbstractR2NSubsolver{T} end
-
-"""
-    initialize_subsolver!(subsolver, nlp, x)
-
-Initial setup for the subsolver.
-"""
-function initialize_subsolver! end
-
-"""
-    update_subsolver!(subsolver, nlp, x)
-
-Update the internal Hessian/Operator representation at point `x`.
-"""
-function update_subsolver! end
-
-"""
-    solve_subproblem!(subsolver, s, rhs, σ, atol, rtol, n; verbose=0)
-
-Solve (H + σI)s = rhs (where rhs is usually -∇f).
-Returns: (solved::Bool, status::Symbol, niter::Int, npcCount::Int)
-"""
-function solve_subproblem! end
-
-"""
-    get_operator(subsolver)
-
-Return the operator/matrix H for outer loop calculations (curvature, Cauchy point).
-"""
-function get_operator end
-
-"""
-    get_inertia(subsolver)
-
-Return (num_neg, num_zero) eigenvalues. Returns (-1, -1) if unknown.
-"""
-function get_inertia(sub)
-  return -1, -1
-end
-
-"""
-    get_npc_direction(subsolver)
-
-Return a direction of negative curvature if found.
-"""
-function get_npc_direction(sub)
-  return sub.x
-end
-
-"""
-    get_operator_norm(subsolver)
-
-Return the norm (usually infinity norm or estimate) of the operator H.
-Used for Cauchy point calculation.
-"""
-function get_operator_norm end
-
-# ==============================================================================
 #   Krylov Subsolver (CG, CR, MINRES)
 # ==============================================================================
 
@@ -668,7 +607,7 @@ function SolverCore.solve!(
   unconstrained(nlp) || error("R2N should only be called on unconstrained problems.")
   npc_handler in npc_handler_allowed || error("npc_handler must be one of $(npc_handler_allowed)")
 
-  reset!(stats)
+  SolverCore.reset!(stats)
   params = solver.params
   η1 = value(params.η1)
   η2 = value(params.η2)
