@@ -116,7 +116,7 @@ where `nlp` is an AbstractNLPModel or some specialization, such as an `AbstractN
 - `max_eval` is the maximum number of objective and constraints function evaluations (default: `-1`, which means no limit);
 - `max_time` is the maximum allowed elapsed time (default: `30.0`);
 - `callback` is a function that is called at each iteration;
-- `callback_quasi_newton` is a function that is called at each iteration to perform quasi-Newton updates, if appropriate;
+- `callback_quasi_newton` is a function that is called at each iteration to perform quasi-Newton updates, if appropriate (currently only supported by TRON and TRUNK);
 - `stats` is a `SolverTools.GenericExecutionStats` with the output of the solver.
 
 ### Callbacks
