@@ -37,7 +37,6 @@ function default_callback_quasi_newton(
   solver::AbstractSolver,
   stats::GenericExecutionStats,
 )
-  @debug "in default_callback_quasi_newton"
   isa(model, NLPModelsModifiers.QuasiNewtonModel) || return
   if !stats.iter_reliable
     @warn "iteration counter is not reliable, skipping Hessian approximation update"
