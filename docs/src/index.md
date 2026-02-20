@@ -147,3 +147,5 @@ The relevant fields of the input arguments are:
 - `stats.iter_reliable`: flag indicating whether the iteration counter has been reliably set by the solver;
 - `stats.step_status`: the status of the most recent step (`:unknown`, `:rejected`, or `:accepted`);
 - `stats.step_status_reliable`: flag indicating whether the step status has been reliably set by the solver.
+
+Note that `callback_quasi_newton` is called before `callback`, so the user has access to updated Hessian information in the callback.
