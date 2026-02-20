@@ -327,8 +327,8 @@ function SolverCore.solve!(
     ),
   )
 
-  callback(nlp, solver, stats)
   callback_quasi_newton(nlp, solver, stats)
+  callback(nlp, solver, stats)
 
   done = stats.status != :unknown
 
@@ -433,8 +433,8 @@ function SolverCore.solve!(
       ),
     )
 
-    callback(nlp, solver, stats)
     callback_quasi_newton(nlp, solver, stats)
+    callback(nlp, solver, stats)
 
     done = stats.status != :unknown
   end
