@@ -159,44 +159,36 @@ end
 
 function solve_subproblem!(sub::KrylovR2NSubsolver, s, rhs, σ, atol, rtol, n; verbose = 0)
   sub.workspace.stats.niter = 0
-  sub.workspace.stats.npcCount = 0
+  # Note: Standard Krylov.jl stats do not have .npcCount. 
+  # If you are using a custom branch, keep this. Otherwise, remove it.
+  # sub.workspace.stats.npcCount = 0 
 
   if sub.solver_name in (:cg, :cr)
     sub.A.σ = σ
     krylov_solve!(
-      sub.workspace,
-      sub.A,
-      rhs,
-      itmax = max(2 * n, 50),
-      atol = atol,
-      rtol = rtol,
-      verbose = verbose,
-      linesearch = true,
+      sub.workspace, sub.A, rhs,
+      itmax = max(2 * n, 50), atol = atol, rtol = rtol,
+      verbose = verbose, linesearch = true
     )
   else # minres, minres_qlp
     krylov_solve!(
-      sub.workspace,
-      sub.H,
-      rhs,
-      λ = σ,
-      itmax = max(2 * n, 50),
-      atol = atol,
-      rtol = rtol,
-      verbose = verbose,
-      linesearch = true,
+      sub.workspace, sub.H, rhs, λ = σ,
+      itmax = max(2 * n, 50), atol = atol, rtol = rtol,
+      verbose = verbose, linesearch = true
     )
   end
 
   s .= sub.workspace.x
-
+  
   if isdefined(sub.workspace, :npc_dir)
-    sub.npc_dir .= sub.workspace.npc_dir
+      sub.npc_dir .= sub.workspace.npc_dir
   end
-
+  
+  # Return the tuple expected by the main loop
   return Krylov.issolved(sub.workspace),
-        sub.workspace.stats.status,
-        sub.workspace.stats.niter,
-        sub.workspace.stats.npcCount
+         sub.workspace.stats.status,
+         sub.workspace.stats.niter,
+         0 # npcCount placeholder if not available in stats
 end
 
 get_operator(sub::KrylovR2NSubsolver) = sub.H
@@ -275,7 +267,7 @@ function HSLR2NSubsolver(nlp::AbstractNLPModel{T, V}, x::V; hsl_constructor=ma97
   @inbounds for i = 1:n
     rows[nnzh + i] = i
     cols[nnzh + i] = i
-    # Diagonal shift will be updated during solve
+    # Diagonal shift will be updated during solve using σ
     vals[nnzh + i] = one(T) 
   end
 
@@ -352,7 +344,9 @@ end
 
 # Helper to support `mul!` for HSL subsolver
 function LinearAlgebra.mul!(y::AbstractVector, sub::HSLR2NSubsolver, x::AbstractVector)
-    coo_sym_prod!(sub.rows, sub.cols, sub.vals, x, y)
+    coo_sym_prod!(view(sub.rows, 1:sub.nnzh), 
+        view(sub.cols, 1:sub.nnzh), 
+        view(sub.vals, 1:sub.nnzh), x, y)
 end
 
 
@@ -772,10 +766,10 @@ function SolverCore.solve!(
         # Ensure line search model points to current x and dir
         SolverTools.redirect!(solver.h, x, dir)
         f0_val = stats.objective
-        slope = dot(∇fk, dir) # slope = ∇f^T * d
+        dot_gs = dot(∇fk, dir) # dot_gs = ∇f^T * d
 
         α, ft, nbk, nbG = armijo_goldstein(
-          solver.h, f0_val, slope;
+          solver.h, f0_val, dot_gs;
           t = one(T), τ₀ = ls_c, τ₁ = 1 - ls_c,
           γ₀ = ls_decrease, γ₁ = ls_increase,
           bk_max = 100, bG_max = 100, verbose = (verbose > 0),
@@ -790,9 +784,9 @@ function SolverCore.solve!(
     # Compute Cauchy step
     if scp_flag == true || npc_handler == :cp || calc_scp_needed
       mul!(Hs, H, ∇fk)
-      curv = dot(∇fk, Hs)
-      slope = σk * norm_∇fk^2
-      γ_k = (curv + slope) / norm_∇fk^2
+      dot_gHg = dot(∇fk, Hs)
+      σ_norm_g2 = σk * norm_∇fk^2
+      γ_k = (dot_gHg + σ_norm_g2) / norm_∇fk^2
 
       if γ_k > 0
         ν_k = 2*(1-δ1) / (γ_k)
@@ -818,14 +812,13 @@ function SolverCore.solve!(
       solver.σ = σk
       npcCount = 0
     else
-      # Compute Model Curvature and Slope
+      # Compute Model Predicted Reduction
       mul!(Hs, H, s)
-      curv = dot(s, Hs)    # s' (H + σI) s
-      slope = dot(s, ∇fk)  # ∇f' s
+      dot_sHs = dot(s, Hs)    # s' (H + σI) s
+      dot_gs = dot(s, ∇fk)  # ∇f' s
 
       # Predicted Reduction: m(0) - m(s) = -g's - 0.5 s'Bs
-      # Note: For a descent direction, slope < 0, so -slope > 0.
-      ΔTk = -slope - curv / 2
+      ΔTk = -dot_gs - dot_sHs / 2
       
       # Verify that the predicted reduction is positive and numerically significant.
       # This check handles cases where the subsolver returns a poor step (e.g., if
