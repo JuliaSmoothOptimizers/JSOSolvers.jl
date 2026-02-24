@@ -186,7 +186,7 @@ function solve_subproblem!(sub::KrylovR2NSubsolver, s, rhs, σ, atol, rtol, n; v
   return Krylov.issolved(sub.workspace),
          sub.workspace.stats.status,
          sub.workspace.stats.niter,
-         0 # npcCount placeholder if not available in stats
+         sub.workspace.stats.npcCount
 end
 
 get_operator(sub::KrylovR2NSubsolver) = sub.H
