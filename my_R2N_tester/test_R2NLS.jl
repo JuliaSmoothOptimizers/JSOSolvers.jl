@@ -24,6 +24,6 @@ stats = R2NLS(nls,max_iter = 100 ,verbose=1)
  
 ########### Additional tests can be added here, e.g., with different subsolvers or on different problems
 
-stats = R2NLS(nls, subsolver=LSMRSubsolver, verbose=1)
+stats = R2NLS(nls, subsolver=LSMRSubsolver, verbose=1, max_iter=100)
 
  

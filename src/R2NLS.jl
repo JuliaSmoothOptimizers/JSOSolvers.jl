@@ -389,7 +389,7 @@ function R2NLSSolver(
 
   # Instantiate Subsolver
   # Strictly checks for Type or AbstractR2NLSSubsolver instance
-  if subsolver isa Type || subsolver isa Function
+  if subsolver isa Union{Type, Function}
     sub_inst = subsolver(nls, x)
   elseif subsolver isa AbstractR2NLSSubsolver
     sub_inst = subsolver
