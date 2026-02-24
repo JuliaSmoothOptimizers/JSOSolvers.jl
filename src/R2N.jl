@@ -160,9 +160,6 @@ end
 
 function solve_subproblem!(sub::KrylovR2NSubsolver, s, rhs, σ, atol, rtol, n; verbose = 0)
   sub.workspace.stats.niter = 0
-  # Note: Standard Krylov.jl stats do not have .npcCount. 
-  # If you are using a custom branch, keep this. Otherwise, remove it.
-  # sub.workspace.stats.npcCount = 0 
 
   if sub.solver_name in (:cg, :cr)
     sub.A.σ = σ
@@ -738,25 +735,26 @@ function SolverCore.solve!(
     
     calc_scp_needed = false
     force_sigma_increase = false
-
-    num_neg, num_zero = get_inertia(solver.subsolver)
+    if solver.subsolver isa HSLR2NSubsolver
+      num_neg, num_zero = get_inertia(solver.subsolver)
     
-    if num_zero > 0
-        force_sigma_increase = true
-    end
+      if num_zero > 0
+          force_sigma_increase = true
+      end
 
-    if !force_sigma_increase && num_neg > 0
-        mul!(Hs, H, s)
-        curv_s = dot(s, Hs)
-        
-        if curv_s < 0
-             npcCount = 1
-             if npc_handler == :prev
-                 npc_handler = :gs
-             end
-        else
-             calc_scp_needed = true
-        end
+      if !force_sigma_increase && num_neg > 0
+          mul!(Hs, H, s)
+          curv_s = dot(s, Hs)
+          
+          if curv_s < 0
+              npcCount = 1
+              if npc_handler == :prev
+                  npc_handler = :gs  #Force the npc_handler to be gs and not :prev since we can not have that behavior with HSL subsolver
+              end
+          else
+              calc_scp_needed = true
+          end
+      end
     end
 
     if !(solver.subsolver isa ShiftedLBFGSSolver) && npcCount >= 1
@@ -779,6 +777,7 @@ function SolverCore.solve!(
         fck_computed = true
       elseif npc_handler == :prev
         npcCount = 0
+        # s is already populated by solve_subproblem!
       end
     end
 
