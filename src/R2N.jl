@@ -2,6 +2,7 @@ export R2N, R2NSolver, R2NParameterSet
 export ShiftedLBFGSSolver, HSLR2NSubsolver, KrylovR2NSubsolver
 export CGR2NSubsolver, CRR2NSubsolver, MinresR2NSubsolver, MinresQlpR2NSubsolver
 export AbstractR2NSubsolver
+export MA97R2NSubsolver, MA57R2NSubsolver
 
 using LinearOperators, LinearAlgebra
 using SparseArrays
@@ -94,13 +95,13 @@ function R2NParameterSet(
   R2NParameterSet{T}(
     Parameter(θ1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(θ2, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
-    Parameter(η1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
+    Parameter(η1, RealInterval(zero(T), one(T), lower_open = false, upper_open = true)),
     Parameter(η2, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(γ1, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
     Parameter(γ2, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
-    Parameter(γ3, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
+    Parameter(γ3, RealInterval(zero(T), one(T), lower_open = false, upper_open = true)),
     Parameter(δ1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
-    Parameter(σmin, RealInterval(zero(T), T(Inf), lower_open = true, upper_open = true)),
+    Parameter(σmin, RealInterval(zero(T), T(Inf), lower_open = false, upper_open = true)),
     Parameter(non_mono_size, IntegerRange(1, typemax(Int))),
     Parameter(ls_c, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(ls_increase, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
@@ -148,7 +149,7 @@ MinresR2NSubsolver(nlp, x) = KrylovR2NSubsolver(nlp, x, :minres)
 MinresQlpR2NSubsolver(nlp, x) = KrylovR2NSubsolver(nlp, x, :minres_qlp)
 
 function initialize_subsolver!(sub::KrylovR2NSubsolver, nlp, x)
-  reset!(sub.H)
+  
   return nothing
 end
 
@@ -196,7 +197,7 @@ get_npc_direction(sub::KrylovR2NSubsolver) = sub.npc_dir
 
 function get_operator_norm(sub::KrylovR2NSubsolver)
     # Estimate norm of H. 
-    val, _ = estimate_opnorm(sub.H)
+    val, _ =  LinearOperators.estimate_opnorm(sub.H)
     return val
 end
 
@@ -230,7 +231,7 @@ get_operator(sub::ShiftedLBFGSSolver) = sub.H
 
 function get_operator_norm(sub::ShiftedLBFGSSolver)
     # Estimate norm of H. 
-    val, _ = estimate_opnorm(sub.H)
+    val, _ = LinearOperators.estimate_opnorm(sub.H)
     return val
 end
 
@@ -485,7 +486,7 @@ function R2NSolver(
   
   x .= nlp.meta.x0
 
-  if subsolver isa Type
+  if subsolver isa Union{Type, Function}
      sub_inst = subsolver(nlp, x)
   elseif subsolver isa AbstractR2NSubsolver
      sub_inst = subsolver
@@ -526,7 +527,7 @@ end
 function SolverCore.reset!(solver::R2NSolver{T}) where {T}
   fill!(solver.obj_vec, typemin(T))
   if solver.subsolver isa KrylovR2NSubsolver
-      reset!(solver.subsolver.H)
+      LinearOperators.reset!(solver.subsolver.H)
   end
   return solver
 end
@@ -534,7 +535,7 @@ end
 function SolverCore.reset!(solver::R2NSolver{T}, nlp::AbstractNLPModel) where {T}
   fill!(solver.obj_vec, typemin(T))
   if solver.subsolver isa KrylovR2NSubsolver
-      reset!(solver.subsolver.H)
+      LinearOperators.reset!(solver.subsolver.H)
   end
   solver.h = LineModel(nlp, solver.x, solver.s)
   return solver

@@ -3,6 +3,8 @@ uuid = "10dff2fc-5484-5881-a0e0-c90441020f8a"
 version = "0.14.3"
 
 [deps]
+Arpack = "7d9fca2a-8960-54d3-9f78-7d1dccf2cb97"
+GenericLinearAlgebra = "14197337-ba66-59df-a3e3-ca00e7dcff7a"
 HSL = "34c5aeac-e683-54a6-a0e9-6e0fdc586c50"
 HSL_jll = "017b0a0e-03f4-516a-9b91-836bbd1904dd"
 Krylov = "ba0b0d4f-ebba-5204-a429-3ac8c609bfb7"
@@ -18,8 +20,11 @@ SolverParameters = "d076d87d-d1f9-4ea3-a44b-64b4cdd1e470"
 SolverTools = "b5612192-2639-5dc1-abfe-fbedd65fab29"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 SparseMatricesCOO = "fa32481b-f100-4b48-8dc8-c62f61b13870"
+TSVD = "9449cd9e-2762-5aa3-a617-5413e99d722e"
 
 [compat]
+Arpack = "0.5.4"
+GenericLinearAlgebra = "0.3.19"
 HSL = "0.5.2"
 Krylov = "0.10.1"
 LinearOperators = "2.12.0"
@@ -31,6 +36,7 @@ SolverParameters = "0.1"
 SolverTools = "0.10"
 SparseArrays = "1.11.0"
 SparseMatricesCOO = "0.2.6"
+TSVD = "0.4.4"
 julia = "1.10"
 
 [extras]

@@ -4,6 +4,7 @@ module JSOSolvers
 using LinearAlgebra, Logging, Printf, SparseArrays
 
 # JSO packages
+using Arpack, TSVD, GenericLinearAlgebra
 using Krylov,
   LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverParameters, SolverTools
 
