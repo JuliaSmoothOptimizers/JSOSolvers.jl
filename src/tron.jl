@@ -139,7 +139,7 @@ mutable struct TronSolver{
   cg_solver::Sub
   cg_rhs::V
   cg_op_diag::V
-  cg_op::LinearOperator{T}
+  cg_op::LinearOperator{T, V}
 
   ZHZ::Aop
   params::TRONParameterSet{T}
