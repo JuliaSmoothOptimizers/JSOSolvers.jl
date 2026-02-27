@@ -141,7 +141,7 @@ mutable struct TronSolverNLS{
 
   ls_rhs::V
   ls_op_diag::V
-  ls_op::LinearOperator{T}
+  ls_op::LinearOperator{T, V}
 
   AZ::Aop
   ls_subsolver::Sub
