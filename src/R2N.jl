@@ -103,7 +103,7 @@ function R2NParameterSet(
   )
 end
 
-const npc_handler_allowed = [:gs, :sigma, :prev, :cp]
+const npc_handler_allowed = [:ag, :sigma, :prev, :cp]
 
 """
     R2N(nlp; kwargs...)
@@ -142,8 +142,10 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `subsolver = CGR2NSubsolver`: the subproblem solver type or instance.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
 - `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
-- `npc_handler::Symbol = :gs`: the non_positive_curve handling strategy.
-  - `:gs`: run line-search along NPC with Goldstein conditions.
+- `always_accept_npc_ag::Bool = false`: if true, we skip the computation of the reduction ratio ρ for Goldstein steps taken along directions of negative curvature, unconditionally accepting them as very successful steps to aggressively escape saddle points.
+- `fast_local_convergence::Bool = false`: if true, we scale the regularization parameter σ by the norm of the current gradient on very successful iterations (using `γ3 * min(σ, norm(gx))`), which accelerates local convergence near a minimizer.
+- `npc_handler::Symbol = :ag`: the non_positive_curve handling strategy.
+  - `:ag`: run line-search along NPC with Armijo-Goldstein conditions.
   - `:sigma`: increase the regularization parameter σ.
   - `:prev`: if subsolver return after first iteration, increase the sigma, but if subsolver return after second iteration, set s_k = s_k^(t-1).
   - `:cp`: set s_k to Cauchy point.
@@ -334,8 +336,10 @@ function SolverCore.solve!(
   max_iter::Int = typemax(Int),
   verbose::Int = 0,
   subsolver_verbose::Int = 0,
-  npc_handler::Symbol = :gs,
+  npc_handler::Symbol = :ag,
   scp_flag::Bool = true,
+  always_accept_npc_ag::Bool = false,
+  fast_local_convergence::Bool = false,
 ) where {T, V}
   unconstrained(nlp) || error("R2N should only be called on unconstrained problems.")
   npc_handler in npc_handler_allowed || error("npc_handler must be one of $(npc_handler_allowed)")
@@ -455,6 +459,7 @@ function SolverCore.solve!(
   sub_stats = :unknown
   subiter = 0
   dir_stat = ""
+  is_npc_gs_step = false # Determine if we took an NPC Goldstein step this iteration
 
   while !done
     npcCount = 0
@@ -489,7 +494,7 @@ function SolverCore.solve!(
         if curv_s < 0
           npcCount = 1
           if npc_handler == :prev
-            npc_handler = :gs  #Force the npc_handler to be gs and not :prev since we can not have that behavior with HSL subsolver
+            npc_handler = :ag  #Force the npc_handler to be ag and not :prev since we can not have that behavior with HSL subsolver
           end
         else
           calc_scp_needed = true
@@ -498,7 +503,8 @@ function SolverCore.solve!(
     end
 
     if !(solver.subsolver isa ShiftedLBFGSSolver) && npcCount >= 1
-      if npc_handler == :gs
+      if npc_handler == :ag
+        is_npc_gs_step = true
         npcCount = 0
         # If it's HSL, `s` is already our NPC direction
         dir = solver.subsolver isa HSLR2NSubsolver ? s : get_npc_direction(solver.subsolver)
@@ -506,12 +512,12 @@ function SolverCore.solve!(
         # Ensure line search model points to current x and dir
         SolverTools.redirect!(solver.h, x, dir)
         f0_val = stats.objective
-        dot_gs = dot(∇fk, dir) # dot_gs = ∇f^T * d
+        dot_ag = dot(∇fk, dir) # dot_ag = ∇f^T * d
 
         α, ft, nbk, nbG = armijo_goldstein(
           solver.h,
           f0_val,
-          dot_gs;
+          dot_ag;
           t = one(T),
           τ₀ = ls_c,
           τ₁ = 1 - ls_c,
@@ -559,40 +565,49 @@ function SolverCore.solve!(
       σk = max(σmin, γ2 * σk)
       solver.σ = σk
       npcCount = 0
-    else
-      # Compute Model Predicted Reduction
-      mul!(Hs, H, s)
-      dot_sHs = dot(s, Hs)    # s' (H + σI) s
-      dot_gs = dot(s, ∇fk)  # ∇f' s
-
-      # Predicted Reduction: m(0) - m(s) = -g's - 0.5 s'Bs
-      ΔTk = -dot_gs - dot_sHs / 2
-
-      # Verify that the predicted reduction is positive and numerically significant.
-      # This check handles cases where the subsolver returns a poor step (e.g., if
-      # npc_handler=:prev reuses a bad step) or if the reduction is dominated by 
-      # machine noise relative to the objective value.
-      if ΔTk <= eps(T) * max(one(T), abs(stats.objective))
-        step_accepted = false
-        σk = max(σmin, γ2 * σk)
-        solver.σ = σk
-      else
+    else 
+      # Determine if we took an NPC Armijo-Goldstein step this iteration
+      if is_npc_gs_step && always_accept_npc_gs
+        is_npc_gs_step = false # reset
+        # Skip the model decrease computation entirely!
+        # Force the ratio to act like a very successful step to escape the saddle point.
+        ρk = η2
         @. xt = x + s
+        step_accepted = true
+      else
+        # Compute Model Predicted Reduction
+        mul!(Hs, H, s)
+        dot_sHs = dot(s, Hs)    # s' (H + σI) s
+        dot_ag = dot(s, ∇fk)  # ∇f' s
 
-        if !fck_computed
-          ft = obj(nlp, xt)
-        end
+        # Predicted Reduction: m(0) - m(s) = -g's - 0.5 s'Bs
+        ΔTk = -dot_ag - dot_sHs / 2
 
-        if non_mono_size > 1
-          k = mod(stats.iter, non_mono_size) + 1
-          solver.obj_vec[k] = stats.objective
-          ft_max = maximum(solver.obj_vec)
-          ρk = (ft_max - ft) / (ft_max - stats.objective + ΔTk)
+        # Verify that the predicted reduction is positive and numerically significant.
+        # This check handles cases where the subsolver returns a poor step (e.g., if
+        # npc_handler=:prev reuses a bad step) or if the reduction is dominated by 
+        # machine noise relative to the objective value.
+        if ΔTk <= eps(T) * max(one(T), abs(stats.objective))
+          step_accepted = false
+          σk = max(σmin, γ2 * σk)
+          solver.σ = σk
         else
-          ρk = (stats.objective - ft) / ΔTk
-        end
+          @. xt = x + s
 
-        step_accepted = ρk >= η1
+          if !fck_computed
+            ft = obj(nlp, xt)
+          end
+
+          if non_mono_size > 1
+            k = mod(stats.iter, non_mono_size) + 1
+            solver.obj_vec[k] = stats.objective
+            ft_max = maximum(solver.obj_vec)
+            ρk = (ft_max - ft) / (ft_max - stats.objective + ΔTk)
+          else
+            ρk = (stats.objective - ft) / ΔTk
+          end
+          step_accepted = ρk >= η1
+        end        
         if step_accepted
           # Quasi-Newton Update: Needs ∇f_new - ∇f_old.
           # We have ∇f_old in ∇fk. We need to save it or use a temp.
@@ -619,7 +634,14 @@ function SolverCore.solve!(
           norm_∇fk = norm(∇fk)
 
           if ρk >= η2
-            σk = max(σmin, γ3 * σk)
+            # Very successful step
+            if fast_local_convergence
+              # Local fast convergence variant: scale by the norm of the current gradient
+              σk = max(σmin, γ3 * min(σk, norm_∇fk))
+            else
+              # Standard update
+              σk = max(σmin, γ3 * σk)
+            end
           else
             σk = γ1 * σk
           end
