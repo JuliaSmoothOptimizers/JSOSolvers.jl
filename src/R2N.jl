@@ -1,12 +1,4 @@
 export R2N, R2NSolver, R2NParameterSet
-export ShiftedLBFGSSolver, HSLR2NSubsolver, KrylovR2NSubsolver
-export CGR2NSubsolver, CRR2NSubsolver, MinresR2NSubsolver, MinresQlpR2NSubsolver
-export AbstractR2NSubsolver
-export MA97R2NSubsolver, MA57R2NSubsolver
-
-using LinearOperators, LinearAlgebra
-using SparseArrays
-using HSL
 
 """
     R2NParameterSet([T=Float64]; θ1, θ2, η1, η2, γ1, γ2, γ3, σmin, non_mono_size)
@@ -113,246 +105,6 @@ end
 
 const npc_handler_allowed = [:gs, :sigma, :prev, :cp]
 
-# ==============================================================================
-#   Krylov Subsolver (CG, CR, MINRES)
-# ==============================================================================
-
-mutable struct KrylovR2NSubsolver{T, V, Op, W, ShiftOp} <: AbstractR2NSubsolver{T}
-  workspace::W
-  H::Op           # The Hessian Operator
-  A::ShiftOp      # The Shifted Operator (only for CG/CR)
-  solver_name::Symbol
-  npc_dir::V      # Store NPC direction if needed
-
-  function KrylovR2NSubsolver(
-    nlp::AbstractNLPModel{T, V},
-    x_init::V,
-    solver_name::Symbol = :cg,
-  ) where {T, V}
-    n = nlp.meta.nvar
-    H = hess_op(nlp, x_init)
-
-    A = nothing
-    if solver_name in (:cg, :cr)
-      A = ShiftedOperator(H)
-    end
-
-    workspace = krylov_workspace(Val(solver_name), n, n, V)
-
-    new{T, V, typeof(H), typeof(workspace), typeof(A)}(workspace, H, A, solver_name, V(undef, n))
-  end
-end
-
-CGR2NSubsolver(nlp, x) = KrylovR2NSubsolver(nlp, x, :cg)
-CRR2NSubsolver(nlp, x) = KrylovR2NSubsolver(nlp, x, :cr)
-MinresR2NSubsolver(nlp, x) = KrylovR2NSubsolver(nlp, x, :minres)
-MinresQlpR2NSubsolver(nlp, x) = KrylovR2NSubsolver(nlp, x, :minres_qlp)
-
-function initialize_subsolver!(sub::KrylovR2NSubsolver, nlp, x)
-  
-  return nothing
-end
-
-function update_subsolver!(sub::KrylovR2NSubsolver, nlp, x)
-  # Standard hess_op updates internally if it holds the NLP reference
-  return nothing
-end
-
-function solve_subproblem!(sub::KrylovR2NSubsolver, s, rhs, σ, atol, rtol, n; verbose = 0)
-  sub.workspace.stats.niter = 0
-
-  if sub.solver_name in (:cg, :cr)
-    sub.A.σ = σ
-    krylov_solve!(
-      sub.workspace, sub.A, rhs,
-      itmax = max(2 * n, 50), atol = atol, rtol = rtol,
-      verbose = verbose, linesearch = true
-    )
-  else # minres, minres_qlp
-    krylov_solve!(
-      sub.workspace, sub.H, rhs, λ = σ,
-      itmax = max(2 * n, 50), atol = atol, rtol = rtol,
-      verbose = verbose, linesearch = true
-    )
-  end
-
-  s .= sub.workspace.x
-  
-  if isdefined(sub.workspace, :npc_dir)
-      sub.npc_dir .= sub.workspace.npc_dir
-  end
-  
-  # Return the tuple expected by the main loop
-  return Krylov.issolved(sub.workspace),
-         sub.workspace.stats.status,
-         sub.workspace.stats.niter,
-         sub.workspace.stats.npcCount
-end
-
-get_operator(sub::KrylovR2NSubsolver) = sub.H
-get_npc_direction(sub::KrylovR2NSubsolver) = sub.npc_dir
-
-function get_operator_norm(sub::KrylovR2NSubsolver)
-    # Estimate norm of H. 
-    val, _ =  LinearOperators.estimate_opnorm(sub.H)
-    return val
-end
-
-# ==============================================================================
-#   Shifted LBFGS Subsolver
-# ==============================================================================
-
-mutable struct ShiftedLBFGSSolver{T, Op} <: AbstractR2NSubsolver{T}
-  H::Op # The LBFGS Operator
-
-  function ShiftedLBFGSSolver(nlp::AbstractNLPModel{T, V}, x::V) where {T, V}
-    if !(nlp isa LBFGSModel)
-      error("ShiftedLBFGSSolver can only be used by LBFGSModel")
-    end
-    new{T, typeof(nlp.op)}(nlp.op)
-  end
-end
-
-ShiftedLBFGSSolver(nlp, x) = ShiftedLBFGSSolver(nlp, x)
-
-initialize_subsolver!(sub::ShiftedLBFGSSolver, nlp, x) = nothing
-update_subsolver!(sub::ShiftedLBFGSSolver, nlp, x) = nothing # LBFGS updates via push! in outer loop
-
-function solve_subproblem!(sub::ShiftedLBFGSSolver, s, rhs, σ, atol, rtol, n; verbose = 0)
-  # rhs is usually -∇f. solve_shifted_system! expects negative gradient
-  solve_shifted_system!(s, sub.H, rhs, σ)
-  return true, :first_order, 1, 0
-end
-
-get_operator(sub::ShiftedLBFGSSolver) = sub.H
-
-function get_operator_norm(sub::ShiftedLBFGSSolver)
-    # Estimate norm of H. 
-    val, _ = LinearOperators.estimate_opnorm(sub.H)
-    return val
-end
-
-# ==============================================================================
-#   HSL Subsolver (MA97 / MA57)
-# ==============================================================================
-
-mutable struct HSLR2NSubsolver{T, S} <: AbstractR2NSubsolver{T}
-  hsl_obj::S
-  rows::Vector{Int}
-  cols::Vector{Int}
-  vals::Vector{T}
-  n::Int
-  nnzh::Int
-  work::Vector{T} # workspace for solves (used for MA57)
-end
-
-function HSLR2NSubsolver(nlp::AbstractNLPModel{T, V}, x::V; hsl_constructor=ma97_coord) where {T, V}
-  LIBHSL_isfunctional() || error("HSL library is not functional")
-  n = nlp.meta.nvar
-  nnzh = nlp.meta.nnzh
-  total_nnz = nnzh + n
-
-  rows = Vector{Int}(undef, total_nnz)
-  cols = Vector{Int}(undef, total_nnz)
-  vals = Vector{T}(undef, total_nnz)
-
-  # Structure analysis must happen in constructor to define the object type S
-  hess_structure!(nlp, view(rows, 1:nnzh), view(cols, 1:nnzh))
-  
-  # Initialize values to zero. Actual computation happens in initialize_subsolver!
-  fill!(vals, zero(T)) 
-
-  @inbounds for i = 1:n
-    rows[nnzh + i] = i
-    cols[nnzh + i] = i
-    # Diagonal shift will be updated during solve using σ
-    vals[nnzh + i] = one(T) 
-  end
-
-  hsl_obj = hsl_constructor(n, cols, rows, vals)
-  
-  if hsl_constructor == ma57_coord
-    work = Vector{T}(undef, n * size(nlp.meta.x0, 2))
-  else
-    work = Vector{T}(undef, 0)
-  end
-  
-  return HSLR2NSubsolver{T, typeof(hsl_obj)}(hsl_obj, rows, cols, vals, n, nnzh, work)
-end
-
-MA97R2NSubsolver(nlp, x) = HSLR2NSubsolver(nlp, x; hsl_constructor=ma97_coord)
-MA57R2NSubsolver(nlp, x) = HSLR2NSubsolver(nlp, x; hsl_constructor=ma57_coord)
-
-function initialize_subsolver!(sub::HSLR2NSubsolver, nlp, x)
-  # Compute the initial Hessian values at x
-  hess_coord!(nlp, x, view(sub.vals, 1:sub.nnzh))
-  return nothing
-end
-
-function update_subsolver!(sub::HSLR2NSubsolver, nlp, x)
-  hess_coord!(nlp, x, view(sub.vals, 1:sub.nnzh))
-end
-
-function get_inertia(sub::HSLR2NSubsolver{T, S}) where {T, S <: Ma97{T}}
-  n = sub.n
-  num_neg = sub.hsl_obj.info.num_neg
-  num_zero = n - sub.hsl_obj.info.matrix_rank
-  return num_neg, num_zero
-end
-
-function get_inertia(sub::HSLR2NSubsolver{T, S}) where {T, S <: Ma57{T}}
-  n = sub.n
-  num_neg = sub.hsl_obj.info.num_negative_eigs
-  num_zero = n - sub.hsl_obj.info.rank
-  return num_neg, num_zero
-end
-
-function _hsl_factor_and_solve!(sub::HSLR2NSubsolver{T, S}, g, s) where {T, S <: Ma97{T}}
-  ma97_factorize!(sub.hsl_obj)
-  if sub.hsl_obj.info.flag < 0
-    return false, :err, 0, 0
-  end
-  s .= g
-  ma97_solve!(sub.hsl_obj, s)
-  return true, :first_order, 1, 0
-end
-
-function _hsl_factor_and_solve!(sub::HSLR2NSubsolver{T, S}, g, s) where {T, S <: Ma57{T}}
-  ma57_factorize!(sub.hsl_obj)
-  s .= g
-  ma57_solve!(sub.hsl_obj, s, sub.work)
-  return true, :first_order, 1, 0
-end
-
-function solve_subproblem!(sub::HSLR2NSubsolver, s, rhs, σ, atol, rtol, n; verbose=0)
-  # Update diagonal shift in the vals array
-  @inbounds for i = 1:n
-    sub.vals[sub.nnzh + i] = σ
-  end
-  return _hsl_factor_and_solve!(sub, rhs, s)
-end
-
-get_operator(sub::HSLR2NSubsolver) = sub
-
-function get_operator_norm(sub::HSLR2NSubsolver)
-    # Cheap estimate of norm using the stored values
-    # Exclude the shift values (last n elements) which are at indices nnzh+1:end
-    return norm(view(sub.vals, 1:sub.nnzh), Inf) 
-end
-
-# Helper to support `mul!` for HSL subsolver
-function LinearAlgebra.mul!(y::AbstractVector, sub::HSLR2NSubsolver, x::AbstractVector)
-    coo_sym_prod!(view(sub.rows, 1:sub.nnzh), 
-        view(sub.cols, 1:sub.nnzh), 
-        view(sub.vals, 1:sub.nnzh), x, y)
-end
-
-
-
-# ==============================================================================
-#   R2N Solver
-# ==============================================================================
-
 """
     R2N(nlp; kwargs...)
 
@@ -411,12 +163,8 @@ stats = R2N(nlp)
 ```
 
 """
-mutable struct R2NSolver{
-  T,
-  V,
-  Sub <: AbstractR2NSubsolver{T},
-  M <: AbstractNLPModel{T, V},
-} <: AbstractOptimizationSolver
+mutable struct R2NSolver{T, V, Sub <: AbstractR2NSubsolver{T}, M <: AbstractNLPModel{T, V}} <:
+               AbstractOptimizationSolver
   x::V              # Current iterate x_k
   xt::V             # Trial iterate x_{k+1}
   gx::V             # Gradient ∇f(x)
@@ -445,7 +193,7 @@ function R2NSolver(
   δ1 = get(R2N_δ1, nlp),
   σmin = get(R2N_σmin, nlp),
   non_mono_size = get(R2N_non_mono_size, nlp),
-  subsolver = CGR2NSubsolver, # Default Type
+  subsolver::AbstractR2NSubsolver{T} = CGR2NSubsolver(nlp), # Default is an INSTANCE
   ls_c = get(R2N_ls_c, nlp),
   ls_increase = get(R2N_ls_increase, nlp),
   ls_decrease = get(R2N_ls_decrease, nlp),
@@ -470,7 +218,7 @@ function R2NSolver(
     ls_min_alpha = ls_min_alpha,
     ls_max_alpha = ls_max_alpha,
   )
-  
+
   value(params.non_mono_size) >= 1 || error("non_mono_size must be greater than or equal to 1")
 
   nvar = nlp.meta.nvar
@@ -478,21 +226,13 @@ function R2NSolver(
   xt = V(undef, nvar)
   gx = V(undef, nvar)
   rhs = V(undef, nvar)
-  y = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0) # y storage
+  y = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
   Hs = V(undef, nvar)
-  
+
   x .= nlp.meta.x0
 
-  if subsolver isa Union{Type, Function}
-     sub_inst = subsolver(nlp, x)
-  elseif subsolver isa AbstractR2NSubsolver
-     sub_inst = subsolver
-  else
-     error("subsolver must be a Type or an AbstractR2NSubsolver instance")
-  end
-
-  if sub_inst isa ShiftedLBFGSSolver && !(nlp isa LBFGSModel)
-     error("ShiftedLBFGSSolver can only be used by LBFGSModel")
+  if subsolver isa ShiftedLBFGSSolver && !(nlp isa LBFGSModel)
+    error("ShiftedLBFGSSolver can only be used by LBFGSModel")
   end
 
   σ = zero(T)
@@ -500,10 +240,10 @@ function R2NSolver(
   scp = V(undef, nvar)
   subtol = one(T)
   obj_vec = fill(typemin(T), non_mono_size)
-  
+
   h = LineModel(nlp, x, s)
 
-  return R2NSolver{T, V, typeof(sub_inst), typeof(nlp)}(
+  return R2NSolver{T, V, typeof(subsolver), typeof(nlp)}(
     x,
     xt,
     gx,
@@ -513,7 +253,7 @@ function R2NSolver(
     s,
     scp,
     obj_vec,
-    sub_inst,
+    subsolver,
     h,
     subtol,
     σ,
@@ -524,7 +264,7 @@ end
 function SolverCore.reset!(solver::R2NSolver{T}) where {T}
   fill!(solver.obj_vec, typemin(T))
   if solver.subsolver isa KrylovR2NSubsolver
-      LinearOperators.reset!(solver.subsolver.H)
+    LinearOperators.reset!(solver.subsolver.H)
   end
   return solver
 end
@@ -532,7 +272,7 @@ end
 function SolverCore.reset!(solver::R2NSolver{T}, nlp::AbstractNLPModel) where {T}
   fill!(solver.obj_vec, typemin(T))
   if solver.subsolver isa KrylovR2NSubsolver
-      LinearOperators.reset!(solver.subsolver.H)
+    LinearOperators.reset!(solver.subsolver.H)
   end
   solver.h = LineModel(nlp, solver.x, solver.s)
   return solver
@@ -550,7 +290,7 @@ end
   δ1::Real = get(R2N_δ1, nlp),
   σmin::Real = get(R2N_σmin, nlp),
   non_mono_size::Int = get(R2N_non_mono_size, nlp),
-  subsolver = CGR2NSubsolver,
+  subsolver::AbstractR2NSubsolver = CGR2NSubsolver(nlp),
   ls_c::Real = get(R2N_ls_c, nlp),
   ls_increase::Real = get(R2N_ls_increase, nlp),
   ls_decrease::Real = get(R2N_ls_decrease, nlp),
@@ -558,6 +298,7 @@ end
   ls_max_alpha::Real = get(R2N_ls_max_alpha, nlp),
   kwargs...,
 ) where {T, V}
+  sub_instance = subsolver isa Type ? subsolver(nlp) : subsolver
   solver = R2NSolver(
     nlp;
     η1 = convert(T, η1),
@@ -570,7 +311,7 @@ end
     δ1 = convert(T, δ1),
     σmin = convert(T, σmin),
     non_mono_size = non_mono_size,
-    subsolver = subsolver,
+    subsolver = sub_instance,
     ls_c = convert(T, ls_c),
     ls_increase = convert(T, ls_increase),
     ls_decrease = convert(T, ls_decrease),
@@ -615,7 +356,7 @@ function SolverCore.solve!(
   ls_c = value(params.ls_c)
   ls_increase = value(params.ls_increase)
   ls_decrease = value(params.ls_decrease)
-  
+
   start_time = time()
   set_time!(stats, 0.0)
 
@@ -631,8 +372,8 @@ function SolverCore.solve!(
   σk = solver.σ
 
   subtol = solver.subtol
-  
-  initialize_subsolver!(solver.subsolver, nlp, x)
+
+  initialize!(solver.subsolver, nlp, x)
   H = get_operator(solver.subsolver)
 
   set_iter!(stats, 0)
@@ -651,7 +392,7 @@ function SolverCore.solve!(
 
   ϵ = atol + rtol * norm_∇fk
   optimal = norm_∇fk ≤ ϵ
-  
+
   if optimal
     @info "Optimal point found at initial point"
     @info log_header(
@@ -695,9 +436,9 @@ function SolverCore.solve!(
   subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * subtol))
   solver.σ = σk
   solver.subtol = subtol
-  
+
   if solver.subsolver isa ShiftedLBFGSSolver
-    scp_flag = false 
+    scp_flag = false
   end
 
   callback(nlp, solver, stats)
@@ -717,14 +458,13 @@ function SolverCore.solve!(
 
   while !done
     npcCount = 0
-    fck_computed = false 
+    fck_computed = false
 
     # Prepare RHS for subsolver (rhs = -∇f)
-    @. rhs = -∇fk 
-    
-    subsolver_solved, sub_stats, subiter, npcCount = solve_subproblem!(
-       solver.subsolver, s, rhs, σk, atol, subtol, n; verbose=subsolver_verbose
-    )
+    @. rhs = -∇fk
+
+    subsolver_solved, sub_stats, subiter, npcCount =
+      solver.subsolver(s, rhs, σk, atol, subtol, n; verbose = subsolver_verbose)
 
     if !subsolver_solved && npcCount == 0
       @warn "Subsolver failed to solve the system. Terminating."
@@ -732,28 +472,28 @@ function SolverCore.solve!(
       done = true
       break
     end
-    
+
     calc_scp_needed = false
     force_sigma_increase = false
     if solver.subsolver isa HSLR2NSubsolver
       num_neg, num_zero = get_inertia(solver.subsolver)
-    
+
       if num_zero > 0
-          force_sigma_increase = true
+        force_sigma_increase = true
       end
 
       if !force_sigma_increase && num_neg > 0
-          mul!(Hs, H, s)
-          curv_s = dot(s, Hs)
-          
-          if curv_s < 0
-              npcCount = 1
-              if npc_handler == :prev
-                  npc_handler = :gs  #Force the npc_handler to be gs and not :prev since we can not have that behavior with HSL subsolver
-              end
-          else
-              calc_scp_needed = true
+        mul!(Hs, H, s)
+        curv_s = dot(s, Hs)
+
+        if curv_s < 0
+          npcCount = 1
+          if npc_handler == :prev
+            npc_handler = :gs  #Force the npc_handler to be gs and not :prev since we can not have that behavior with HSL subsolver
           end
+        else
+          calc_scp_needed = true
+        end
       end
     end
 
@@ -761,23 +501,30 @@ function SolverCore.solve!(
       if npc_handler == :gs
         npcCount = 0
         dir = get_npc_direction(solver.subsolver)
-        
+
         # Ensure line search model points to current x and dir
         SolverTools.redirect!(solver.h, x, dir)
         f0_val = stats.objective
         dot_gs = dot(∇fk, dir) # dot_gs = ∇f^T * d
 
         α, ft, nbk, nbG = armijo_goldstein(
-          solver.h, f0_val, dot_gs;
-          t = one(T), τ₀ = ls_c, τ₁ = 1 - ls_c,
-          γ₀ = ls_decrease, γ₁ = ls_increase,
-          bk_max = 100, bG_max = 100, verbose = (verbose > 0),
+          solver.h,
+          f0_val,
+          dot_gs;
+          t = one(T),
+          τ₀ = ls_c,
+          τ₁ = 1 - ls_c,
+          γ₀ = ls_decrease,
+          γ₁ = ls_increase,
+          bk_max = 100,
+          bG_max = 100,
+          verbose = (verbose > 0),
         )
         @. s = α * dir
         fck_computed = true
       elseif npc_handler == :prev
         npcCount = 0
-        # s is already populated by solve_subproblem!
+        # s is already populated by solver.subsolver
       end
     end
 
@@ -797,7 +544,7 @@ function SolverCore.solve!(
 
       # scp = - ν_k * ∇f
       @. scp = -ν_k * ∇fk
-      
+
       if npc_handler == :cp && npcCount >= 1
         npcCount = 0
         s .= scp
@@ -819,7 +566,7 @@ function SolverCore.solve!(
 
       # Predicted Reduction: m(0) - m(s) = -g's - 0.5 s'Bs
       ΔTk = -dot_gs - dot_sHs / 2
-      
+
       # Verify that the predicted reduction is positive and numerically significant.
       # This check handles cases where the subsolver returns a poor step (e.g., if
       # npc_handler=:prev reuses a bad step) or if the reduction is dominated by 
@@ -850,26 +597,26 @@ function SolverCore.solve!(
           # We have ∇f_old in ∇fk. We need to save it or use a temp.
           # We use `rhs` as temp storage for ∇f_old since we are done with it for this iter.
           if isa(nlp, QuasiNewtonModel)
-             rhs .= ∇fk # Save old gradient
+            rhs .= ∇fk # Save old gradient
           end
-          
+
           x .= xt
           grad!(nlp, x, ∇fk) # ∇fk is now NEW gradient
-          
+
           if isa(nlp, QuasiNewtonModel)
-             @. y = ∇fk - rhs # y = new - old
-             push!(nlp, s, y)
+            @. y = ∇fk - rhs # y = new - old
+            push!(nlp, s, y)
           end
-          
+
           if !(solver.subsolver isa ShiftedLBFGSSolver)
-               update_subsolver!(solver.subsolver, nlp, x) 
-               H = get_operator(solver.subsolver) 
+            update!(solver.subsolver, nlp, x)
+            H = get_operator(solver.subsolver)
           end
-          
+
           set_objective!(stats, ft)
           unbounded = ft < fmin
           norm_∇fk = norm(∇fk)
-          
+
           if ρk >= η2
             σk = max(σmin, γ3 * σk)
           else
@@ -900,7 +647,15 @@ function SolverCore.solve!(
     if verbose > 0 && mod(stats.iter, verbose) == 0
       dir_stat = step_accepted ? "↘" : "↗"
       @info log_row([
-        stats.iter, stats.objective, norm_∇fk, norm(s), σk, ρk, subiter, dir_stat, sub_stats
+        stats.iter,
+        stats.objective,
+        norm_∇fk,
+        norm(s),
+        σk,
+        ρk,
+        subiter,
+        dir_stat,
+        sub_stats,
       ])
     end
 

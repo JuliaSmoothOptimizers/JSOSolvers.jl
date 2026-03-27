@@ -8,6 +8,7 @@ using Arpack, TSVD, GenericLinearAlgebra
 using Krylov,
   LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverParameters, SolverTools
 
+
 import SolverTools.reset!
 import SolverCore.solve!
 export default_callback_quasi_newton, solve!
@@ -60,7 +61,9 @@ function default_callback_quasi_newton(
   end
 end
 # subsolver interface
-include("sub_solver_common.jl")
+include("r2n_subsolver_common.jl")
+inlcude("R2N_subsolvers.jl")
+include("R2NLS_subsolvers.jl")
 
 # Unconstrained solvers
 include("lbfgs.jl")

@@ -1,8 +1,4 @@
-using QRMumps, SparseMatricesCOO
-
 export R2NLS, R2NLSSolver, R2NLSParameterSet
-export QRMumpsSubsolver, LSMRSubsolver, LSQRSubsolver, CGLSSubsolver
-export AbstractR2NLSSubsolver
 
 """
   R2NLSParameterSet([T=Float64]; η1, η2, θ1, θ2, γ1, γ2, γ3, δ1, σmin, non_mono_size)
@@ -94,171 +90,6 @@ function R2NLSParameterSet(
   )
 end
 
-# ==============================================================================
-#  QRMumps Subsolver
-# ==============================================================================
-
-mutable struct QRMumpsSubsolver{T} <: AbstractR2NLSSubsolver{T}
-  spmat::qrm_spmat{T}
-  spfct::qrm_spfct{T}
-  irn::Vector{Int}
-  jcn::Vector{Int}
-  val::Vector{T}
-  b_aug::Vector{T}
-  m::Int
-  n::Int
-  nnzj::Int
-  closed::Bool
-
-  # Stored internally, initialized in constructor
-  Jx::SparseMatrixCOO{T, Int}
-
-  function QRMumpsSubsolver(nls::AbstractNLSModel{T}, x::AbstractVector{T}) where {T}
-    qrm_init()
-    meta = nls.meta
-    n = meta.nvar
-    m = nls.nls_meta.nequ
-    nnzj = nls.nls_meta.nnzj
-
-    # 1. Allocate Arrays
-    irn = Vector{Int}(undef, nnzj + n)
-    jcn = Vector{Int}(undef, nnzj + n)
-    val = Vector{T}(undef, nnzj + n)
-
-    # 2. FILL STRUCTURE IMMEDIATELY 
-    # This populates the first nnzj elements with the Jacobian pattern
-    jac_structure_residual!(nls, view(irn, 1:nnzj), view(jcn, 1:nnzj))
-
-    # 3. Fill Regularization Structure
-    # Rows m+1 to m+n, Columns 1 to n
-    @inbounds for i = 1:n
-      irn[nnzj + i] = m + i
-      jcn[nnzj + i] = i
-    end
-
-    # 4. Create Jx
-    # Since irn/jcn are already populated, Jx is valid immediately.
-    # It copies the structure from irn/jcn.
-    Jx = SparseMatrixCOO(m, n, irn[1:nnzj], jcn[1:nnzj], val[1:nnzj])
-
-    # 5. Initialize QRMumps
-    spmat = qrm_spmat_init(m + n, n, irn, jcn, val; sym = false)
-    spfct = qrm_spfct_init(spmat)
-    b_aug = Vector{T}(undef, m + n)
-
-    # 6. Analyze Sparsity
-    qrm_analyse!(spmat, spfct; transp = 'n')
-
-    sub = new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, false, Jx)
-    # finalizer(free_qrm, sub) # we don't need, will cuase error but in the server the user may need to call free_qrm manually to free the memory,  
-    return sub
-  end
-end
-
-function free_qrm(sub::QRMumpsSubsolver)
-  if !sub.closed
-    qrm_spfct_destroy!(sub.spfct)
-    qrm_spmat_destroy!(sub.spmat)
-    sub.closed = true
-  end
-end
-
-function initialize_subsolver!(sub::QRMumpsSubsolver, nls, x)
-  # Just update the values for the new x.
-  update_jacobian!(sub, nls, x)
-end
-
-function update_jacobian!(sub::QRMumpsSubsolver, nls, x)
-  # 1. Compute Jacobian values into QRMumps 'val' array
-  jac_coord_residual!(nls, x, view(sub.val, 1:sub.nnzj))
-
-  # 2. Explicitly sync to Jx (Copy values)
-  # This ensures Jx.vals has the fresh Jacobian for the gradient calculation
-  sub.Jx.vals .= view(sub.val, 1:sub.nnzj)
-end
-
-function solve_subproblem!(sub::QRMumpsSubsolver{T}, s, rhs, σ, atol, rtol; verbose = 0) where {T}
-  sqrt_σ = sqrt(σ)
-
-  # 1. Update ONLY the regularization values 
-  @inbounds for i = 1:sub.n
-    sub.val[sub.nnzj + i] = sqrt_σ
-  end
-
-  # 2. Tell QRMumps values changed
-  qrm_update!(sub.spmat, sub.val)
-
-  # 3. Prepare RHS [-F(x); 0]
-  sub.b_aug[1:sub.m] .= rhs
-  sub.b_aug[(sub.m + 1):end] .= zero(T)
-
-  # 4. Factorize and Solve
-  qrm_factorize!(sub.spmat, sub.spfct; transp = 'n')
-  qrm_apply!(sub.spfct, sub.b_aug; transp = 't')
-  qrm_solve!(sub.spfct, sub.b_aug, s; transp = 'n')
-
-  return true, :solved, 1
-end
-
-get_jacobian(sub::QRMumpsSubsolver) = sub.Jx
-
-# ==============================================================================
-#   Krylov Subsolvers (LSMR, LSQR, CGLS)
-# ==============================================================================
-
-mutable struct GenericKrylovSubsolver{T, V, Op, W} <: AbstractR2NLSSubsolver{T}
-  workspace::W
-  Jx::Op
-  solver_name::Symbol
-
-  function GenericKrylovSubsolver(
-    nls::AbstractNLSModel{T, V},
-    x_init::V,
-    solver_name::Symbol,
-  ) where {T, V}
-    m = nls.nls_meta.nequ
-    n = nls.meta.nvar
-
-    # Jx and its buffers allocated here inside the subsolver
-    Jv = V(undef, m)
-    Jtv = V(undef, n)
-    Jx = jac_op_residual!(nls, x_init, Jv, Jtv)
-
-    workspace = krylov_workspace(Val(solver_name), m, n, V)
-    new{T, V, typeof(Jx), typeof(workspace)}(workspace, Jx, solver_name)
-  end
-end
-
-# Specific Constructors for Uniform Signature (nls, x)
-LSMRSubsolver(nls, x) = GenericKrylovSubsolver(nls, x, :lsmr)
-LSQRSubsolver(nls, x) = GenericKrylovSubsolver(nls, x, :lsqr)
-CGLSSubsolver(nls, x) = GenericKrylovSubsolver(nls, x, :cgls)
-
-function update_jacobian!(sub::GenericKrylovSubsolver, nls, x)
-  # Implicitly updated because Jx holds reference to x.
-  # We just ensure x is valid.
-  nothing
-end
-
-function solve_subproblem!(sub::GenericKrylovSubsolver, s, rhs, σ, atol, rtol; verbose = 0)
-  # λ allocation/calculation happens here in the solve
-  krylov_solve!(
-    sub.workspace,
-    sub.Jx,
-    rhs,
-    atol = atol,
-    rtol = rtol,
-    λ = sqrt(σ), # λ allocated here
-    itmax = max(2 * (size(sub.Jx, 1) + size(sub.Jx, 2)), 50),
-    verbose = verbose,
-  )
-  s .= sub.workspace.x
-  return Krylov.issolved(sub.workspace), sub.workspace.stats.status, sub.workspace.stats.niter
-end
-
-get_jacobian(sub::GenericKrylovSubsolver) = sub.Jx
-initialize_subsolver!(sub::GenericKrylovSubsolver, nls, x) = nothing
-
 """
   R2NLS(nls; kwargs...)
 
@@ -341,7 +172,7 @@ end
 
 function R2NLSSolver(
   nls::AbstractNLSModel{T, V};
-  subsolver = QRMumpsSubsolver, # Default is the TYPE QRMumpsSubsolver
+  subsolver::AbstractR2NLSSubsolver{T} = QRMumpsSubsolver(nls), # Default is an INSTANCE
   η1::T = get(R2NLS_η1, nls),
   η2::T = get(R2NLS_η2, nls),
   θ1::T = get(R2NLS_θ1, nls),
@@ -387,17 +218,8 @@ function R2NLSSolver(
 
   x .= nls.meta.x0
 
-  # Instantiate Subsolver
-  # Strictly checks for Type or AbstractR2NLSSubsolver instance
-  if subsolver isa Union{Type, Function}
-    sub_inst = subsolver(nls, x)
-  elseif subsolver isa AbstractR2NLSSubsolver
-    sub_inst = subsolver
-  else
-    error("subsolver must be a Type or an AbstractR2NLSSubsolver instance")
-  end
-
-  R2NLSSolver(x, xt, gx, r, rt, temp, sub_inst, obj_vec, one(T), s, scp, eps(T)^(1/5), params)
+  # We pass the subsolver instance directly into the struct. No if/else checks needed!
+  R2NLSSolver(x, xt, gx, r, rt, temp, subsolver, obj_vec, one(T), s, scp, eps(T)^(1/5), params)
 end
 
 function SolverCore.reset!(solver::R2NLSSolver{T}) where {T}
@@ -428,9 +250,10 @@ end
   non_mono_size::Int = get(R2NLS_non_mono_size, nls),
   compute_cauchy_point::Bool = get(R2NLS_compute_cauchy_point, nls),
   inexact_cauchy_point::Bool = get(R2NLS_inexact_cauchy_point, nls),
-  subsolver = QRMumpsSubsolver,
+  subsolver::AbstractR2NLSSubsolver = QRMumpsSubsolver(nls),
   kwargs...,
 ) where {T, V}
+  sub_instance = subsolver isa Type ? subsolver(nls) : subsolver
   solver = R2NLSSolver(
     nls;
     η1 = convert(T, η1),
@@ -445,7 +268,7 @@ end
     non_mono_size = non_mono_size,
     compute_cauchy_point = compute_cauchy_point,
     inexact_cauchy_point = inexact_cauchy_point,
-    subsolver = subsolver,
+    subsolver = sub_instance,
   )
   return solve!(solver, nls; kwargs...)
 end
@@ -499,7 +322,7 @@ function SolverCore.solve!(
   ∇f = solver.gx
 
   # Ensure subsolver is up to date with initial x
-  initialize_subsolver!(solver.subsolver, nls, x)
+  initialize!(solver.subsolver, nls, x)
 
   # Get accessor for Jacobian (abstracted away from solver details)
   Jx = get_jacobian(solver.subsolver)
@@ -512,12 +335,8 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇f)
 
   # Heuristic for initial σ
-  #TODO check with prof Orban
-  if Jx isa AbstractMatrix
-    solver.σ = max(T(1e-6), T(1e-4) * maximum(sum(abs2, Jx, dims = 1)))
-  else
-    solver.σ = 2^round(log2(norm_∇fk + 1)) / norm_∇fk
-  end
+
+  solver.σ = 2^round(log2(norm_∇fk + 1)) / norm_∇fk
 
   # Stopping criterion: 
   unbounded = false
@@ -591,15 +410,8 @@ function SolverCore.solve!(
     # We pass -r as RHS. Subsolver handles its own temp/workspace for this.
     @. temp = -r
 
-    sub_solved, sub_stats, sub_iter = solve_subproblem!(
-      solver.subsolver,
-      s,
-      temp,
-      solver.σ,
-      atol,
-      solver.subtol,
-      verbose = subsolver_verbose,
-    )
+    sub_solved, sub_stats, sub_iter =
+      solver.subsolver(s, temp, solver.σ, atol, solver.subtol, verbose = subsolver_verbose)
 
     # 2. Cauchy Point
     if compute_cauchy_point
@@ -609,8 +421,7 @@ function SolverCore.solve!(
         γ_k = curvature_gn / norm_∇fk^2 + solver.σ
         ν_k = 2 * (1 - δ1) / γ_k
       else
-        λmax, found_λ = opnorm(Jx)
-        !found_λ && error("operator norm computation failed")
+        λmax = get_operator_norm(solver.subsolver)
         ν_k = θ1 / (λmax + solver.σ)
       end
 
@@ -649,7 +460,7 @@ function SolverCore.solve!(
       f = ft
 
       # Update Subsolver Jacobian
-      update_jacobian!(solver.subsolver, nls, x)
+      update!(solver.subsolver, nls, x)
 
       resid_norm = resid_norm_t
       mul!(∇f, Jx', r)
