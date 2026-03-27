@@ -500,7 +500,8 @@ function SolverCore.solve!(
     if !(solver.subsolver isa ShiftedLBFGSSolver) && npcCount >= 1
       if npc_handler == :gs
         npcCount = 0
-        dir = get_npc_direction(solver.subsolver)
+        # If it's HSL, `s` is already our NPC direction
+        dir = solver.subsolver isa HSLR2NSubsolver ? s : get_npc_direction(solver.subsolver)
 
         # Ensure line search model points to current x and dir
         SolverTools.redirect!(solver.h, x, dir)
