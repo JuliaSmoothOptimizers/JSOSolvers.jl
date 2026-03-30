@@ -567,7 +567,7 @@ function SolverCore.solve!(
       npcCount = 0
     else 
       # Determine if we took an NPC Armijo-Goldstein step this iteration
-      if is_npc_gs_step && always_accept_npc_gs
+      if is_npc_gs_step && always_accept_npc_ag
         is_npc_gs_step = false # reset
         # Skip the model decrease computation entirely!
         # Force the ratio to act like a very successful step to escape the saddle point.
