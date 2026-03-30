@@ -195,7 +195,7 @@ function R2NSolver(
   δ1 = get(R2N_δ1, nlp),
   σmin = get(R2N_σmin, nlp),
   non_mono_size = get(R2N_non_mono_size, nlp),
-  subsolver::AbstractR2NSubsolver{T} = CGR2NSubsolver(nlp), # Default is an INSTANCE
+  subsolver::Union{Type, AbstractR2NSubsolver} = CGR2NSubsolver(nlp), # Default is an INSTANCE
   ls_c = get(R2N_ls_c, nlp),
   ls_increase = get(R2N_ls_increase, nlp),
   ls_decrease = get(R2N_ls_decrease, nlp),

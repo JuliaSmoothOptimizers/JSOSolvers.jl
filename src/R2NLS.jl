@@ -250,7 +250,7 @@ end
   non_mono_size::Int = get(R2NLS_non_mono_size, nls),
   compute_cauchy_point::Bool = get(R2NLS_compute_cauchy_point, nls),
   inexact_cauchy_point::Bool = get(R2NLS_inexact_cauchy_point, nls),
-  subsolver::AbstractR2NLSSubsolver = QRMumpsSubsolver(nls),
+  subsolver::Union{Type, AbstractR2NLSSubsolver} = QRMumpsSubsolver(nls),
   kwargs...,
 ) where {T, V}
   sub_instance = subsolver isa Type ? subsolver(nls) : subsolver
