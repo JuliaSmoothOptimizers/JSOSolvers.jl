@@ -31,10 +31,10 @@ mutable struct KrylovR2NSubsolver{T, V, Op, W, ShiftOp} <: AbstractR2NSubsolver{
   end
 end
 
-CGR2NSubsolver(nlp, x) = KrylovR2NSubsolver(nlp, :cg)
-CRR2NSubsolver(nlp, x) = KrylovR2NSubsolver(nlp, :cr)
-MinresR2NSubsolver(nlp, x) = KrylovR2NSubsolver(nlp, :minres)
-MinresQlpR2NSubsolver(nlp, x) = KrylovR2NSubsolver(nlp, :minres_qlp)
+CGR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :cg)
+CRR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :cr)
+MinresR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :minres)
+MinresQlpR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :minres_qlp)
 
 function initialize!(sub::KrylovR2NSubsolver, nlp, x)
   return nothing
