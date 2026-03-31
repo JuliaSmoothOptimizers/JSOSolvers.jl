@@ -562,7 +562,8 @@ function SolverCore.solve!(
 
     if force_sigma_increase || (npc_handler == :sigma && npcCount >= 1)
       step_accepted = false
-      σk = max(σmin, γ2 * σk)
+      # σk = max(σmin, γ2 * σk)
+      σk = γ2 * σk
       solver.σ = σk
       npcCount = 0
     else 
@@ -571,7 +572,7 @@ function SolverCore.solve!(
         is_npc_gs_step = false # reset
         # Skip the model decrease computation entirely!
         # Force the ratio to act like a very successful step to escape the saddle point.
-        ρk = η2
+        ρk = η1 #TODO set to eta 1
         @. xt = x + s
         step_accepted = true
       else
@@ -637,10 +638,12 @@ function SolverCore.solve!(
             # Very successful step
             if fast_local_convergence
               # Local fast convergence variant: scale by the norm of the current gradient
-              σk = max(σmin, γ3 * min(σk, norm_∇fk))
+              # σk = max(σmin, γ3 * min(σk, norm_∇fk))
+              # TODO Sigma can go to zero
+              σk =  γ3 * min(σk, norm_∇fk)
             else
               # Standard update
-              σk = max(σmin, γ3 * σk)
+              σk =   γ3 * σk
             end
           else
             σk = γ1 * σk
