@@ -40,7 +40,7 @@ function initialize!(sub::KrylovR2NSubsolver, nlp, x)
   return nothing
 end
 
-function update!(sub::KrylovR2NSubsolver, nlp, x)
+function update_subsolver!(sub::KrylovR2NSubsolver, nlp, x)
   # Standard hess_op updates internally if it holds the NLP reference
   return nothing
 end
@@ -118,7 +118,7 @@ end
 ShiftedLBFGSSolver(nlp) = ShiftedLBFGSSolver(nlp)
 
 initialize!(sub::ShiftedLBFGSSolver, nlp, x) = nothing
-update!(sub::ShiftedLBFGSSolver, nlp, x) = nothing # LBFGS updates via push! in outer loop
+update_subsolver!(sub::ShiftedLBFGSSolver, nlp, x) = nothing # LBFGS updates via push! in outer loop
 
 function (sub::ShiftedLBFGSSolver)(s, rhs, σ, atol, rtol, n; verbose = 0)
   # rhs is usually -∇f. solve_shifted_system! expects negative gradient
@@ -191,7 +191,7 @@ function initialize!(sub::HSLR2NSubsolver, nlp, x)
   return nothing
 end
 
-function update!(sub::HSLR2NSubsolver, nlp, x)
+function update_subsolver!(sub::HSLR2NSubsolver, nlp, x)
   hess_coord!(nlp, x, view(sub.vals, 1:sub.nnzh))
 end
 

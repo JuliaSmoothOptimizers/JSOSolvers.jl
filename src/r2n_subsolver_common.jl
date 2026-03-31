@@ -4,7 +4,7 @@
 # ==============================================================================
 
 export AbstractSubsolver, AbstractR2NSubsolver, AbstractR2NLSSubsolver
-export initialize!, update!
+export initialize!, update_subsolver!
 export get_operator,
   get_jacobian, get_inertia, has_npc_direction, get_npc_direction, get_operator_norm
 
@@ -46,13 +46,13 @@ This is typically called once at the start of the optimization.
 function initialize! end
 
 """
-    update!(subsolver::AbstractSubsolver, model, x)
+    update_subsolver!(subsolver::AbstractSubsolver, model, x)
 
 Update the internal representation of the subsolver at point `x`.
 For R2N solvers, this typically updates the Hessian or Operator.
 For R2NLS solvers, this updates the Jacobian.
 """
-function update! end
+function update_subsolver! end
 
 """
     get_operator(subsolver)
