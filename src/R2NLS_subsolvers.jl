@@ -62,10 +62,10 @@ end
 
 function initialize!(sub::QRMumpsSubsolver, nls, x)
   # Just update the values for the new x.
-  update!(sub, nls, x)
+  update_subsolver!(sub, nls, x)
 end
 
-function update!(sub::QRMumpsSubsolver, nls, x)
+function update_subsolver!(sub::QRMumpsSubsolver, nls, x)
   # 1. Compute Jacobian values into QRMumps 'val' array
   jac_coord_residual!(nls, x, view(sub.val, 1:sub.nnzj))
 
@@ -83,7 +83,7 @@ function (sub::QRMumpsSubsolver{T})(s, rhs, σ, atol, rtol; verbose = 0) where {
   end
 
   # 2. Tell QRMumps values changed
-  qrm_update!(sub.spmat, sub.val)
+  qrm_update_subsolver!(sub.spmat, sub.val)
 
   # 3. Prepare RHS [-F(x); 0]
   sub.b_aug[1:sub.m] .= rhs
@@ -134,7 +134,7 @@ LSMRSubsolver(nls, x) = GenericKrylovSubsolver(nls, :lsmr)
 LSQRSubsolver(nls, x) = GenericKrylovSubsolver(nls, :lsqr)
 CGLSSubsolver(nls, x) = GenericKrylovSubsolver(nls, :cgls)
 
-function update!(sub::GenericKrylovSubsolver, nls, x)
+function update_subsolver!(sub::GenericKrylovSubsolver, nls, x)
   # Implicitly updated because Jx holds reference to x.
   # We just ensure x is valid.
   nothing

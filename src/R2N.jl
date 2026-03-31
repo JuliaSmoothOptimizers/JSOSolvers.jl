@@ -626,7 +626,7 @@ function SolverCore.solve!(
           end
 
           if !(solver.subsolver isa ShiftedLBFGSSolver)
-            update!(solver.subsolver, nlp, x)
+            update_subsolver!(solver.subsolver, nlp, x)
             H = get_operator(solver.subsolver)
           end
 

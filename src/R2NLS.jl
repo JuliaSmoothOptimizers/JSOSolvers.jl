@@ -460,7 +460,7 @@ function SolverCore.solve!(
       f = ft
 
       # Update Subsolver Jacobian
-      update!(solver.subsolver, nls, x)
+      update_subsolver!(solver.subsolver, nls, x)
 
       resid_norm = resid_norm_t
       mul!(∇f, Jx', r)
