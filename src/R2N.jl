@@ -459,7 +459,7 @@ function SolverCore.solve!(
   sub_stats = :unknown
   subiter = 0
   dir_stat = ""
-  is_npc_gs_step = false # Determine if we took an NPC Goldstein step this iteration
+  is_npc_ag_step = false # Determine if we took an NPC Goldstein step this iteration
 
   while !done
     npcCount = 0
@@ -504,7 +504,7 @@ function SolverCore.solve!(
 
     if !(solver.subsolver isa ShiftedLBFGSSolver) && npcCount >= 1
       if npc_handler == :ag
-        is_npc_gs_step = true
+        is_npc_ag_step = true
         npcCount = 0
         # If it's HSL, `s` is already our NPC direction
         dir = solver.subsolver isa HSLR2NSubsolver ? s : get_npc_direction(solver.subsolver)
@@ -555,46 +555,49 @@ function SolverCore.solve!(
       if npc_handler == :cp && npcCount >= 1
         npcCount = 0
         s .= scp
+        fck_computed = false
       elseif norm(s) > θ2 * norm(scp)
         s .= scp
+        fck_computed = false
       end
     end
 
-    if force_sigma_increase || (npc_handler == :sigma && npcCount >= 1)
+
+
+
+
+  if force_sigma_increase || (npc_handler == :sigma && npcCount >= 1)
       step_accepted = false
-      # σk = max(σmin, γ2 * σk)
       σk = γ2 * σk
       solver.σ = σk
       npcCount = 0
     else 
-      # Determine if we took an NPC Armijo-Goldstein step this iteration
-      if is_npc_gs_step && always_accept_npc_ag
-        is_npc_gs_step = false # reset
-        # Skip the model decrease computation entirely!
-        # Force the ratio to act like a very successful step to escape the saddle point.
-        ρk = η1 #TODO set to eta 1
+      # 1. Determine if we took an NPC Armijo-Goldstein step this iteration
+      if is_npc_ag_step && always_accept_npc_ag
+        is_npc_ag_step = false # reset
+        ρk = η1 
         @. xt = x + s
+        
+        # Safety Check: If the Cauchy step logic overwrote `s`, we MUST re-evaluate ft!
+        if !fck_computed
+          ft = obj(nlp, xt)
+        end
+        
         step_accepted = true
+      
+      # 2. Standard Model Predicted Reduction
       else
-        # Compute Model Predicted Reduction
         mul!(Hs, H, s)
         dot_sHs = dot(s, Hs)    # s' (H + σI) s
-        dot_ag = dot(s, ∇fk)  # ∇f' s
+        dot_ag = dot(s, ∇fk)    # ∇f' s
 
         # Predicted Reduction: m(0) - m(s) = -g's - 0.5 s'Bs
         ΔTk = -dot_ag - dot_sHs / 2
 
-        # Verify that the predicted reduction is positive and numerically significant.
-        # This check handles cases where the subsolver returns a poor step (e.g., if
-        # npc_handler=:prev reuses a bad step) or if the reduction is dominated by 
-        # machine noise relative to the objective value.
         if ΔTk <= eps(T) * max(one(T), abs(stats.objective))
           step_accepted = false
-          σk = max(σmin, γ2 * σk)
-          solver.σ = σk
         else
           @. xt = x + s
-
           if !fck_computed
             ft = obj(nlp, xt)
           end
@@ -608,49 +611,47 @@ function SolverCore.solve!(
             ρk = (stats.objective - ft) / ΔTk
           end
           step_accepted = ρk >= η1
-        end        
-        if step_accepted
-          # Quasi-Newton Update: Needs ∇f_new - ∇f_old.
-          # We have ∇f_old in ∇fk. We need to save it or use a temp.
-          # We use `rhs` as temp storage for ∇f_old since we are done with it for this iter.
-          if isa(nlp, QuasiNewtonModel)
-            rhs .= ∇fk # Save old gradient
-          end
+        end
+      end  
 
-          x .= xt
-          grad!(nlp, x, ∇fk) # ∇fk is now NEW gradient
+      # 3. Process the Step  
+      if step_accepted
+        # Quasi-Newton Update: Needs ∇f_new - ∇f_old.
+        if isa(nlp, QuasiNewtonModel)
+          rhs .= ∇fk # Save old gradient
+        end
 
-          if isa(nlp, QuasiNewtonModel)
-            @. y = ∇fk - rhs # y = new - old
-            push!(nlp, s, y)
-          end
+        x .= xt
+        grad!(nlp, x, ∇fk) # ∇fk is now NEW gradient
 
-          if !(solver.subsolver isa ShiftedLBFGSSolver)
-            update_subsolver!(solver.subsolver, nlp, x)
-            H = get_operator(solver.subsolver)
-          end
+        if isa(nlp, QuasiNewtonModel)
+          @. y = ∇fk - rhs # y = new - old
+          push!(nlp, s, y)
+        end
 
-          set_objective!(stats, ft)
-          unbounded = ft < fmin
-          norm_∇fk = norm(∇fk)
+        if !(solver.subsolver isa ShiftedLBFGSSolver)
+          update_subsolver!(solver.subsolver, nlp, x)
+          H = get_operator(solver.subsolver)
+        end
 
-          if ρk >= η2
-            # Very successful step
-            if fast_local_convergence
-              # Local fast convergence variant: scale by the norm of the current gradient
-              # σk = max(σmin, γ3 * min(σk, norm_∇fk))
-              # TODO Sigma can go to zero
-              σk =  γ3 * min(σk, norm_∇fk)
-            else
-              # Standard update
-              σk =   γ3 * σk
-            end
+        set_objective!(stats, ft)
+        unbounded = ft < fmin
+        norm_∇fk = norm(∇fk)
+
+        # Update Sigma on Success
+        if ρk >= η2
+          if fast_local_convergence
+            σk = γ3 * min(σk, norm_∇fk)
           else
-            σk = γ1 * σk
+            σk = γ3 * σk
           end
         else
-          σk = γ2 * σk
+          σk = γ1 * σk
         end
+      
+      # Update Sigma on Rejection
+      else
+        σk = γ2 * σk
       end
     end
 
