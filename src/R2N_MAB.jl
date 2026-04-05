@@ -64,6 +64,7 @@ function R2NMABSolver(
     ls_decrease = get(R2N_ls_decrease, nlp),
     ls_min_alpha = get(R2N_ls_min_alpha, nlp),
     ls_max_alpha = get(R2N_ls_max_alpha, nlp),
+    kwargs...
 ) where {T, V}
     
     @assert abs(w1 + w2 + w3 - one(T)) < sqrt(eps(T)) "Bandit weights w1, w2, w3 must sum to 1.0"
