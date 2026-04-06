@@ -70,7 +70,6 @@ include("lbfgs.jl")
 include("trunk.jl")
 include("fomo.jl")
 include("R2N.jl")
-include("R2N_MAB.jl")
 
 # Unconstrained solvers for NLS
 include("trunkls.jl")
