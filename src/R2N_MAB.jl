@@ -1,28 +1,24 @@
-export R2NMAB, R2NMABSolver, R2NArm
+export R2NMAB, R2NContextualSolver, R2NArm
 
 """
     R2NArm{T}
 
-A specific hyperparameter configuration (an "arm") for the MAB-R2N solver.
+A specific regularization configuration (an "arm") for the Contextual MAB-R2N solver.
+Only contains the gamma parameters to preserve global convergence guarantees.
 """
 struct R2NArm{T}
-    θ1::T
-    θ2::T
-    η1::T
-    η2::T
     γ1::T
     γ2::T
     γ3::T
 end
 
 """
-    R2NMABSolver
+    R2NContextualSolver
 
-A mutable solver structure for the Bandit-tuned R2N algorithm. 
-Maintains the standard R2N memory allocations while adding the UCB Bandit 
-trackers (N counts, Q values) and composite reward weights.
+Maintains the standard R2N memory allocations while adding Contextual UCB Bandit 
+trackers (N counts, Q values), a history window for state aggregation, and learning rates.
 """
-mutable struct R2NMABSolver{T, V, Sub <: AbstractR2NSubsolver{T}, M <: AbstractNLPModel{T, V}} <: AbstractOptimizationSolver
+mutable struct R2NContextualSolver{T, V, Sub <: AbstractR2NSubsolver{T}, M <: AbstractNLPModel{T, V}} <: AbstractOptimizationSolver
     x::V
     xt::V
     gx::V
@@ -38,23 +34,22 @@ mutable struct R2NMABSolver{T, V, Sub <: AbstractR2NSubsolver{T}, M <: AbstractN
     σ::T
     params::R2NParameterSet{T}
     
-    # Bandit Specific State
+    # Contextual Bandit State
     arms::Vector{R2NArm{T}}
-    N::Vector{Int}      # Play counts
-    Q::Vector{T}        # Estimated average rewards
-    ucb_c::T            # Exploration constant
-    w1::T               # Weight: Model Agreement (ρ)
-    w2::T               # Weight: Stationarity Progress
-    w3::T               # Weight: Step Vigor
+    window_size::Int
+    history::Vector{Int} # Stores 0 (Fail), 1 (Success), or 2 (Very Success)
+    N::Matrix{Int}       # Play counts [num_states, num_arms]
+    Q::Matrix{T}         # Q-values [num_states, num_arms]
+    ucb_c::T             # Exploration constant
+    alpha::T             # Recency learning rate
 end
 
-function R2NMABSolver(
+function R2NContextualSolver(
     nlp::AbstractNLPModel{T, V},
     arms::Vector{R2NArm{T}};
+    window_size::Int = 5,
     ucb_c::T = T(0.1),
-    w1::T = T(0.4),
-    w2::T = T(0.4),
-    w3::T = T(0.2),
+    alpha::T = T(0.2),
     δ1 = get(R2N_δ1, nlp),
     σmin = get(R2N_σmin, nlp),
     non_mono_size = get(R2N_non_mono_size, nlp),
@@ -67,20 +62,14 @@ function R2NMABSolver(
     kwargs...
 ) where {T, V}
     
-    @assert abs(w1 + w2 + w3 - one(T)) < sqrt(eps(T)) "Bandit weights w1, w2, w3 must sum to 1.0"
     @assert length(arms) > 0 "Must provide at least one R2NArm"
+    @assert window_size > 0 "Window size must be strictly positive"
 
-    # Default parameters for baseline fallback
+    # Baseline static parameters (θ and η)
     params = R2NParameterSet(
-        nlp;
-        δ1 = δ1,
-        σmin = σmin,
-        non_mono_size = non_mono_size,
-        ls_c = ls_c,
-        ls_increase = ls_increase,
-        ls_decrease = ls_decrease,
-        ls_min_alpha = ls_min_alpha,
-        ls_max_alpha = ls_max_alpha,
+        nlp; δ1 = δ1, σmin = σmin, non_mono_size = non_mono_size,
+        ls_c = ls_c, ls_increase = ls_increase, ls_decrease = ls_decrease,
+        ls_min_alpha = ls_min_alpha, ls_max_alpha = ls_max_alpha,
     )
 
     nvar = nlp.meta.nvar
@@ -100,18 +89,22 @@ function R2NMABSolver(
 
     sub_instance = subsolver isa Type ? subsolver(nlp) : subsolver
 
+    # Bandit Initialization
     num_arms = length(arms)
-    N = zeros(Int, num_arms)
-    Q = zeros(T, num_arms)
+    num_states = (2 * window_size) + 1 # Max score is 2 * window_size, plus 1 for the zero index
+    history = zeros(Int, window_size)
+    N = zeros(Int, num_states, num_arms)
+    Q = zeros(T, num_states, num_arms)
 
-    return R2NMABSolver{T, V, typeof(sub_instance), typeof(nlp)}(
+    return R2NContextualSolver{T, V, typeof(sub_instance), typeof(nlp)}(
         x, xt, gx, rhs, y, Hs, s, scp, obj_vec, sub_instance, h, subtol, σ, params,
-        arms, N, Q, ucb_c, w1, w2, w3
+        arms, window_size, history, N, Q, ucb_c, alpha
     )
 end
 
-function SolverCore.reset!(solver::R2NMABSolver{T}) where {T}
+function SolverCore.reset!(solver::R2NContextualSolver{T}) where {T}
     fill!(solver.obj_vec, typemin(T))
+    fill!(solver.history, 0)
     fill!(solver.N, 0)
     fill!(solver.Q, zero(T))
     if solver.subsolver isa KrylovR2NSubsolver
@@ -120,33 +113,21 @@ function SolverCore.reset!(solver::R2NMABSolver{T}) where {T}
     return solver
 end
 
-function SolverCore.reset!(solver::R2NMABSolver{T}, nlp::AbstractNLPModel) where {T}
-    fill!(solver.obj_vec, typemin(T))
-    fill!(solver.N, 0)
-    fill!(solver.Q, zero(T))
-    if solver.subsolver isa KrylovR2NSubsolver
-        LinearOperators.reset!(solver.subsolver.H)
-    end
-    solver.h = LineModel(nlp, solver.x, solver.s)
-    return solver
+function get_current_state(solver::R2NContextualSolver)
+    return sum(solver.history) + 1
 end
 
-"""
-    R2NMAB(nlp, arms; kwargs...)
-
-Executes the R2N algorithm with online hyperparameter tuning via Upper Confidence Bound (UCB) Multi-Armed Bandits.
-"""
 function R2NMAB(
     nlp::AbstractNLPModel{T, V},
     arms::Vector{R2NArm{T}};
     kwargs...
 ) where {T, V}
-    solver = R2NMABSolver(nlp, arms; kwargs...)
+    solver = R2NContextualSolver(nlp, arms; kwargs...)
     return solve!(solver, nlp; kwargs...)
 end
 
 function SolverCore.solve!(
-    solver::R2NMABSolver{T, V},
+    solver::R2NContextualSolver{T, V},
     nlp::AbstractNLPModel{T, V},
     stats::GenericExecutionStats{T, V} = GenericExecutionStats(nlp);
     callback = (args...) -> nothing,
@@ -169,10 +150,15 @@ function SolverCore.solve!(
     
     SolverCore.reset!(stats)
     params = solver.params
+    
+    # Static parameters
+    η1 = value(params.η1)
+    η2 = value(params.η2)
+    θ1 = value(params.θ1)
+    θ2 = value(params.θ2)
     δ1 = value(params.δ1)
     σmin = value(params.σmin)
     non_mono_size = value(params.non_mono_size)
-
     ls_c = value(params.ls_c)
     ls_increase = value(params.ls_increase)
     ls_decrease = value(params.ls_decrease)
@@ -190,7 +176,6 @@ function SolverCore.solve!(
     scp = solver.scp
     Hs = solver.Hs
     σk = solver.σ
-
     subtol = solver.subtol
 
     initialize!(solver.subsolver, nlp, x)
@@ -206,10 +191,8 @@ function SolverCore.solve!(
 
     σk = 2^round(log2(norm_∇fk + 1)) / norm_∇fk
     ρk = zero(T)
-
     fmin = min(-one(T), f0) / eps(T)
     unbounded = f0 < fmin
-
     ϵ = atol + rtol * norm_∇fk
     optimal = norm_∇fk ≤ ϵ
 
@@ -222,52 +205,39 @@ function SolverCore.solve!(
     subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * subtol))
     solver.σ = σk
     solver.subtol = subtol
-
     callback(nlp, solver, stats)
-    subtol = solver.subtol
-    σk = solver.σ
-
+    
     done = stats.status != :unknown
     ft = f0
-
     step_accepted = false
-    sub_stats = :unknown
     subiter = 0
-    dir_stat = ""
     is_npc_ag_step = false
 
     while !done
         # ==========================================================
-        # 1. BANDIT ACTION SELECTION (UCB)
+        # 1. CONTEXTUAL BANDIT ACTION SELECTION (UCB)
         # ==========================================================
-        unplayed_idx = findfirst(==(0), solver.N)
+        current_state = get_current_state(solver)
+        
+        unplayed_idx = findfirst(==(0), solver.N[current_state, :])
         i_k = if unplayed_idx !== nothing
-            unplayed_idx # Pure exploration of all arms first
+            unplayed_idx # Pure exploration for this specific state
         else
-            total_plays = sum(solver.N)
-            # argmax (Q_i + c * sqrt(ln(t) / N_i))
-            argmax(solver.Q .+ solver.ucb_c .* sqrt.(log(T(total_plays)) ./ solver.N))
+            total_plays = sum(solver.N[current_state, :])
+            argmax(solver.Q[current_state, :] .+ solver.ucb_c .* sqrt.(log(T(total_plays)) ./ solver.N[current_state, :]))
         end
 
-        # Extract dynamic parameters for this iteration
+        # Extract dynamic gamma parameters
         active_arm = solver.arms[i_k]
-        θ1 = active_arm.θ1
-        θ2 = active_arm.θ2
-        η1 = active_arm.η1
-        η2 = active_arm.η2
         γ1 = active_arm.γ1
         γ2 = active_arm.γ2
         γ3 = active_arm.γ3
 
-        # Track old state for Bandit Reward
-        norm_∇fk_old = norm_∇fk
-        
         # ==========================================================
-        # 2. CORE R2N STEP (Using dynamic parameters)
+        # 2. CORE R2N STEP
         # ==========================================================
         npcCount = 0
         fck_computed = false
-
         @. rhs = -∇fk
 
         subsolver_solved, sub_stats, subiter, npcCount = 
@@ -407,6 +377,35 @@ function SolverCore.solve!(
             end
         end
 
+        # ==========================================================
+        # 3. CONTEXT & REWARD UPDATE
+        # ==========================================================
+        norm_s = norm(s)
+        
+        # Calculate Reward
+        if step_accepted
+            final_reward = norm_s / (one(T) + norm_s)
+        else
+            final_reward = zero(T)
+        end
+        
+        # Update trackers for the specific state and arm chosen
+        solver.N[current_state, i_k] += 1
+        solver.Q[current_state, i_k] += solver.alpha * (final_reward - solver.Q[current_state, i_k])
+
+        # Shift history queue and push new outcome
+        popfirst!(solver.history)
+        if !step_accepted
+            push!(solver.history, 0)
+        elseif ρk >= η2
+            push!(solver.history, 2)
+        else
+            push!(solver.history, 1)
+        end
+
+        # ==========================================================
+        # Loop Maintenance
+        # ==========================================================
         set_iter!(stats, stats.iter + 1)
         set_time!(stats, time() - start_time)
 
@@ -415,54 +414,16 @@ function SolverCore.solve!(
 
         solver.σ = σk
         solver.subtol = subtol
-
         callback(nlp, solver, stats)
-        
-        # ==========================================================
-        # 3. BANDIT REWARD & BELIEF UPDATE
-        # ==========================================================
-        norm_s = norm(s)
-        
-        # Component 1: Bounded Model Agreement (Clip to [0,1] to avoid wild swings)
-        rho_reward = max(zero(T), min(one(T), ρk))
-        
-        # Component 2: Stationarity Progress
-        # If rejected, norm_∇fk is unchanged, so progress is 0.
-        grad_progress = max(zero(T), (norm_∇fk_old - norm_∇fk) / norm_∇fk_old)
-        
-        # Component 3: Step Vigor 
-        step_vigor = norm_s / (one(T) + norm_s)
-        
-        # Composite calculation
-        raw_reward = solver.w1 * rho_reward + solver.w2 * grad_progress + solver.w3 * step_vigor
-        final_reward = max(zero(T), raw_reward)
-        
-        # Update trackers for the chosen arm
-        solver.N[i_k] += 1
-        solver.Q[i_k] += (final_reward - solver.Q[i_k]) / solver.N[i_k]
 
-        # ==========================================================
-        # Loop Termination Checking
-        # ==========================================================
-        norm_∇fk = stats.dual_feas
-        σk = solver.σ
         optimal = norm_∇fk ≤ ϵ
-
         if stats.status == :user
             done = true
         else
             set_status!(
                 stats,
-                get_status(
-                    nlp,
-                    elapsed_time = stats.elapsed_time,
-                    optimal = optimal,
-                    unbounded = unbounded,
-                    max_eval = max_eval,
-                    iter = stats.iter,
-                    max_iter = max_iter,
-                    max_time = max_time,
-                ),
+                get_status(nlp, elapsed_time=stats.elapsed_time, optimal=optimal, unbounded=unbounded,
+                           max_eval=max_eval, iter=stats.iter, max_iter=max_iter, max_time=max_time)
             )
             done = stats.status != :unknown
         end
