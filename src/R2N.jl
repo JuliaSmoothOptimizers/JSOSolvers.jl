@@ -469,7 +469,7 @@ function SolverCore.solve!(
     @. rhs = -∇fk
 
     subsolver_solved, sub_stats, subiter, npcCount =
-      solver.subsolver(s, rhs, σk, atol, subtol, n; verbose = subsolver_verbose)
+      solver.subsolver(s, rhs, σk, T(0.0), subtol, n; verbose = subsolver_verbose) # TODO atol = 0 when subsolver 
 
     if !subsolver_solved && npcCount == 0
       @warn "Subsolver failed to solve the system. Terminating."
@@ -658,7 +658,7 @@ function SolverCore.solve!(
     set_iter!(stats, stats.iter + 1)
     set_time!(stats, time() - start_time)
 
-    subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * subtol))
+    subtol = max(√eps(T), min(T(0.1), √norm_∇fk, T(0.9) * subtol)) # TODO
     set_dual_residual!(stats, norm_∇fk)
 
     solver.σ = σk

@@ -33,7 +33,7 @@ end
 
 CGR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :cg)
 CRR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :cr)
-MinresR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :minres)
+MinresR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :minres) 
 MinresQlpR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :minres_qlp)
 
 function initialize!(sub::KrylovR2NSubsolver, nlp, x)
@@ -49,7 +49,7 @@ function (sub::KrylovR2NSubsolver)(s, rhs, σ, atol, rtol, n; verbose = 0)
   sub.workspace.stats.niter = 0
 
   if sub.solver_name in (:cg, :cr)
-    sub.A.σ = σ
+    sub.A.data.σ = σ
     krylov_solve!(
       sub.workspace,
       sub.A,
