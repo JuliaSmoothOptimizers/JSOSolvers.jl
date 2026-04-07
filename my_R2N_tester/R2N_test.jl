@@ -5,24 +5,26 @@ using Arpack, TSVD, GenericLinearAlgebra
 using SparseArrays, LinearAlgebra
 using ADNLPModels, Krylov, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore 
 using Printf
+using CUTEst 
 
 println("==============================================================")
 println("      Testing R2N with different NPC Handling Strategies      ")
 println("==============================================================")
 
 # 1. Define the Problem (Extended Rosenbrock)
-n = 30
-nlp = ADNLPModel(
-    x -> sum(100 * (x[i + 1] - x[i]^2)^2 + (x[i] - 1)^2 for i = 1:(n - 1)),
-    collect(1:n) ./ (n + 1),
-    name = "Extended Rosenbrock"
-)
+# n = 30
+# nlp = ADNLPModel(
+#     x -> sum(100 * (x[i + 1] - x[i]^2)^2 + (x[i] - 1)^2 for i = 1:(n - 1)),
+#     collect(1:n) ./ (n + 1),
+#     name = "Extended Rosenbrock"
+# )
 
+nlp = CUTEstModel("TOINTQOR")
 # 2. Define Solver Configurations
 
 # List of strategies to test
 solvers_to_test = [
-    ("GS (Goldstein)",   MinresQlpR2NSubsolver, :gs,    0.0),
+    ("GS (Goldstein)",   MinresQlpR2NSubsolver, :ag,    0.0),
     ("Sigma Increase",   MinresQlpR2NSubsolver, :sigma, 1.0),
     ("Previous Step",    MinresQlpR2NSubsolver, :prev,  0.0),
     ("Cauchy Point",     MinresQlpR2NSubsolver, :cp,    1.0),
