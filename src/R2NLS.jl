@@ -172,7 +172,7 @@ end
 
 function R2NLSSolver(
   nls::AbstractNLSModel{T, V};
-  subsolver::AbstractR2NLSSubsolver{T} = QRMumpsSubsolver(nls), # Default is an INSTANCE
+  subsolver::Union{Function, Type, AbstractR2NLSSubsolver{T}} = QRMumpsSubsolver(nls), # Default is an INSTANCE
   η1::T = get(R2NLS_η1, nls),
   η2::T = get(R2NLS_η2, nls),
   θ1::T = get(R2NLS_θ1, nls),
@@ -250,10 +250,10 @@ end
   non_mono_size::Int = get(R2NLS_non_mono_size, nls),
   compute_cauchy_point::Bool = get(R2NLS_compute_cauchy_point, nls),
   inexact_cauchy_point::Bool = get(R2NLS_inexact_cauchy_point, nls),
-  subsolver::Union{Type, AbstractR2NLSSubsolver} = QRMumpsSubsolver(nls),
+  subsolver::Union{Function, Type, AbstractR2NLSSubsolver} = QRMumpsSubsolver(nls),
   kwargs...,
 ) where {T, V}
-  sub_instance = subsolver isa Type ? subsolver(nls) : subsolver
+  sub_instance = (subsolver isa Type || subsolver isa Function) ? subsolver(nls) : subsolver
   solver = R2NLSSolver(
     nls;
     η1 = convert(T, η1),

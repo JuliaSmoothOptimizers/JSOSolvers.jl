@@ -195,7 +195,7 @@ function R2NSolver(
   δ1 = get(R2N_δ1, nlp),
   σmin = get(R2N_σmin, nlp),
   non_mono_size = get(R2N_non_mono_size, nlp),
-  subsolver::Union{Type, AbstractR2NSubsolver} = CGR2NSubsolver(nlp), # Default is an INSTANCE
+  subsolver::Union{Function, Type, AbstractR2NSubsolver} = CGR2NSubsolver(nlp),
   ls_c = get(R2N_ls_c, nlp),
   ls_increase = get(R2N_ls_increase, nlp),
   ls_decrease = get(R2N_ls_decrease, nlp),
@@ -292,7 +292,7 @@ end
   δ1::Real = get(R2N_δ1, nlp),
   σmin::Real = get(R2N_σmin, nlp),
   non_mono_size::Int = get(R2N_non_mono_size, nlp),
-  subsolver::AbstractR2NSubsolver = CGR2NSubsolver(nlp),
+  subsolver::Union{Function, Type, AbstractR2NSubsolver} = CGR2NSubsolver(nlp),
   ls_c::Real = get(R2N_ls_c, nlp),
   ls_increase::Real = get(R2N_ls_increase, nlp),
   ls_decrease::Real = get(R2N_ls_decrease, nlp),
@@ -300,7 +300,7 @@ end
   ls_max_alpha::Real = get(R2N_ls_max_alpha, nlp),
   kwargs...,
 ) where {T, V}
-  sub_instance = subsolver isa Type ? subsolver(nlp) : subsolver
+  sub_instance = (subsolver isa Type || subsolver isa Function) ? subsolver(nlp) : subsolver
   solver = R2NSolver(
     nlp;
     η1 = convert(T, η1),

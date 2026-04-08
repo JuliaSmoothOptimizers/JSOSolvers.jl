@@ -20,7 +20,32 @@ println("==============================================================")
 # )
 
 nlp = CUTEstModel("TOINTQOR")
+
+# bigfloat
+using CUTEst, Quadmath
+
+nlp_big = CUTEstModel{Float128}("TOINTQOR")
+R2N(nlp_big; subsolver=MinresR2NSubsolver(nlp_big), npc_handler=:ag, max_iter=105, η1=1.0e-6, verbose = 1 , fast_local_convergence= true)
+R2N(nlp_big; subsolver=MinresR2NSubsolver(nlp_big), npc_handler=:ag, max_iter=105, η1=1.0e-6, verbose = 1 )
 # 2. Define Solver Configurations
+
+
+#####
+# LBFGS
+# 1. Wrap the model so R2N knows it's a Quasi-Newton problem
+qn_nlp = LBFGSModel(nlp)
+
+# 2. Pass the wrapped model as the main argument
+R2N(
+    qn_nlp; 
+    subsolver = MinresR2NSubsolver, # Just pass the type, R2N will construct it with qn_nlp
+    npc_handler = :ag, 
+    max_iter = 105, 
+    η1 = 1.0e-6, 
+    verbose = 1, 
+    fast_local_convergence = true
+)
+
 
 # List of strategies to test
 solvers_to_test = [
