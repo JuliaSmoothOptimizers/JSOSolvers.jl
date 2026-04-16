@@ -21,9 +21,7 @@ mutable struct KrylovR2NSubsolver{T, V, Op, W, ShiftOp} <: AbstractR2NSubsolver{
     H = hess_op(nlp, x_init)
 
     A = nothing
-    if solver_name in (:cg, :cr)
-      A = ShiftedOperator(H)
-    end
+    A = ShiftedOperator(H)
 
     workspace = krylov_workspace(Val(solver_name), n, n, V)
 
@@ -37,6 +35,9 @@ MinresR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :minres)
 MinresQlpR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :minres_qlp)
 
 function initialize!(sub::KrylovR2NSubsolver, nlp, x)
+  # x here is the live solver.x from the main loop!
+  sub.H = hess_op(nlp, x)
+  sub.A = ShiftedOperator(sub.H)
   return nothing
 end
 
@@ -48,31 +49,31 @@ end
 function (sub::KrylovR2NSubsolver)(s, rhs, σ, atol, rtol, n; verbose = 0)
   sub.workspace.stats.niter = 0
 
-  if sub.solver_name in (:cg, :cr)
-    sub.A.data.σ = σ
-    krylov_solve!(
-      sub.workspace,
-      sub.A,
-      rhs,
-      itmax = max(2 * n, 50),
-      atol = atol,
-      rtol = rtol,
-      verbose = verbose,
-      linesearch = true,
-    )
-  else # minres, minres_qlp
-    krylov_solve!(
-      sub.workspace,
-      sub.H,
-      rhs,
-      λ = σ,
-      itmax = max(2 * n, 50),
-      atol = atol,
-      rtol = rtol,
-      verbose = verbose,
-      linesearch = true,
-    )
-  end
+  # if sub.solver_name in (:cg, :cr)
+  sub.A.data.σ = σ
+  krylov_solve!(
+    sub.workspace,
+    sub.A,
+    rhs,
+    itmax = max(2 * n, 50),
+    atol = atol,
+    rtol = rtol,
+    verbose = verbose,
+    linesearch = true,
+  )
+  # else # minres, minres_qlp
+  #   krylov_solve!(
+  #     sub.workspace,
+  #     sub.H,
+  #     rhs,
+  #     λ = σ,
+  #     itmax = max(2 * n, 50),
+  #     atol = atol,
+  #     rtol = rtol,
+  #     verbose = verbose,
+  #     linesearch = true,
+  #   )
+  # end
 
   s .= sub.workspace.x
   if isdefined(sub.workspace, :npc_dir)
