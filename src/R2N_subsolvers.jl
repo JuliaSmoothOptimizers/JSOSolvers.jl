@@ -49,7 +49,6 @@ end
 function (sub::KrylovR2NSubsolver)(s, rhs, σ, atol, rtol, n; verbose = 0)
   sub.workspace.stats.niter = 0
 
-  # if sub.solver_name in (:cg, :cr)
   sub.A.data.σ = σ
   krylov_solve!(
     sub.workspace,
@@ -61,19 +60,6 @@ function (sub::KrylovR2NSubsolver)(s, rhs, σ, atol, rtol, n; verbose = 0)
     verbose = verbose,
     linesearch = true,
   )
-  # else # minres, minres_qlp
-  #   krylov_solve!(
-  #     sub.workspace,
-  #     sub.H,
-  #     rhs,
-  #     λ = σ,
-  #     itmax = max(2 * n, 50),
-  #     atol = atol,
-  #     rtol = rtol,
-  #     verbose = verbose,
-  #     linesearch = true,
-  #   )
-  # end
 
   s .= sub.workspace.x
   if isdefined(sub.workspace, :npc_dir)

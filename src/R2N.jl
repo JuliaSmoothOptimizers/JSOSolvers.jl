@@ -265,17 +265,11 @@ end
 
 function SolverCore.reset!(solver::R2NSolver{T}) where {T}
   fill!(solver.obj_vec, typemin(T))
-  if solver.subsolver isa KrylovR2NSubsolver
-    LinearOperators.reset!(solver.subsolver.H)
-  end
   return solver
 end
 
 function SolverCore.reset!(solver::R2NSolver{T}, nlp::AbstractNLPModel) where {T}
   fill!(solver.obj_vec, typemin(T))
-  if solver.subsolver isa KrylovR2NSubsolver
-    LinearOperators.reset!(solver.subsolver.H)
-  end
   solver.h = LineModel(nlp, solver.x, solver.s)
   return solver
 end

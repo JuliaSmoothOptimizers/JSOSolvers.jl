@@ -113,7 +113,9 @@ mutable struct GenericKrylovSubsolver{T, V, Op, W} <: AbstractR2NLSSubsolver{T}
   workspace::W
   Jx::Op
   solver_name::Symbol
-
+  Jv::V    # Store buffer
+  Jtv::V   # Store buffer
+  
   function GenericKrylovSubsolver(nls::AbstractNLSModel{T, V}, solver_name::Symbol) where {T, V}
     x_init = nls.meta.x0
     m = nls.nls_meta.nequ
@@ -157,7 +159,11 @@ function (sub::GenericKrylovSubsolver)(s, rhs, σ, atol, rtol; verbose = 0)
 end
 
 get_jacobian(sub::GenericKrylovSubsolver) = sub.Jx
-initialize!(sub::GenericKrylovSubsolver, nls, x) = nothing
+function initialize!(sub::GenericKrylovSubsolver, nls, x)
+  sub.Jx = jac_op_residual!(nls, x, sub.Jv, sub.Jtv)
+  return nothing
+end
+
 function get_operator_norm(sub::GenericKrylovSubsolver)
   # Jx is a LinearOperator, so we can use the specialized estimator
   λmax, _ = LinearOperators.estimate_opnorm(sub.Jx)
