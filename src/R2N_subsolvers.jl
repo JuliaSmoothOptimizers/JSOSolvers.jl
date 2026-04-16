@@ -18,7 +18,7 @@ mutable struct KrylovR2NSubsolver{T, V, Op, W, ShiftOp} <: AbstractR2NSubsolver{
   function KrylovR2NSubsolver(nlp::AbstractNLPModel{T, V}, solver_name::Symbol = :cg) where {T, V}
     x_init = nlp.meta.x0
     n = nlp.meta.nvar
-    H = hess_op(nlp, x_init)
+    H = isa(nlp, LBFGSModel) ? nlp.op : hess_op(nlp, x_init)
 
     A = nothing
     A = ShiftedOperator(H)
@@ -36,7 +36,7 @@ MinresQlpR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :minres_qlp)
 
 function initialize!(sub::KrylovR2NSubsolver, nlp, x)
   # x here is the live solver.x from the main loop!
-  sub.H = hess_op(nlp, x)
+  sub.H = isa(nlp, LBFGSModel) ? nlp.op : hess_op(nlp, x)
   sub.A = ShiftedOperator(sub.H)
   return nothing
 end

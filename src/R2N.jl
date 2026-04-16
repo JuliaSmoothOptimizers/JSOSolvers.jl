@@ -519,7 +519,7 @@ function SolverCore.solve!(
           γ₁ = ls_increase,
           bk_max = 100,
           bG_max = 100,
-          verbose = (verbose > 0),
+          verbose = false#(verbose > 0), #TODO False?
         )
         @. s = α * dir
         fck_computed = true

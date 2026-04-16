@@ -11,8 +11,8 @@ using OptimizationProblems, OptimizationProblems.ADNLPProblems
 nlp  =  chainwoo(n=100)
 
 solvers_to_test = [
-    ("GS (Goldstein)",   MinresR2NSubsolver, :ag,    0.0),
-    ("GS (Goldstein)",   CRR2NSubsolver, :ag,    0.0),
+    ("GS (Goldstein)--minres",   MinresR2NSubsolver, :ag,    0.0),
+    ("GS (Goldstein)--cr",   CRR2NSubsolver, :ag,    0.0),
     # ("Sigma Increase",   MinresR2NSubsolver, :sigma, 0.0),
     # ("Previous Step",    MinresR2NSubsolver, :prev,  0.0),
     # ("Cauchy Point",     MinresR2NSubsolver, :cp,    0.0),
@@ -26,7 +26,7 @@ for (name, sub_type, handler, sigma_min) in solvers_to_test
     println("\nRunning $name...")
     stats = R2N(
         nlp; 
-        verbose = 5, 
+        verbose = 1, 
         max_iter = 700, 
         subsolver = sub_type, 
         npc_handler = handler,
@@ -52,10 +52,10 @@ R2N(
     qn_nlp; 
     subsolver = MinresR2NSubsolver, # Just pass the type, R2N will construct it with qn_nlp
     npc_handler = :ag, 
-    max_iter = 250, 
+    max_iter = 750, 
     η1 = 1.0e-6, 
-    verbose = 1, 
-    fast_local_convergence = true
+    verbose = 10, 
+    fast_local_convergence = false
 )
 
 
@@ -66,10 +66,10 @@ R2N(
     qn_nlp; 
     subsolver = ShiftedLBFGSSolver, # Just pass the type, R2N will construct it with qn_nlp
     npc_handler = :ag, 
-    max_iter = 250, 
+    max_iter = 750, 
     η1 = 1.0e-6, 
-    verbose = 1, 
-    fast_local_convergence = true
+    verbose = 10, 
+    fast_local_convergence = false
 )
 
 
