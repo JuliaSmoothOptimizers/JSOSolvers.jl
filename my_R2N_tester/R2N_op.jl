@@ -12,7 +12,7 @@ nlp  =  chainwoo(n=100)
 
 solvers_to_test = [
     ("GS (Goldstein)--minres",   MinresR2NSubsolver, :ag,    0.0),
-    ("GS (Goldstein)--cr",   CRR2NSubsolver, :ag,    0.0),
+    # ("GS (Goldstein)--cr",   CRR2NSubsolver, :ag,    0.0),
     # ("Sigma Increase",   MinresR2NSubsolver, :sigma, 0.0),
     # ("Previous Step",    MinresR2NSubsolver, :prev,  0.0),
     # ("Cauchy Point",     MinresR2NSubsolver, :cp,    0.0),
@@ -30,7 +30,8 @@ for (name, sub_type, handler, sigma_min) in solvers_to_test
         max_iter = 700, 
         subsolver = sub_type, 
         npc_handler = handler,
-        σmin = sigma_min
+        σmin = sigma_min,
+        always_accept_npc_ag = true,
     )
     push!(results, (name, stats))
     print("stats: ")
