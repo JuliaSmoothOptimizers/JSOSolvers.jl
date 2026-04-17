@@ -141,6 +141,8 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `subsolver = CGR2NSubsolver`: the subproblem solver type or instance.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
+- `callback`: function called at each iteration, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
+- `callback_quasi_newton`: function called at each iteration, specifically to update the Hessian approximation of quasi-Newton models, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
 - `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
 - `always_accept_npc_ag::Bool = false`: if true, we skip the computation of the reduction ratio ρ for Goldstein steps taken along directions of negative curvature, unconditionally accepting them as very successful steps to aggressively escape saddle points.
 - `fast_local_convergence::Bool = false`: if true, we scale the regularization parameter σ by the norm of the current gradient on very successful iterations (using `γ3 * min(σ, norm(gx))`), which accelerates local convergence near a minimizer.
@@ -171,7 +173,6 @@ mutable struct R2NSolver{T, V, Sub <: AbstractR2NSubsolver{T}, M <: AbstractNLPM
   xt::V             # Trial iterate x_{k+1}
   gx::V             # Gradient ∇f(x)
   rhs::V            # RHS for subsolver (store -∇f)
-  y::V              # Difference of gradients y = ∇f_new - ∇f_old
   Hs::V             # Storage for H*s products
   s::V              # Step direction
   scp::V            # Cauchy point step
@@ -228,7 +229,6 @@ function R2NSolver(
   xt = V(undef, nvar)
   gx = V(undef, nvar)
   rhs = V(undef, nvar)
-  y = isa(nlp, QuasiNewtonModel) ? V(undef, nvar) : V(undef, 0)
   Hs = V(undef, nvar)
 
   x .= nlp.meta.x0
@@ -250,7 +250,6 @@ function R2NSolver(
     xt,
     gx,
     rhs,
-    y,
     Hs,
     s,
     scp,
@@ -322,6 +321,7 @@ function SolverCore.solve!(
   nlp::AbstractNLPModel{T, V},
   stats::GenericExecutionStats{T, V};
   callback = (args...) -> nothing,
+  callback_quasi_newton = default_callback_quasi_newton,
   x::V = nlp.meta.x0,
   atol::T = √eps(T),
   rtol::T = √eps(T),
@@ -363,7 +363,6 @@ function SolverCore.solve!(
   xt = solver.xt
   ∇fk = solver.gx # current gradient
   rhs = solver.rhs # -∇f for subsolver
-  y = solver.y    # gradient difference
   s = solver.s
   scp = solver.scp
   Hs = solver.Hs
@@ -439,6 +438,7 @@ function SolverCore.solve!(
     scp_flag = false
   end
 
+  callback_quasi_newton(nlp, solver, stats)
   callback(nlp, solver, stats)
   subtol = solver.subtol
   σk = solver.σ
@@ -610,18 +610,8 @@ function SolverCore.solve!(
 
       # 3. Process the Step  
       if step_accepted
-        # Quasi-Newton Update: Needs ∇f_new - ∇f_old.
-        if isa(nlp, QuasiNewtonModel)
-          rhs .= ∇fk # Save old gradient
-        end
-
         x .= xt
-        grad!(nlp, x, ∇fk) # ∇fk is now NEW gradient
-
-        if isa(nlp, QuasiNewtonModel)
-          @. y = ∇fk - rhs # y = new - old
-          push!(nlp, s, y)
-        end
+        grad!(nlp, x, ∇fk)
 
         if !(solver.subsolver isa ShiftedLBFGSSolver)
           update_subsolver!(solver.subsolver, nlp, x)
@@ -649,6 +639,8 @@ function SolverCore.solve!(
       end
     end
 
+    set_step_status!(stats, step_accepted ? :accepted : :rejected)
+
     set_iter!(stats, stats.iter + 1)
     set_time!(stats, time() - start_time)
 
@@ -658,6 +650,7 @@ function SolverCore.solve!(
     solver.σ = σk
     solver.subtol = subtol
 
+    callback_quasi_newton(nlp, solver, stats)
     callback(nlp, solver, stats)
 
     norm_∇fk = stats.dual_feas
