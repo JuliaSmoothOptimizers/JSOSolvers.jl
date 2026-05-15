@@ -411,7 +411,7 @@ function SolverCore.solve!(
     @. temp = -r
 
     sub_solved, sub_stats, sub_iter =
-      solver.subsolver(s, temp, solver.σ, atol, solver.subtol, verbose = subsolver_verbose)
+      solver.subsolver(s, temp, solver.σ, atol, solver.subtol, n,verbose = subsolver_verbose)
 
     # 2. Cauchy Point
     if compute_cauchy_point

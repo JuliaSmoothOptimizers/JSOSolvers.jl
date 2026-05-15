@@ -465,7 +465,7 @@ function SolverCore.solve!(
     subsolver_solved, sub_stats, subiter, npcCount =
       solver.subsolver(s, rhs, σk, T(0.0), subtol, n; verbose = subsolver_verbose) # TODO atol = 0 when subsolver 
 
-    if !subsolver_solved && npcCount == 0
+    if !subsolver_solved && npcCount == 0 #TODO incrase sigma
       @warn "Subsolver failed to solve the system. Terminating."
       set_status!(stats, :stalled)
       done = true

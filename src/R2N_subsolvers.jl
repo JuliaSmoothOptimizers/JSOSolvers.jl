@@ -102,7 +102,7 @@ mutable struct ShiftedLBFGSSolver{T, Op} <: AbstractR2NSubsolver{T}
   end
 end
 
-ShiftedLBFGSSolver(nlp) = ShiftedLBFGSSolver(nlp)
+# ShiftedLBFGSSolver(nlp) = ShiftedLBFGSSolver(nlp)
 
 initialize!(sub::ShiftedLBFGSSolver, nlp, x) = nothing
 update_subsolver!(sub::ShiftedLBFGSSolver, nlp, x) = nothing # LBFGS updates via push! in outer loop
