@@ -463,14 +463,7 @@ function SolverCore.solve!(
     @. rhs = -∇fk
 
     subsolver_solved, sub_stats, subiter, npcCount =
-      solver.subsolver(s, rhs, σk, T(0.0), subtol, n; verbose = subsolver_verbose) # TODO atol = 0 when subsolver 
-
-    if !subsolver_solved && npcCount == 0 #TODO incrase sigma
-      @warn "Subsolver failed to solve the system. Terminating."
-      set_status!(stats, :stalled)
-      done = true
-      break
-    end
+      solver.subsolver(s, rhs, σk, atol, subtol, n; verbose = subsolver_verbose) # TODO atol = 0 when subsolver 
 
     calc_scp_needed = false
     force_sigma_increase = false
