@@ -11,7 +11,6 @@
  
   solver = eval(s)(nlp)
   
-
   stats = GenericExecutionStats(nlp)
   stats = SolverCore.solve!(solver, nlp, stats)
   @test stats.status == :first_order
@@ -31,7 +30,6 @@ end
   (:R2NLSSolver, :R2NLSSolver),
   (:R2NLSSolver_CG, :R2NLSSolver),
   (:R2NLSSolver_LSQR, :R2NLSSolver),
-  (:R2NLSSolver_CR, :R2NLSSolver),
   (:R2NLSSolver_LSMR, :R2NLSSolver),
   (:R2NLSSolver_QRMumps, :R2NLSSolver),
 )
@@ -40,15 +38,13 @@ end
 
   stats = GenericExecutionStats(nlp)
   if fun == :R2NLSSolver_CG
-    solver = eval(s)(nlp, subsolver = :cgls)
+    solver = eval(s)(nlp, subsolver = CGLSSubsolver)
   elseif fun == :R2NLSSolver_LSQR
-    solver = eval(s)(nlp, subsolver = :lsqr)
-  elseif fun == :R2NLSSolver_CR
-    solver = eval(s)(nlp, subsolver = :crls)
+    solver = eval(s)(nlp, subsolver = LSQRSubsolver)
   elseif fun == :R2NLSSolver_LSMR
-    solver = eval(s)(nlp, subsolver = :lsmr)
+    solver = eval(s)(nlp, subsolver = LSMRSubsolver)
   elseif fun == :R2NLSSolver_QRMumps
-    solver = eval(s)(nlp, subsolver = :qrmumps)
+    solver = eval(s)(nlp, subsolver = QRMumpsSubsolver)
   else
     solver = eval(s)(nlp)
   end
@@ -84,8 +80,6 @@ end
 
   f2(x) = (x[1])^2 + 4 * (x[2] - x[1]^2)^2
   nlp = ADNLPModel(f2, [-1.2; 1.0])
- 
-  solver = eval(s)(nlp) 
   
   SolverCore.reset!(solver, nlp)
 
@@ -100,7 +94,6 @@ end
   (:R2NLSSolver, :R2NLSSolver),
   (:R2NLSSolver_CG, :R2NLSSolver),
   (:R2NLSSolver_LSQR, :R2NLSSolver),
-  (:R2NLSSolver_CR, :R2NLSSolver),
   (:R2NLSSolver_LSMR, :R2NLSSolver),
   (:R2NLSSolver_QRMumps, :R2NLSSolver),
 )
@@ -109,15 +102,13 @@ end
 
   stats = GenericExecutionStats(nlp)
   if fun == :R2NLSSolver_CG
-    solver = eval(s)(nlp, subsolver = :cgls)
+    solver = eval(s)(nlp, subsolver = CGLSSubsolver)
   elseif fun == :R2NLSSolver_LSQR
-    solver = eval(s)(nlp, subsolver = :lsqr)
-  elseif fun == :R2NLSSolver_CR
-    solver = eval(s)(nlp, subsolver = :crls)
+    solver = eval(s)(nlp, subsolver = LSQRSubsolver)
   elseif fun == :R2NLSSolver_LSMR
-    solver = eval(s)(nlp, subsolver = :lsmr)
+    solver = eval(s)(nlp, subsolver = LSMRSubsolver)
   elseif fun == :R2NLSSolver_QRMumps
-    solver = eval(s)(nlp, subsolver = :qrmumps)
+    solver = eval(s)(nlp, subsolver = QRMumpsSubsolver)
   else
     solver = eval(s)(nlp)
   end

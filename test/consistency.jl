@@ -17,18 +17,18 @@ function consistency()
       ("R2", R2),
       ("R2N", R2N),
       (
-        "R2N_exact",
+        "R2N_ShiftedLBFGS",
         (nlp; kwargs...) ->
-          R2N(LBFGSModel(nlp), subsolver= :shifted_lbfgs; kwargs...),
+          R2N(LBFGSModel(nlp), subsolver = ShiftedLBFGSSolver; kwargs...),
       ),
       ("fomo", fomo),
     ]
       with_logger(NullLogger()) do
-        reset!(unlp)
+        NLPModels.reset!(unlp)
         stats = solver(unlp; args...)
         @test stats isa GenericExecutionStats
         @test stats.status == :first_order
-        reset!(unlp)
+        NLPModels.reset!(unlp)
         stats = solver(unlp; max_eval = 1)
         @test stats.status == :max_eval
         slow_nlp = ADNLPModel(x -> begin
@@ -47,14 +47,14 @@ function consistency()
       ("R2", R2),
       ("R2N", R2N),
       (
-        "R2N_exact",
+        "R2N_ShiftedLBFGS",
         (nlp; kwargs...) ->
-          R2N(LBFGSModel(nlp), subsolver= :shifted_lbfgs; kwargs...),
+          R2N(LBFGSModel(nlp), subsolver = ShiftedLBFGSSolver; kwargs...),
       ),
       ("fomo", fomo),
     ]
       with_logger(NullLogger()) do
-        reset!(qnlp)
+        NLPModels.reset!(qnlp)
         stats = solver(qnlp; args...)
         @test stats isa GenericExecutionStats
         @test stats.status == :first_order
@@ -64,8 +64,8 @@ function consistency()
     @testset "NLS with $mtd" for (mtd, solver) in [
       ("trunk", trunk),
       ("R2NLS", (unls; kwargs...) -> R2NLS(unls; kwargs...)),
-      ("R2NLS_CGLS", (unls; kwargs...) -> R2NLS(unls, subsolver = :cgls; kwargs...)),
-      ("R2NLS_QRMumps", (unls; kwargs...) -> R2NLS(unls, subsolver = :qrmumps; kwargs...)),
+      ("R2NLS_CGLS", (unls; kwargs...) -> R2NLS(unls, subsolver = CGLSSubsolver; kwargs...)),
+      ("R2NLS_QRMumps", (unls; kwargs...) -> R2NLS(unls, subsolver = QRMumpsSubsolver; kwargs...)),
     ]
       with_logger(NullLogger()) do
         stats = solver(unls; args...)

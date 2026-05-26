@@ -30,6 +30,7 @@ include("test-gpu.jl")
   @testset "Test unconstrained NLS parameters $paramset" for (paramset, fun) in (
     (TRONLSParameterSet, tron),
     (TRUNKLSParameterSet, trunk),
+    (R2NLSParameterSet, R2NLS),
   )
     nls = MGH01()
     params = eval(paramset)(nls)
@@ -54,7 +55,7 @@ end
   @test stats.status == :first_order
 end
 
-@testset "Test small residual checks $solver" for solver in (:TrunkSolverNLS, :TronSolverNLS)
+@testset "Test small residual checks $solver" for solver in (:TrunkSolverNLS, :TronSolverNLS, :R2NLSSolver)
   nls = ADNLSModel(x -> [x[1] - 1; sin(x[2])], [-1.2; 1.0], 2)
   stats = GenericExecutionStats(nls)
   solver = eval(solver)(nls)
@@ -70,7 +71,7 @@ end
 end
 
 @testset "Test iteration limit" begin
-  @testset "$fun" for fun in (R2, R2N,fomo, lbfgs, tron, trunk)
+  @testset "$fun" for fun in (R2, R2N, fomo, lbfgs, tron, trunk)
     f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
     nlp = ADNLPModel(f, [-1.2; 1.0])
 
@@ -93,11 +94,11 @@ end
     ("lbfgs", lbfgs),
     ("tron", tron),
     ("R2", R2),
-    # ("R2N", R2N),
+    ("R2N", R2N),
     (
-      "R2N_exact",
+      "R2N_ShiftedLBFGS",
       (nlp; kwargs...) ->
-        R2N(LBFGSModel(nlp), subsolver= :shifted_lbfgs; kwargs...),
+        R2N(LBFGSModel(nlp), subsolver = ShiftedLBFGSSolver; kwargs...),
     ),
     ("fomo", fomo),
   ]

@@ -1,4 +1,5 @@
 using ADNLPModels, JSOSolvers, LinearAlgebra, Logging #, Plots
+
 @testset "Test callback" begin
   f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
   nlp = ADNLPModel(f, [-1.2; 1.0])
@@ -12,6 +13,7 @@ using ADNLPModels, JSOSolvers, LinearAlgebra, Logging #, Plots
       stats.status = :user
     end
   end
+
   stats = with_logger(NullLogger()) do
     R2(nlp, callback = cb)
   end
@@ -70,7 +72,7 @@ end
 
 @testset "Test quasi-Newton callback" begin
   f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
-  for solver in (:trunk, :tron)
+  for solver in (:trunk, :tron, :R2N)
     for model in (:LBFGSModel, :LSR1Model)
       nlp = eval(model)(ADNLPModel(f, [-1.2; 1.0]))
       B0 = Matrix(hess_op(nlp, nlp.meta.x0))
@@ -100,5 +102,28 @@ end
   end
   stats = with_logger(NullLogger()) do
     R2(nlp, callback = cb)
+  end
+
+  # --- Callbacks for R2N and R2NLS ---
+  function cb_r2n(nlp, solver, stats)
+    if stats.iter == 4
+      @test solver.σ > 0.0
+      stats.status = :user
+    end
+  end
+  stats = with_logger(NullLogger()) do
+    R2N(nlp, callback = cb_r2n)
+  end
+
+  F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
+  nls = ADNLSModel(F, [-1.2; 1.0], 2)
+  function cb_r2nls(nls, solver, stats)
+    if stats.iter == 4
+      @test solver.σ > 0.0
+      stats.status = :user
+    end
+  end
+  stats = with_logger(NullLogger()) do
+    R2NLS(nls, callback = cb_r2nls)
   end
 end

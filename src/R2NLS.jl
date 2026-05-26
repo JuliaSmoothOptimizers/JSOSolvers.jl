@@ -219,19 +219,19 @@ function R2NLSSolver(
   x .= nls.meta.x0
 
   # We pass the subsolver instance directly into the struct. No if/else checks needed!
-  R2NLSSolver(x, xt, gx, r, rt, temp, subsolver, obj_vec, one(T), s, scp, eps(T)^(1/5), params)
+  R2NLSSolver(x, xt, gx, r, rt, temp, subsolver, obj_vec, one(T), s, scp, T(eps(T)^(1/5)), params)
 end
 
 function SolverCore.reset!(solver::R2NLSSolver{T}) where {T}
   fill!(solver.obj_vec, typemin(T))
-  solver.σ = eps(T)^(1 / 5)
+  solver.σ = T(eps(T)^(1 / 5))
   solver.subtol = one(T)
   solver
 end
 
 function SolverCore.reset!(solver::R2NLSSolver{T}, nls::AbstractNLSModel) where {T}
   fill!(solver.obj_vec, typemin(T))
-  solver.σ = eps(T)^(1 / 5)
+  solver.σ = T(eps(T)^(1 / 5))
   solver.subtol = one(T)
   solver
 end

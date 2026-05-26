@@ -32,7 +32,7 @@ if Sys.isunix()
   @testset "Allocation tests" begin
     @testset "$name" for (name, symsolver) in (
       (:R2N, :R2NSolver),
-      (:R2N_exact, :R2NSolver),
+      (:R2N_ShiftedLBFGS, :R2NSolver),
       (:R2, :FoSolver),
       (:fomo, :FomoSolver),
       (:lbfgs, :LBFGSSolver),
@@ -44,8 +44,8 @@ if Sys.isunix()
         if unconstrained(nlp) || (bound_constrained(nlp) && (name == :TronSolver))
           if (name == :FoSolver || name == :FomoSolver)
             solver = eval(symsolver)(nlp; M = 2) # nonmonotone configuration allocates extra memory
-          elseif name == :R2N_exact
-            solver = eval(symsolver)(LBFGSModel(nlp), subsolver= :shifted_lbfgs)
+          elseif name == :R2N_ShiftedLBFGS
+            solver = eval(symsolver)(LBFGSModel(nlp), subsolver = ShiftedLBFGSSolver)
           else
             solver = eval(symsolver)(nlp)
           end
@@ -69,16 +69,16 @@ if Sys.isunix()
     @testset "$name" for (name, symsolver) in (
       (:TrunkSolverNLS, :TrunkSolverNLS),
       (:R2NLSSolver, :R2NLSSolver),
-      (:R2NLSSolver_QRMumps, :R2NLSSolver),
+      (:R2NLSSolver_LSMR, :R2NLSSolver),
       (:TronSolverNLS, :TronSolverNLS),
     )
       for model in NLPModelsTest.nls_problems
         nlp = eval(Meta.parse(model))()
         if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolverNLS))
-          if name == :R2NLSSolver_QRMumps
-            solver = eval(symsolver)(nlp, subsolver = :qrmumps)
+          if name == :R2NLSSolver_LSMR
+            solver = eval(symsolver)(nlp, subsolver = LSMRSubsolver)
           else
-            solver = eval(symsolver)(nlp)
+            solver = eval(symsolver)(nlp) # Defaults to QRMumpsSubsolver
           end
 
           stats = GenericExecutionStats(nlp)

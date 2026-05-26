@@ -8,7 +8,12 @@ end
 
 function test_incompatible()
   @testset "Incompatible problems should throw error" begin
-    solvers = Dict(:lbfgs => [:unc], :trunk => [:unc], :tron => [:unc, :bnd])
+    solvers = Dict(
+      :lbfgs => [:unc], 
+      :trunk => [:unc], 
+      :tron => [:unc, :bnd], 
+      :R2N => [:unc]
+    )
     problems = Dict(
       :unc => ADNLPModel(x -> 0, zeros(2)),
       :bnd => ADNLPModel(x -> 0, zeros(2), zeros(2), ones(2)),
@@ -28,7 +33,11 @@ function test_incompatible()
       @test_throws ErrorException eval(solver)(nlp)
     end
 
-    solvers = Dict(:trunk => [:unc], :tron => [:unc, :bnd])
+    solvers = Dict(
+      :trunk => [:unc], 
+      :tron => [:unc, :bnd], 
+      :R2NLS => [:unc]
+    )
     problems = Dict(
       :unc => ADNLSModel(x -> [0], zeros(2), 1),
       :bnd => ADNLSModel(x -> [0], zeros(2), 1, zeros(2), ones(2)),

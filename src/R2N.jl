@@ -56,7 +56,10 @@ const R2N_non_mono_size = DefaultParameter(1)
 const R2N_ls_c = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1e-4), "T(1e-4)")
 const R2N_ls_increase = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1.5), "T(1.5)")
 const R2N_ls_decrease = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
-const R2N_ls_min_alpha = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1e-8), "T(1e-8)")
+const R2N_ls_min_alpha = DefaultParameter(nlp -> begin
+  T = eltype(nlp.meta.x0)
+  max(T(1e-8), nextfloat(zero(T)))
+end, "max(T(1e-8), nextfloat(zero(T)))")
 const R2N_ls_max_alpha = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1e2), "T(1e2)")
 
 function R2NParameterSet(
@@ -336,6 +339,11 @@ function SolverCore.solve!(
   fast_local_convergence::Bool = false,
 ) where {T, V}
   unconstrained(nlp) || error("R2N should only be called on unconstrained problems.")
+
+  if !(nlp.meta.minimize)
+    error("R2N only works for minimization problem")
+  end
+
   npc_handler in npc_handler_allowed || error("npc_handler must be one of $(npc_handler_allowed)")
 
   SolverCore.reset!(stats)
