@@ -80,8 +80,8 @@ The main dependencies required to use the solvers are:
 
 - `SolverTools.jl` – provides common optimization components such as line searches, stopping conditions, and trace utilities;
 
-- `Krylov.jl` – used by second-order methods such as TRON and TRUNK for solving Newton or trust-region subproblems;
-
+- `Krylov.jl` – used by second-order methods such as TRON, TRUNK, R2N, and R2NLS for solving Newton, regularized, or trust-region subproblems;
+- 
 - `LinearOperators.jl` – provides abstractions for matrix-free linear operators used by iterative methods;
 
 - `SolverCore.jl` – provides the solver interface infrastructure;
@@ -116,7 +116,7 @@ where `nlp` is an AbstractNLPModel or some specialization, such as an `AbstractN
 - `max_eval` is the maximum number of objective and constraints function evaluations (default: `-1`, which means no limit);
 - `max_time` is the maximum allowed elapsed time (default: `30.0`);
 - `callback` is a function that is called at each iteration;
-- `callback_quasi_newton` is a function that is called at each iteration to perform quasi-Newton updates, if appropriate (currently only supported by TRON and TRUNK);
+- `callback_quasi_newton` is a function that is called at each iteration to perform quasi-Newton updates, if appropriate (currently only supported by TRON , TRUNK, and R2N);
 - `stats` is a `SolverTools.GenericExecutionStats` with the output of the solver.
 
 ### Callbacks
