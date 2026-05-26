@@ -17,23 +17,23 @@ nlp = ADNLPModel(
 # 2. Define Parameter Grids for Combinations
 # subsolvers = [CGR2NSubsolver, CRR2NSubsolver, MinresR2NSubsolver, MinresQlpR2NSubsolver]
 
-println("Subsolver = CG, NPC Handler = AG")
-stats_cg = R2N(nlp; verbose = 1, max_iter = 200, subsolver = CGR2NSubsolver, npc_handler = :ag)
+# println("Subsolver = CG, NPC Handler = AG")
+# stats_cg = R2N(nlp; verbose = 1, max_iter = 200, subsolver = CGR2NSubsolver, npc_handler = :ag)
 
 println("\nSubsolver = Minres, NPC Handler = AG")
 stats_minres =
-  R2N(nlp; verbose = 1, max_iter = 50, subsolver = MinresR2NSubsolver, npc_handler = :ag, subsolver_verbose = 0)
+  R2N(nlp; verbose = 1, max_iter = 50, subsolver = MinresR2NSubsolver, npc_handler = :ag, subsolver_verbose = 1)
 
-println("\nSubsolver = CR, NPC Handler = AG")
-stats_cr = R2N(nlp; verbose = 1, max_iter = 200, subsolver = CRR2NSubsolver, npc_handler = :ag)
+# println("\nSubsolver = CR, NPC Handler = AG")
+# stats_cr = R2N(nlp; verbose = 1, max_iter = 200, subsolver = CRR2NSubsolver, npc_handler = :ag)
 
 println("\nSubsolver = MinresQlp, NPC Handler = AG")
 stats_minres_qlp =
-  R2N(nlp; verbose = 1, max_iter = 50, subsolver = MinresQlpR2NSubsolver, npc_handler = :ag, subsolver_verbose = 0)
+  R2N(nlp; verbose = 1, max_iter = 50, subsolver = MinresQlpR2NSubsolver, npc_handler = :ag, subsolver_verbose = 1)
 
 
 println("\nStastics Summary:")
 println("stats_minres: ", stats_minres)
-println("stats_cg: ", stats_cg)
-println("stats_cr: ", stats_cr)
+# println("stats_cg: ", stats_cg)
+# println("stats_cr: ", stats_cr)
 println("stats_minres_qlp: ", stats_minres_qlp)
