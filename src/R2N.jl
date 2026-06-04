@@ -466,6 +466,7 @@ function SolverCore.solve!(
   while !done
     npcCount = 0
     fck_computed = false
+    is_npc_ag_step = false
 
     # Prepare RHS for subsolver (rhs = -∇f)
     @. rhs = -∇fk
