@@ -335,9 +335,7 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇f)
 
   # Heuristic for initial σ
-
-  solver.σ = 2^round(log2(norm_∇fk + 1)) / norm_∇fk
-
+  solver.σ = norm_∇fk == zero(T) ? one(T) : (2^round(log2(norm_∇fk + one(T))) / norm_∇fk)
   # Stopping criterion: 
   unbounded = false
   ρk = zero(T)
