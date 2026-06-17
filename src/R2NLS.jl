@@ -439,8 +439,9 @@ function SolverCore.solve!(
     residual!(nls, xt, rt)
     resid_norm_t = norm(rt)
     ft = resid_norm_t^2 / 2
-
-    if non_mono_size > 1
+    if ΔTk <= eps(T) * max(one(T), abs(stats.objective))
+      ρk = -T(Inf) # this case should not happen, but we set ρk to -Inf to ensure the step is rejected if it does
+    elseif non_mono_size > 1
       k = mod(stats.iter, non_mono_size) + 1
       solver.obj_vec[k] = stats.objective
       ft_max = maximum(solver.obj_vec)

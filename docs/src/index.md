@@ -81,7 +81,7 @@ The main dependencies required to use the solvers are:
 - `SolverTools.jl` – provides common optimization components such as line searches, stopping conditions, and trace utilities;
 
 - `Krylov.jl` – used by second-order methods such as TRON, TRUNK, R2N, and R2NLS for solving Newton, regularized, or trust-region subproblems;
-- 
+
 - `LinearOperators.jl` – provides abstractions for matrix-free linear operators used by iterative methods;
 
 - `SolverCore.jl` – provides the solver interface infrastructure;

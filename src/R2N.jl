@@ -389,7 +389,7 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇fk)
   set_dual_residual!(stats, norm_∇fk)
 
-  σk = 2^round(log2(norm_∇fk + 1)) / norm_∇fk
+  σk = norm_∇fk == zero(T) ? one(T) : (2^round(log2(norm_∇fk + one(T))) / norm_∇fk)
   ρk = zero(T)
 
   fmin = min(-one(T), f0) / eps(T)
