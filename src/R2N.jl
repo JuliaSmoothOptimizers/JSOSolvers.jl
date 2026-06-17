@@ -472,7 +472,7 @@ function SolverCore.solve!(
     @. rhs = -∇fk
 
     subsolver_solved, sub_stats, subiter, npcCount =
-      solver.subsolver(s, rhs, σk, atol, subtol, n; verbose = subsolver_verbose) # TODO atol = 0 when subsolver 
+      solver.subsolver(s, rhs, σk, atol, subtol, n; verbose = subsolver_verbose)
 
     calc_scp_needed = false
     force_sigma_increase = false
@@ -521,7 +521,7 @@ function SolverCore.solve!(
           γ₁ = ls_increase,
           bk_max = 100,
           bG_max = 100,
-          verbose = false#(verbose > 0), #TODO False?
+          verbose = false
         )
         @. s = α * dir
         fck_computed = true
@@ -646,7 +646,7 @@ function SolverCore.solve!(
     set_iter!(stats, stats.iter + 1)
     set_time!(stats, time() - start_time)
 
-    subtol = max(√eps(T), min(T(0.1), √norm_∇fk, T(0.9) * subtol)) # TODO
+    subtol = max(√eps(T), min(T(0.1), √norm_∇fk, T(0.9) * subtol))
     set_dual_residual!(stats, norm_∇fk)
 
     solver.σ = σk
