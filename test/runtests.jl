@@ -114,7 +114,7 @@ end
 end
 
 include("test_hsl_subsolver.jl")
-# include("restart.jl") #TODO R2N will fail with 10e-10
+include("restart.jl")
 include("callback.jl")
 include("consistency.jl")
 include("test_solvers.jl")
