@@ -6,7 +6,7 @@ export R2N, R2NSolver, R2NParameterSet
 Parameter set for the R2N solver. Controls algorithmic tolerances and step acceptance.
 
 # Keyword Arguments
-- `θ1 = T(0.5)`: Cauchy step parameter (0 < θ1 < 1).
+- `θ1 = T(0.9)`: Cauchy step parameter (0 < θ1 < 1).
 - `θ2 = eps(T)^(-1)`: Maximum allowed ratio between the step and the Cauchy step (θ2 > 1).
 - `η1 = eps(T)^(1/4)`: Accept step if actual/predicted reduction ≥ η1 (0 < η1 ≤ η2 < 1).
 - `η2 = T(0.95)`: Step is very successful if reduction ≥ η2 (0 < η1 ≤ η2 < 1).
@@ -36,7 +36,7 @@ struct R2NParameterSet{T} <: AbstractParameterSet
 end
 
 # Default parameter values
-const R2N_θ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
+const R2N_θ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.9), "T(0.9)")
 const R2N_θ2 = DefaultParameter(nlp -> inv(eps(eltype(nlp.meta.x0))), "eps(T)^(-1)")
 const R2N_η1 = DefaultParameter(nlp -> begin
   T = eltype(nlp.meta.x0)
