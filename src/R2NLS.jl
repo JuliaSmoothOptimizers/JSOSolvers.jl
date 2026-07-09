@@ -8,7 +8,7 @@ Parameter set for the R2NLS solver. Controls algorithmic tolerances and step acc
 # Keyword Arguments
 - `η1 = eps(T)^(1/4)`: Accept step if actual/predicted reduction ≥ η1 (0 < η1 ≤ η2 < 1).
 - `η2 = T(0.95)`: Step is very successful if reduction ≥ η2 (0 < η1 ≤ η2 < 1).
-- `θ1 = T(0.5)`: Controls Cauchy step size (0 < θ1 < 1).
+- `θ1 = T(0.9)`: Controls Cauchy step size (0 < θ1 < 1).
 - `θ2 = eps(T)^(-1)`: Maximum allowed ratio between the step and the Cauchy step (θ2 > 1).
 - `γ1 = T(1.5)`: Regularization increase factor on successful (but not very successful) step (1 < γ1 ≤ γ2).
 - `γ2 = T(2.5)`: Regularization increase factor on rejected step (γ1 ≤ γ2).
@@ -40,7 +40,7 @@ const R2NLS_η1 = DefaultParameter(nls -> begin
   T(eps(T))^(T(1)/T(4))
 end, "eps(T)^(1/4)")
 const R2NLS_η2 = DefaultParameter(nls -> eltype(nls.meta.x0)(0.95), "T(0.95)")
-const R2NLS_θ1 = DefaultParameter(nls -> eltype(nls.meta.x0)(0.5), "T(0.5)")
+const R2NLS_θ1 = DefaultParameter(nls -> eltype(nls.meta.x0)(0.9), "T(0.9)")
 const R2NLS_θ2 = DefaultParameter(nls -> inv(eps(eltype(nls.meta.x0))), "eps(T)^(-1)")
 const R2NLS_γ1 = DefaultParameter(nls -> eltype(nls.meta.x0)(1.5), "T(1.5)")
 const R2NLS_γ2 = DefaultParameter(nls -> eltype(nls.meta.x0)(2.5), "T(2.5)")
