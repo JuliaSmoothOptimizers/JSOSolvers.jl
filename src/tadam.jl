@@ -287,21 +287,7 @@ function SolverCore.solve!(
   
   while !done
     
-    # Always fresh: gradient on current minibatch (B_{k+1} after callback advanced it)
-    if step_accepted
-      grad!(nlp, x, gx)
-      norm_gx = norm(gx)
-      set_dual_residual!(stats, norm_gx)
-      
-      @. momentum = gx * (oneT - β1) + momentum * β1
-      @. v = (gx^2 * (oneT - β2) + v * β2 * (oneT - β2^(siter - 1))) / (oneT - β2^siter)
-      mdotgx = dot(momentum, gx)
-      @. p = momentum - gx
-      β1max = find_beta(p, mdotgx, norm_gx, β1, θ1, θ2, siter)
-      avgβ1max += β1max
-      @. d = -(gx * (oneT - β1max) + momentum * β1max) / (oneT - β1^max(1, siter))
-    end
-
+    # 1. Take the step using the currently computed d and v
     solve_tadam_subproblem!(s, d, v, solver.Δ, ϵ_v)
     @. xt = x + s
     
@@ -313,27 +299,32 @@ function SolverCore.solve!(
       set_status!(stats, :unbounded)
       break
     end
-    ρk = (stats.objective - ft) / ΔTk
+    
+    # Intercept Float32 underflow
+    if ΔTk <= eps(T)
+        ρk = -one(T)
+    else
+        ρk = (stats.objective - ft) / ΔTk
+    end
 
     if ρk >= η2
       solver.Δ = min(Δmax, γ2 * solver.Δ)
     elseif ρk < η1
       solver.Δ = solver.Δ * γ1
-      β1max *= γ3
+      β1max *= γ3  # Shrink momentum if rejected
     end
 
     step_accepted = ρk >= η1
-    solver.step_accepted = step_accepted  # this is used in callbacks to determine if the step was accepted or not
+    solver.step_accepted = step_accepted 
+    
     if step_accepted
       siter += 1
       x .= xt
       set_objective!(stats, ft)
+      
+      # 2. ABSORPTION: Update buffers using the gx that generated this successful step
       @. momentum = gx * (oneT - β1) + momentum * β1
       @. v = (gx^2 * (oneT - β2) + v * β2 * (oneT - β2^(siter - 1))) / (oneT - β2^siter)
-      mdotgx = dot(momentum, gx)
-      @. p = momentum - gx
-      β1max = find_beta(p, mdotgx, norm_gx, β1, θ1, θ2, siter)
-      avgβ1max += β1max
     end
 
     set_iter!(stats, stats.iter + 1)
@@ -348,22 +339,36 @@ function SolverCore.solve!(
 
     set_status!(
       stats,
-      get_status(
-        nlp,
-        elapsed_time = stats.elapsed_time,
-        optimal = optimal,
-        max_eval = max_eval,
-        iter = stats.iter,
-        max_iter = max_iter,
-        max_time = max_time,
-      ),
+      get_status(nlp, elapsed_time = stats.elapsed_time, optimal = optimal, max_eval = max_eval, iter = stats.iter, max_iter = max_iter, max_time = max_time)
     )
 
     step_underflow && set_status!(stats, :small_step)
     solver.Δ == zero(T) && set_status!(stats, :exception)
     
+    # 3. CALLBACK: Advances the batch to B_{k+1} if accepted
     callback(nlp, solver, stats)
     done = stats.status != :unknown
+
+    # 4. PREPARATION: Setup geometry for the NEXT iteration
+    if step_accepted && !done
+      # Fetch gradient on the NEW batch
+      grad!(nlp, x, gx) 
+      norm_gx = norm(gx)
+      set_dual_residual!(stats, norm_gx)
+      
+      # Compare OLD momentum against NEW gradient
+      mdotgx = dot(momentum, gx)
+      @. p = momentum - gx
+      β1max = find_beta(p, mdotgx, norm_gx, β1, θ1, θ2, siter)
+      avgβ1max += β1max
+      
+      # Compute NEW direction
+      @. d = -(gx * (oneT - β1max) + momentum * β1max) / (oneT - β1^max(1, siter))
+      
+    elseif !step_accepted && !done
+      # If rejected, gx and momentum are unchanged. Recompute d with the shrunk β1max.
+      @. d = -(gx * (oneT - β1max) + momentum * β1max) / (oneT - β1^max(1, siter))
+    end
   end
 
   avgβ1max /= max(1, siter - 1)
