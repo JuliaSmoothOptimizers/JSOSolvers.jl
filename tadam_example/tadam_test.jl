@@ -42,10 +42,14 @@ println("Problem: $(nlp.meta.name)")
 
 
 TADAM_stats = tadam(nlp, max_iter = 1000, verbose = 1)
+TADAM_stats_2 = tadam(nlp, max_iter = 1000, verbose =1 ,  θ2 = 200 )
 lbfgs_stats = lbfgs(nlp, max_iter = 1000, verbose = 10)
 
 println("\nStastics Summary:")
 println(TADAM_stats)
+
+println("\nStastics Summary:")
+println(TADAM_stats_2)
 
 println("\nStastics LBFGS Summary:")
 println(lbfgs_stats)
