@@ -273,6 +273,7 @@ end
 function SolverCore.reset!(solver::R2NSolver{T}, nlp::AbstractNLPModel) where {T}
   fill!(solver.obj_vec, typemin(T))
   solver.h = LineModel(nlp, solver.x, solver.s)
+  reset_subsolver!(solver.subsolver, nlp, nlp.meta.x0)
   return solver
 end
 

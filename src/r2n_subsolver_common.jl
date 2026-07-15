@@ -5,6 +5,7 @@
 
 export AbstractSubsolver, AbstractR2NSubsolver, AbstractR2NLSSubsolver
 export initialize!, update_subsolver!
+export finalize_subsolver!, reset_subsolver!
 export get_operator,
   get_jacobian, get_inertia, has_npc_direction, get_npc_direction, get_operator_norm
 
@@ -103,3 +104,23 @@ has_npc_direction(sub) = false
 Return a direction of negative curvature. Raises an error if none was found or if the subsolver does not support it.
 """
 get_npc_direction(sub) = error("No NPC direction available for $(typeof(sub)).")
+
+"""
+    finalize_subsolver!(subsolver::AbstractSubsolver)
+
+Explicitly free any C/Fortran memory allocated by the subsolver to prevent leaks.
+"""
+function finalize_subsolver!(subsolver::AbstractSubsolver)
+  return nothing
+end
+
+"""
+    reset_subsolver!(subsolver::AbstractSubsolver, nlp, x)
+
+Reset the subsolver state. Default behavior is to finalize and re-initialize.
+"""
+function reset_subsolver!(subsolver::AbstractSubsolver, nlp, x)
+  finalize_subsolver!(subsolver)
+  initialize!(subsolver, nlp, x)
+  return nothing
+end
