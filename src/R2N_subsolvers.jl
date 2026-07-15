@@ -133,6 +133,7 @@ mutable struct HSLR2NSubsolver{T, S} <: AbstractR2NSubsolver{T}
   n::Int
   nnzh::Int
   work::Vector{T} # workspace for solves (used for MA57)
+  _finalized::Bool
 end
 
 function HSLR2NSubsolver(nlp::AbstractNLPModel{T, V}; hsl_constructor = ma97_coord) where {T, V}
@@ -166,7 +167,26 @@ function HSLR2NSubsolver(nlp::AbstractNLPModel{T, V}; hsl_constructor = ma97_coo
     work = Vector{T}(undef, 0)
   end
 
-  return HSLR2NSubsolver{T, typeof(hsl_obj)}(hsl_obj, rows, cols, vals, n, nnzh, work)
+  sub = HSLR2NSubsolver{T, typeof(hsl_obj)}(hsl_obj, rows, cols, vals, n, nnzh, work, false)
+  finalizer(finalize_subsolver!, sub)
+  
+  return sub
+end
+
+# Helper to dispatch safely on the HSL object type
+_finalize_hsl_obj!(obj::Ma97) = Base.finalize(obj)
+_finalize_hsl_obj!(obj)       = nothing # Fallback for Ma57 or other types
+
+"""
+    finalize_subsolver!(sub::HSLR2NSubsolver)
+
+Safely triggers the underlying HSL finalizer exactly once.
+"""
+function finalize_subsolver!(sub::HSLR2NSubsolver)
+  sub._finalized && return nothing
+  sub._finalized = true
+  _finalize_hsl_obj!(sub.hsl_obj)
+  return nothing
 end
 
 MA97R2NSubsolver(nlp) = HSLR2NSubsolver(nlp; hsl_constructor = ma97_coord)
