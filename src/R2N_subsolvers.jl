@@ -178,6 +178,15 @@ end
 _finalize_hsl_obj!(obj::Ma97) = Base.finalize(obj)
 _finalize_hsl_obj!(obj)       = nothing # Fallback for Ma57 or other types #TODO if MA57 has it add it 
 
+
+# _finalize_hsl_obj!(obj::Ma57) = Base.finalize(obj)  # was `nothing` → silent leak
+
+ 
+# Krylov/LBFGS: no-op, so try/finally in R2N is safe for all solvers
+function finalize_subsolver!(sub::AbstractR2NSubsolver)
+  return nothing
+end
+
 """
     finalize_subsolver!(sub::HSLR2NSubsolver)
 
