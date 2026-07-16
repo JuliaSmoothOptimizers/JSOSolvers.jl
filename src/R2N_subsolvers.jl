@@ -127,6 +127,7 @@ end
 
 mutable struct HSLR2NSubsolver{T, S} <: AbstractR2NSubsolver{T}
   hsl_obj::S
+  hsl_constructor::F
   rows::Vector{Int}
   cols::Vector{Int}
   vals::Vector{T}
@@ -167,7 +168,7 @@ function HSLR2NSubsolver(nlp::AbstractNLPModel{T, V}; hsl_constructor = ma97_coo
     work = Vector{T}(undef, 0)
   end
 
-  sub = HSLR2NSubsolver{T, typeof(hsl_obj)}(hsl_obj, rows, cols, vals, n, nnzh, work, false)
+  sub = HSLR2NSubsolver{T, typeof(hsl_obj)}(hsl_obj, hsl_constructor, rows, cols, vals, n, nnzh, work, false)
   finalizer(finalize_subsolver!, sub)
   
   return sub
@@ -175,7 +176,7 @@ end
 
 # Helper to dispatch safely on the HSL object type
 _finalize_hsl_obj!(obj::Ma97) = Base.finalize(obj)
-_finalize_hsl_obj!(obj)       = nothing # Fallback for Ma57 or other types
+_finalize_hsl_obj!(obj)       = nothing # Fallback for Ma57 or other types #TODO if MA57 has it add it 
 
 """
     finalize_subsolver!(sub::HSLR2NSubsolver)
@@ -258,4 +259,41 @@ function LinearAlgebra.mul!(y::AbstractVector, sub::HSLR2NSubsolver, x::Abstract
     x,
     y,
   )
+end
+
+function reset_subsolver!(sub::HSLR2NSubsolver{T}, nlp::AbstractNLPModel, x) where {T}
+  # 1. Free current C/Fortran object before rebuilding
+  finalize_subsolver!(sub)
+
+  # 2. Update dimensions (new problem may differ in size/nnzh)
+  n    = nlp.meta.nvar
+  nnzh = nlp.meta.nnzh
+  sub.n    = n
+  sub.nnzh = nnzh
+
+  # 3. Resize storage arrays if the new problem is larger or smaller
+  total_nnz = nnzh + n
+  resize!(sub.rows, total_nnz)
+  resize!(sub.cols, total_nnz)
+  resize!(sub.vals, total_nnz)
+
+  # 4. Populate sparsity structure for the new problem
+  hess_structure!(nlp, view(sub.rows, 1:nnzh), view(sub.cols, 1:nnzh))
+  fill!(view(sub.vals, 1:total_nnz), zero(T))
+  @inbounds for i = 1:n
+    sub.rows[nnzh + i] = i
+    sub.cols[nnzh + i] = i
+    sub.vals[nnzh + i] = one(T)
+  end
+
+  # 5. Recreate the HSL object — triggers symbolic analysis for the new structure
+  sub.hsl_obj    = sub.hsl_constructor(n, sub.cols, sub.rows, sub.vals)
+  sub._finalized = false   # ← must reset: object is alive again
+
+  # 6. Resize MA57 workspace if needed
+  sub.hsl_constructor === ma57_coord && resize!(sub.work, n)
+
+  # 7. Load actual Hessian values at the starting point
+  hess_coord!(nlp, x, view(sub.vals, 1:sub.nnzh))
+  return nothing
 end
