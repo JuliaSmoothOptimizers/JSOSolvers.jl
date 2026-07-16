@@ -125,9 +125,9 @@ end
 #   HSL Subsolver (MA97 / MA57)
 # ==============================================================================
 
-mutable struct HSLR2NSubsolver{T, S, F} <: AbstractR2NSubsolver{T}
+mutable struct HSLR2NSubsolver{T, S} <: AbstractR2NSubsolver{T}
   hsl_obj::S
-  hsl_constructor::F
+  hsl_constructor::Function
   rows::Vector{Int}
   cols::Vector{Int}
   vals::Vector{T}
