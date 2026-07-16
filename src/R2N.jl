@@ -317,9 +317,12 @@ end
     ls_min_alpha = convert(T, ls_min_alpha),
     ls_max_alpha = convert(T, ls_max_alpha),
   )
-  return solve!(solver, nlp; kwargs...)
+  try
+    return solve!(solver, nlp; kwargs...)
+  finally
+    finalize_subsolver!(solver.subsolver)  # ← free Fortran handle NOW, not at GC
+  end
 end
-
 function SolverCore.solve!(
   solver::R2NSolver{T, V},
   nlp::AbstractNLPModel{T, V},
