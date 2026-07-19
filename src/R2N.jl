@@ -514,6 +514,15 @@ function SolverCore.solve!(
         f0_val = stats.objective
         dot_ag = dot(∇fk, dir) # dot_ag = ∇f^T * d
 
+        # ==========================================
+        # Force a descent direction for MA57/MA97
+        # ==========================================
+        if dot_ag > 0
+        # or if solver.subsolver isa HSLR2NSubsolver && dot_ag > 0 # todo check only for HSLR2NSubsolver
+            dir .= -dir
+            dot_ag = -dot_ag
+        end
+
         α, ft, nbk, nbG = armijo_goldstein(
           solver.h,
           f0_val,
@@ -596,6 +605,9 @@ function SolverCore.solve!(
 
         if ΔTk <= eps(T) * max(one(T), abs(stats.objective))
           step_accepted = false
+          σk = γ2 * σk
+          solver.σ = σk
+          npcCount = 0
         else
           @. xt = x + s
           if !fck_computed
