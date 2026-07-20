@@ -515,29 +515,27 @@ function SolverCore.solve!(
         dot_ag = dot(∇fk, dir) # dot_ag = ∇f^T * d
 
         # ==========================================
-        # Force a descent direction for MA57/MA97
+        # Check a descent direction
         # ==========================================
         if dot_ag > 0
-        # or if solver.subsolver isa HSLR2NSubsolver && dot_ag > 0 # todo check only for HSLR2NSubsolver
-            dir .= -dir
-            dot_ag = -dot_ag
+            force_sigma_increase = true
+        else
+          α, ft, nbk, nbG = armijo_goldstein(
+            solver.h,
+            f0_val,
+            dot_ag;
+            t = one(T),
+            τ₀ = ls_c,
+            τ₁ = 1 - ls_c,
+            γ₀ = ls_decrease,
+            γ₁ = ls_increase,
+            bk_max = 100,
+            bG_max = 100,
+            verbose = false
+          )
+          @. s = α * dir
+          fck_computed = true
         end
-
-        α, ft, nbk, nbG = armijo_goldstein(
-          solver.h,
-          f0_val,
-          dot_ag;
-          t = one(T),
-          τ₀ = ls_c,
-          τ₁ = 1 - ls_c,
-          γ₀ = ls_decrease,
-          γ₁ = ls_increase,
-          bk_max = 100,
-          bG_max = 100,
-          verbose = false
-        )
-        @. s = α * dir
-        fck_computed = true
       elseif npc_handler == :prev
         npcCount = 0
         # s is already populated by solver.subsolver
@@ -570,10 +568,6 @@ function SolverCore.solve!(
         fck_computed = false
       end
     end
-
-
-
-
 
   if force_sigma_increase || (npc_handler == :sigma && npcCount >= 1)
       step_accepted = false
