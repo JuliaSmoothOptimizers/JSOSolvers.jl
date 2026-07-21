@@ -1,7 +1,7 @@
 export tadam, TADAMSolver, TADAMParameterSet
 
 """
-    TADAMParameterSet([T=Float64]; η1, η2, γ1, γ2,γ3 ,β1, β2, ϵ_v, θ1, θ2, Δmax)
+    TADAMParameterSet([T=Float64]; η1, η2, γ1, γ2, γ3 ,β1, β2, ϵ_v, θ1, θ2, Δmax)
 
 Parameter set for the TADAM solver. Controls algorithmic tolerances, momentum parameters, and step acceptance.
 
