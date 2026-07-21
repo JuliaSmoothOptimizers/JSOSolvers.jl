@@ -329,7 +329,7 @@ function SolverCore.solve!(
     compute_cauchy!(solver.sc, d, v, solver.Δ, ϵ_v)
 
     # 2. Find interpolation parameter τ
-    tau = find_tau(solver.sc, solver.s_infty, gx, T(1e-6), θ2)
+    tau = find_tau(solver.sc, solver.s_infty, gx, T(1e-6), θ2) #TODO change from  θ1 to T(1e-6), if I keep θ1, then It would not converge for my example
 
     if tau >= zero(T)
       # Valid step found! Construct the interpolated step.
@@ -348,8 +348,6 @@ function SolverCore.solve!(
       ρk = ΔTk <= eps(T) ? -one(T) : (stats.objective - ft) / ΔTk
     else
       # Gradient-Related Failure
-      # The step could not satisfy the conditions.
-      # Treat as a failure to safely shrink the Trust Region radius.
       ρk = -one(T)
       step_underflow = false
       β1max *= γ3
