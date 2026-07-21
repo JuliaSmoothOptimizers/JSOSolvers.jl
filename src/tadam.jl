@@ -304,13 +304,16 @@ function SolverCore.solve!(
   callback(nlp, solver, stats)
   done = stats.status != :unknown
 
-  @. d = -gx
-  @. v = gx^2
+
 
   β1max = zero(T)
   avgβ1max = zero(T)
-  siter = 1
+  siter = one(T)
   oneT = one(T)
+
+# @. d = -gx
+  @. d = -gx / (oneT - β1^siter)
+  @. v = gx^2
 
   while !done
 
@@ -319,7 +322,6 @@ function SolverCore.solve!(
     compute_cauchy!(solver.sc, d, v, solver.Δ, ϵ_v)
 
     # 2. Find interpolation parameter τ
-    # tau = find_tau(solver.sc, solver.s_infty, gx, T(1e-6), θ2) #TODO change from  θ1 to T(1e-6), if I keep θ1, then It would not converge for my
     tau = find_tau(solver.sc, solver.s_infty, gx, θ1, θ2) #TODO change from  θ1 to T(1e-6), if I keep θ1, then It would not converge for my
 
     # Valid step found! Construct the interpolated step.
@@ -327,7 +329,7 @@ function SolverCore.solve!(
     @. xt = x + s
 
     step_underflow = x == xt
-    ΔTk = dot(d, s) - T(0.5) * dot(s .^ 2, sqrt.(v) .+ ϵ_v)
+    ΔTk = dot(gx, s) - T(0.5) * dot(s .^ 2, sqrt.(v) .+ ϵ_v) #TODO do I need dot(d,s)  or dot(gx,s) 
 
     ft = obj(nlp, xt)
     if ft == -Inf
