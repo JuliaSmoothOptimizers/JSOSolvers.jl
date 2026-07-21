@@ -15,7 +15,7 @@ Parameter set for the TADAM solver. Controls algorithmic tolerances, momentum pa
 - `β2 = T(0.999)`: Constant in the RMSProp term.
 - `ϵ_v = T(1e-8)`: RMSProp epsilon to prevent division by zero.
 - `θ1 = T(0.1)`: Momentum contribution parameter for convergence condition 1.
-- `θ2 = T(1.0)`: Momentum contribution parameter for convergence condition 2.
+- `θ2 =  inv(T(eps(T))^(T(1) / T(3)))`: Momentum contribution parameter for convergence condition 2.
 - `Δmax = 1/eps(T)`: Maximum step parameter for trust-region.
 """
 struct TADAMParameterSet{T} <: AbstractParameterSet
