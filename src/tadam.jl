@@ -308,11 +308,11 @@ function SolverCore.solve!(
 
   β1max = zero(T)
   avgβ1max = zero(T)
-  siter = one(T)
+  siter = 1
   oneT = one(T)
 
 # @. d = -gx
-  @. d = -gx / (oneT - β1^siter)
+  @. d = -gx / (oneT - β1)
   @. v = gx^2
 
   while !done
@@ -329,7 +329,7 @@ function SolverCore.solve!(
     @. xt = x + s
 
     step_underflow = x == xt
-    ΔTk = dot(gx, s) - T(0.5) * dot(s .^ 2, sqrt.(v) .+ ϵ_v) #TODO do I need dot(d,s)  or dot(gx,s) 
+    ΔTk = -dot(gx, s) - T(0.5) * dot(s .^ 2, sqrt.(v) .+ ϵ_v) #TODO do I need dot(d,s)  or dot(gx,s) 
 
     ft = obj(nlp, xt)
     if ft == -Inf
@@ -401,7 +401,7 @@ function SolverCore.solve!(
 
       mdotgx = dot(momentum, gx)
       @. p = momentum - gx
-      β1max = find_beta(p, mdotgx, norm_gx, β1, θ1, θ2, siter)
+      β1max = find_beta_tadam(p, mdotgx, norm_gx, β1, θ1, θ2, siter)
       avgβ1max += β1max
 
       @. d = -(gx * (oneT - β1max) + momentum * β1max) / (oneT - β1^max(1, siter))
@@ -504,9 +504,9 @@ function find_tau(sc::V, s_infty::V, g::V, κ1::T, κ2::T) where {V, T}
 end
 
 """
-    find_beta(p, mdotgx, norm_gx, β1, θ1, θ2, siter)
+    find_beta_tadam(p, mdotgx, norm_gx, β1, θ1, θ2, siter)
 """
-function find_beta(p::V, mdotgx::T, norm_gx::T, β1::T, θ1::T, θ2::T, siter::Int) where {T, V}
+function find_beta_tadam(p::V, mdotgx::T, norm_gx::T, β1::T, θ1::T, θ2::T, siter::Int) where {T, V}
   n1 = norm_gx^2 - mdotgx
   n2 = norm(p)
   b = (one(T) - β1^siter)
