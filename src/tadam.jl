@@ -1,7 +1,7 @@
 export tadam, TADAMSolver, TADAMParameterSet
 
 """
-    TADAMParameterSet([T=Float64]; η1, η2, γ1, γ2, γ3, β1, β2, ϵ_v, θ1, θ2, Δmax)
+    TADAMParameterSet([T=Float64]; η1, η2, γ1, γ2, β1, β2, ϵ_v, θ1, θ2, Δmax)
 
 Parameter set for the TADAM solver. Controls algorithmic tolerances, momentum parameters, and step acceptance.
 
@@ -10,7 +10,6 @@ Parameter set for the TADAM solver. Controls algorithmic tolerances, momentum pa
 - `η2 = T(0.95)`: Step is very successful if reduction ≥ η2.
 - `γ1 = T(0.5)`: Radius decrease factor on rejected step.
 - `γ2 = T(2.0)`: Radius increase factor on very successful step.
-- `γ3 = T(0.5)`: Momentum contribution decrease factor on rejected step.
 - `β1 = T(0.9)`: Constant in the momentum term.
 - `β2 = T(0.999)`: Constant in the RMSProp term.
 - `ϵ_v = T(1e-8)`: RMSProp epsilon to prevent division by zero.
@@ -23,7 +22,6 @@ struct TADAMParameterSet{T} <: AbstractParameterSet
   η2::Parameter{T, RealInterval{T}}
   γ1::Parameter{T, RealInterval{T}}
   γ2::Parameter{T, RealInterval{T}}
-  γ3::Parameter{T, RealInterval{T}}
   β1::Parameter{T, RealInterval{T}}
   β2::Parameter{T, RealInterval{T}}
   ϵ_v::Parameter{T, RealInterval{T}}
@@ -39,7 +37,6 @@ end, "eps(T)^(1/4)")
 const TADAM_η2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.95), "T(0.95)")
 const TADAM_γ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
 const TADAM_γ2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(2.0), "T(2.0)")
-const TADAM_γ3 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
 const TADAM_β1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.9), "T(0.9)")
 const TADAM_β2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.999), "T(0.999)")
 const TADAM_ϵ_v = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1e-8), "T(1e-8)")
@@ -56,7 +53,6 @@ function TADAMParameterSet(
   η2::T = get(TADAM_η2, nlp),
   γ1::T = get(TADAM_γ1, nlp),
   γ2::T = get(TADAM_γ2, nlp),
-  γ3::T = get(TADAM_γ3, nlp),
   β1::T = get(TADAM_β1, nlp),
   β2::T = get(TADAM_β2, nlp),
   ϵ_v::T = get(TADAM_ϵ_v, nlp),
@@ -79,7 +75,6 @@ function TADAMParameterSet(
     Parameter(η2, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(γ1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(γ2, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
-    Parameter(γ3, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(β1, RealInterval(zero(T), one(T), lower_open = false, upper_open = true)),
     Parameter(β2, RealInterval(zero(T), one(T), lower_open = false, upper_open = true)),
     Parameter(ϵ_v, RealInterval(zero(T), T(Inf), lower_open = true, upper_open = true)),
@@ -125,7 +120,6 @@ function TADAMSolver(
   η2::T = get(TADAM_η2, nlp),
   γ1::T = get(TADAM_γ1, nlp),
   γ2::T = get(TADAM_γ2, nlp),
-  γ3::T = get(TADAM_γ3, nlp),
   β1::T = get(TADAM_β1, nlp),
   β2::T = get(TADAM_β2, nlp),
   ϵ_v::T = get(TADAM_ϵ_v, nlp),
@@ -139,7 +133,6 @@ function TADAMSolver(
     η2 = η2,
     γ1 = γ1,
     γ2 = γ2,
-    γ3 = γ3,
     β1 = β1,
     β2 = β2,
     ϵ_v = ϵ_v,
@@ -191,7 +184,6 @@ SolverCore.reset!(solver::TADAMSolver, ::AbstractNLPModel) = reset!(solver)
   η2::Real = get(TADAM_η2, nlp),
   γ1::Real = get(TADAM_γ1, nlp),
   γ2::Real = get(TADAM_γ2, nlp),
-  γ3::Real = get(TADAM_γ3, nlp),
   β1::Real = get(TADAM_β1, nlp),
   β2::Real = get(TADAM_β2, nlp),
   ϵ_v::Real = get(TADAM_ϵ_v, nlp),
@@ -206,7 +198,6 @@ SolverCore.reset!(solver::TADAMSolver, ::AbstractNLPModel) = reset!(solver)
     η2 = convert(T, η2),
     γ1 = convert(T, γ1),
     γ2 = convert(T, γ2),
-    γ3 = convert(T, γ3),
     β1 = convert(T, β1),
     β2 = convert(T, β2),
     ϵ_v = convert(T, ϵ_v),
@@ -240,7 +231,6 @@ function SolverCore.solve!(
   η2 = value(params.η2)
   γ1 = value(params.γ1)
   γ2 = value(params.γ2)
-  γ3 = value(params.γ3)
   β1 = value(params.β1)
   β2 = value(params.β2)
   ϵ_v = value(params.ϵ_v)
@@ -329,29 +319,23 @@ function SolverCore.solve!(
     compute_cauchy!(solver.sc, d, v, solver.Δ, ϵ_v)
 
     # 2. Find interpolation parameter τ
-    tau = find_tau(solver.sc, solver.s_infty, gx, T(1e-6), θ2) #TODO change from  θ1 to T(1e-6), if I keep θ1, then It would not converge for my example
+    # tau = find_tau(solver.sc, solver.s_infty, gx, T(1e-6), θ2) #TODO change from  θ1 to T(1e-6), if I keep θ1, then It would not converge for my
+    tau = find_tau(solver.sc, solver.s_infty, gx, θ1, θ2) #TODO change from  θ1 to T(1e-6), if I keep θ1, then It would not converge for my
 
-    if tau >= zero(T)
-      # Valid step found! Construct the interpolated step.
-      @. s = (oneT - tau) * solver.sc + tau * solver.s_infty
-      @. xt = x + s
+    # Valid step found! Construct the interpolated step.
+    @. s = (oneT - tau) * solver.sc + tau * solver.s_infty
+    @. xt = x + s
 
-      step_underflow = x == xt
-      ΔTk = dot(d, s) - T(0.5) * dot(s .^ 2, sqrt.(v) .+ ϵ_v)
+    step_underflow = x == xt
+    ΔTk = dot(d, s) - T(0.5) * dot(s .^ 2, sqrt.(v) .+ ϵ_v)
 
-      ft = obj(nlp, xt)
-      if ft == -Inf
-        set_status!(stats, :unbounded)
-        break
-      end
-
-      ρk = ΔTk <= eps(T) ? -one(T) : (stats.objective - ft) / ΔTk
-    else
-      # Gradient-Related Failure
-      ρk = -one(T)
-      step_underflow = false
-      β1max *= γ3
+    ft = obj(nlp, xt)
+    if ft == -Inf
+      set_status!(stats, :unbounded)
+      break
     end
+
+    ρk = ΔTk <= eps(T) ? -one(T) : (stats.objective - ft) / ΔTk
 
     # 3. Standard Trust-Region Update
     if ρk >= η2
@@ -397,11 +381,11 @@ function SolverCore.solve!(
     )
 
     step_underflow && set_status!(stats, :small_step)
-    # solver.Δ == zero(T) && set_status!(stats, :exception)
-    if solver.Δ <= eps(T)^2
-        set_status!(stats, :small_step)
-        break
-    end
+    solver.Δ == zero(T) && set_status!(stats, :exception)
+    # if solver.Δ <= eps(T)^2
+    #   set_status!(stats, :small_step)
+    #   break
+    # end
 
     # 5. CALLBACK: Advances the batch to B_{k+1} if accepted
     callback(nlp, solver, stats)
@@ -468,18 +452,16 @@ end
     find_tau(sc, s_infty, g, θ1, θ2)
 Analytically finds the largest τ ∈ [0,1] satisfying both gradient-related conditions.
 """
-function find_tau(sc::V, s_infty::V, g::V, θ1::T, θ2::T) where {V, T}
+function find_tau(sc::V, s_infty::V, g::V, κ1::T, κ2::T) where {V, T}
   w = s_infty .- sc
   τ_min = zero(T)
   τ_max = one(T)
 
   g_norm_sq = dot(g, g)
 
-  # ---------------------------------------------------------
-  # Condition 1: sᵀg ≤ -θ1 ||g||²
-  # ---------------------------------------------------------
+  # Condition 1: sᵀg ≤ -κ1 ||g||²
   A = dot(w, g)
-  B = -θ1 * g_norm_sq - dot(sc, g)
+  B = -κ1 * g_norm_sq - dot(sc, g)
 
   if A > zero(T)
     τ_max = min(τ_max, B / A)
@@ -487,21 +469,19 @@ function find_tau(sc::V, s_infty::V, g::V, θ1::T, θ2::T) where {V, T}
     τ_min = max(τ_min, B / A)
   else
     if B < zero(T)
-      return -one(T)
+      return zero(T) # Fallback strictly to Cauchy point
     end
   end
 
-  # ---------------------------------------------------------
-  # Condition 2: ||s||² ≤ θ2² ||g||²
-  # ---------------------------------------------------------
+  # Condition 2: ||s||² ≤ κ2² ||g||²
   a = dot(w, w)
   b = T(2.0) * dot(sc, w)
-  c = dot(sc, sc) - (θ2^2 * g_norm_sq)
+  c = dot(sc, sc) - (κ2^2 * g_norm_sq)
 
   if a > eps(T)
     discriminant = b^2 - T(4.0) * a * c
     if discriminant < zero(T)
-      return -one(T)
+      return zero(T)
     end
 
     sq_disc = sqrt(discriminant)
@@ -511,13 +491,13 @@ function find_tau(sc::V, s_infty::V, g::V, θ1::T, θ2::T) where {V, T}
     τ_min = max(τ_min, r1)
     τ_max = min(τ_max, r2)
   elseif c > zero(T)
-    return -one(T)
+    return zero(T)
   end
 
   if τ_min <= τ_max
-    return τ_max
+    return max(zero(T), τ_max)
   else
-    return -one(T)
+    return zero(T)
   end
 end
 
@@ -531,7 +511,7 @@ function find_beta(p::V, mdotgx::T, norm_gx::T, β1::T, θ1::T, θ2::T, siter::I
 
   # Condition 1: Sufficient decrease
   β11 = n1 > zero(T) ? (one(T) - θ1 * b) * norm_gx^2 / n1 : β1
-  
+
   # Condition 2: Upper bound
   β12 = n2 > zero(T) ? (θ2 * b - one(T)) * norm_gx / n2 : β1
 
