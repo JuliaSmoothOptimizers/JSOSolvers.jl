@@ -23,7 +23,6 @@ struct TADAMParameterSet{T} <: AbstractParameterSet
   η2::Parameter{T, RealInterval{T}}
   γ1::Parameter{T, RealInterval{T}}
   γ2::Parameter{T, RealInterval{T}}
-  γ3::Parameter{T, RealInterval{T}}
   β1::Parameter{T, RealInterval{T}}
   β2::Parameter{T, RealInterval{T}}
   ϵ_v::Parameter{T, RealInterval{T}}
@@ -32,7 +31,6 @@ struct TADAMParameterSet{T} <: AbstractParameterSet
   Δmax::Parameter{T, RealInterval{T}}
 end
 
-# Default parameter values
 const TADAM_η1 = DefaultParameter(nlp -> begin
   T = eltype(nlp.meta.x0)
   T(eps(T))^(T(1) / T(4))
@@ -40,14 +38,13 @@ end, "eps(T)^(1/4)")
 const TADAM_η2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.95), "T(0.95)")
 const TADAM_γ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
 const TADAM_γ2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(2.0), "T(2.0)")
-const TADAM_γ3 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
 const TADAM_β1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.9), "T(0.9)")
 const TADAM_β2 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.999), "T(0.999)")
 const TADAM_ϵ_v = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1e-8), "T(1e-8)")
 const TADAM_θ1 = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.1), "T(0.1)")
 const TADAM_θ2 = DefaultParameter(nlp -> begin
   T = eltype(nlp.meta.x0)
-  inv(T(eps(T))^(T(1) / T(3))) # Inverted to create a macroscopic bound
+  inv(T(eps(T))^(T(1) / T(3)))
 end, "1/eps(T)^(1/3)")
 const TADAM_Δmax = DefaultParameter(nlp -> inv(eps(eltype(nlp.meta.x0))), "1/eps(T)")
 
@@ -57,7 +54,6 @@ function TADAMParameterSet(
   η2::T = get(TADAM_η2, nlp),
   γ1::T = get(TADAM_γ1, nlp),
   γ2::T = get(TADAM_γ2, nlp),
-  γ3::T = get(TADAM_γ3, nlp),
   β1::T = get(TADAM_β1, nlp),
   β2::T = get(TADAM_β2, nlp),
   ϵ_v::T = get(TADAM_ϵ_v, nlp),
@@ -68,7 +64,6 @@ function TADAMParameterSet(
   @assert zero(T) < η1 ≤ η2 < one(T) "η1, η2 must satisfy 0 < η1 ≤ η2 < 1"
   @assert zero(T) < γ1 < one(T) "γ1 must satisfy 0 < γ1 < 1"
   @assert γ2 > one(T) "γ2 must satisfy γ2 > 1"
-  @assert zero(T) < γ3 < one(T) "γ3 must satisfy 0 < γ3 < 1"
   @assert zero(T) ≤ β1 < one(T) "β1 must satisfy 0 ≤ β1 < 1"
   @assert zero(T) ≤ β2 < one(T) "β2 must satisfy 0 ≤ β2 < 1"
   @assert zero(T) < ϵ_v "ϵ_v must be strictly positive"
@@ -81,7 +76,6 @@ function TADAMParameterSet(
     Parameter(η2, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(γ1, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(γ2, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
-    Parameter(γ3, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(β1, RealInterval(zero(T), one(T), lower_open = false, upper_open = true)),
     Parameter(β2, RealInterval(zero(T), one(T), lower_open = false, upper_open = true)),
     Parameter(ϵ_v, RealInterval(zero(T), T(Inf), lower_open = true, upper_open = true)),
@@ -113,8 +107,8 @@ mutable struct TADAMSolver{T, V, M <: AbstractNLPModel{T, V}} <: AbstractOptimiz
   d::V
   v::V
   s::V
-  sc::V        # Cauchy step
-  s_infty::V   # Subproblem step
+  sc::V
+  s_infty::V
   p::V
   Δ::T
   step_accepted::Bool
@@ -127,7 +121,6 @@ function TADAMSolver(
   η2::T = get(TADAM_η2, nlp),
   γ1::T = get(TADAM_γ1, nlp),
   γ2::T = get(TADAM_γ2, nlp),
-  γ3::T = get(TADAM_γ3, nlp),
   β1::T = get(TADAM_β1, nlp),
   β2::T = get(TADAM_β2, nlp),
   ϵ_v::T = get(TADAM_ϵ_v, nlp),
@@ -141,7 +134,6 @@ function TADAMSolver(
     η2 = η2,
     γ1 = γ1,
     γ2 = γ2,
-    γ3 = γ3,
     β1 = β1,
     β2 = β2,
     ϵ_v = ϵ_v,
@@ -193,7 +185,6 @@ SolverCore.reset!(solver::TADAMSolver, ::AbstractNLPModel) = reset!(solver)
   η2::Real = get(TADAM_η2, nlp),
   γ1::Real = get(TADAM_γ1, nlp),
   γ2::Real = get(TADAM_γ2, nlp),
-  γ3::Real = get(TADAM_γ3, nlp),
   β1::Real = get(TADAM_β1, nlp),
   β2::Real = get(TADAM_β2, nlp),
   ϵ_v::Real = get(TADAM_ϵ_v, nlp),
@@ -208,7 +199,6 @@ SolverCore.reset!(solver::TADAMSolver, ::AbstractNLPModel) = reset!(solver)
     η2 = convert(T, η2),
     γ1 = convert(T, γ1),
     γ2 = convert(T, γ2),
-    γ3 = convert(T, γ3),
     β1 = convert(T, β1),
     β2 = convert(T, β2),
     ϵ_v = convert(T, ϵ_v),
@@ -242,7 +232,6 @@ function SolverCore.solve!(
   η2 = value(params.η2)
   γ1 = value(params.γ1)
   γ2 = value(params.γ2)
-  γ3 = value(params.γ3)
   β1 = value(params.β1)
   β2 = value(params.β2)
   ϵ_v = value(params.ϵ_v)
@@ -348,25 +337,22 @@ function SolverCore.solve!(
       end
 
       ρk = ΔTk <= eps(T) ? -one(T) : (stats.objective - ft) / ΔTk
-
-      # Standard Trust-Region Update
-      if ρk >= η2
-        solver.Δ = min(Δmax, γ2 * solver.Δ)
-      elseif ρk < η1
-        solver.Δ = solver.Δ * γ1
-      end
-
-      step_accepted = ρk >= η1
     else
-      # 3. Gradient-Related Failure
-      # The Dogleg interpolation failed the theoretical conditions. 
-      # Shrink momentum strictly to align the model closer to the gradient.
-      # DO NOT shrink the trust-region radius here!
+      # Gradient-Related Failure
+      # The step could not satisfy the conditions.
+      # Treat as a failure to safely shrink the Trust Region radius.
+      ρk = -one(T)
       step_underflow = false
-      step_accepted = false
-      β1max *= γ3
     end
 
+    # 3. Standard Trust-Region Update
+    if ρk >= η2
+      solver.Δ = min(Δmax, γ2 * solver.Δ)
+    elseif ρk < η1
+      solver.Δ = solver.Δ * γ1
+    end
+
+    step_accepted = ρk >= η1
     solver.step_accepted = step_accepted
 
     # 4. ABSORPTION: Apply EMA Updates ONLY on accepted steps
@@ -375,7 +361,6 @@ function SolverCore.solve!(
       x .= xt
       set_objective!(stats, ft)
 
-      # Update buffers using the gx that generated this successful step
       @. momentum = gx * (oneT - β1) + momentum * β1
       @. v = (gx^2 * (oneT - β2) + v * β2 * (oneT - β2^(siter - 1))) / (oneT - β2^siter)
     end
@@ -422,11 +407,9 @@ function SolverCore.solve!(
       avgβ1max += β1max
 
       @. d = -(gx * (oneT - β1max) + momentum * β1max) / (oneT - β1^max(1, siter))
-
-    elseif !step_accepted && !done
-      # If rejected, gx and momentum are unchanged. Recompute strictly with shrunk β1max.
-      @. d = -(gx * (oneT - β1max) + momentum * β1max) / (oneT - β1^max(1, siter))
     end
+    # Note: If rejected, gx, momentum, v, and d are perfectly preserved.
+    # The next iteration automatically attempts the step with a shrunk Δ.
   end
 
   avgβ1max /= max(1, siter - 1)
@@ -440,15 +423,12 @@ end
     solve_tadam_subproblem!(s, d, v, Δk, ϵ_v)
 """
 function solve_tadam_subproblem!(s::V, d::V, v::V, Δk::T, ϵ_v::T) where {V, T}
-  # Note: 'd' already contains the negative sign for descent.
   @. s = min(Δk, max(-Δk, d / (sqrt(v) + ϵ_v)))
 end
 
 """
     compute_cauchy!(sc, d, v, Δk, ϵ_v)
-
-Computes the Cauchy point along the gradient-related momentum direction (-d) 
-using the exact Subcases 1.1 and 1.2 from the TRAdam paper, utilizing the ∞-norm.
+Computes the Cauchy point using the ∞-norm.
 """
 function compute_cauchy!(sc::V, d::V, v::V, Δk::T, ϵ_v::T) where {V, T}
   d_norm_inf = maximum(abs.(d))
@@ -461,25 +441,19 @@ function compute_cauchy!(sc::V, d::V, v::V, Δk::T, ϵ_v::T) where {V, T}
   d_norm_sq = dot(d, d)
   d_H_d = dot(d .^ 2, sqrt.(v) .+ ϵ_v)
 
-  # Case 1: d^T H d > 0 (Always true since H is strictly positive)
-  t_star = d_norm_sq / d_H_d
+  t_star = d_norm_sq / (d_H_d + eps(T))
 
   if t_star * d_norm_inf <= Δk
-    # Sub-case 1.1: Inside trust region
     t_C = t_star
   else
-    # Sub-case 1.2: Boundary of trust region
-    t_C = Δk / d_norm_inf
+    t_C = Δk / (d_norm_inf + eps(T))
   end
 
-  # In this Julia code, 'd' is already mathematically negated (d = -gx...)
-  # so we move mathematically forward along 'd' by magnitude t_C.
   @. sc = t_C * d
 end
 
 """
     find_tau(sc, s_infty, g, θ1, θ2)
-
 Analytically finds the largest τ ∈ [0,1] satisfying both gradient-related conditions.
 """
 function find_tau(sc::V, s_infty::V, g::V, θ1::T, θ2::T) where {V, T}
@@ -545,9 +519,9 @@ function find_beta(p::V, mdotgx::T, norm_gx::T, β1::T, θ1::T, θ2::T, siter::I
 
   # Condition 1: Sufficient decrease
   β11 = n1 > zero(T) ? (one(T) - θ1 * b) * norm_gx^2 / n1 : β1
-  
-  # Condition 2: Upper bound (Fixed triangle inequality algebra)
+
+  # Condition 2: Upper bound
   β12 = n2 > zero(T) ? (θ2 * b - one(T)) * norm_gx / n2 : β1
-  
+
   return min(β1, min(β11, β12))
 end
