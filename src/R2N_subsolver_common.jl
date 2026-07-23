@@ -8,6 +8,7 @@ export initialize!, update_subsolver!
 export finalize_subsolver!, reset_subsolver!
 export get_operator,
   get_jacobian, get_inertia, has_npc_direction, get_npc_direction, get_operator_norm
+export is_unsupported
 
 """
     AbstractSubsolver{T}
@@ -90,6 +91,16 @@ Returns (-1, -1) if unknown or not applicable.
 function get_inertia(sub)
   return -1, -1
 end
+
+"""
+    is_unsupported(subsolver)
+
+Return `true` if the subsolver cannot be used for the current problem (e.g. the
+Hessian is too dense for a direct sparse factorization). When `true`, the outer
+solver should skip solving and return with status `:exception`. Defaults to
+`false`.
+"""
+is_unsupported(sub::AbstractSubsolver) = false
 
 """
     has_npc_direction(subsolver)
