@@ -143,6 +143,7 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `subsolver = CGR2NSubsolver`: the subproblem solver type or instance.
+  - Note: subsolver-specific options such as `fill_ratio` (density guard for the direct HSL `MA57R2NSubsolver`/`MA97R2NSubsolver`) cannot be passed through `R2N`. To set them, pass a pre-built instance, e.g. `subsolver = MA57R2NSubsolver(nlp; fill_ratio = 0.3)`.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
 - `callback`: function called at each iteration, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
 - `callback_quasi_newton`: function called at each iteration, specifically to update the Hessian approximation of quasi-Newton models, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
@@ -542,8 +543,8 @@ function SolverCore.solve!(
             τ₁ = 1 - ls_c,
             γ₀ = ls_decrease,
             γ₁ = ls_increase,
-            bk_max = 100,
-            bG_max = 100,
+            bk_max = 10,
+            bG_max = 10,
             verbose = false
           )
           @. s = α * dir
