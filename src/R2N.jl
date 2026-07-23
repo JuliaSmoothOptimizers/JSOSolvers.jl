@@ -382,6 +382,18 @@ function SolverCore.solve!(
 
   subtol = solver.subtol
 
+  # Guard: some direct subsolvers (e.g. HSL MA57/MA97) cannot handle a Hessian
+  # that is too dense. In that case skip the (prohibitively expensive)
+  # factorization and return early with status :exception.
+  if is_unsupported(solver.subsolver)
+    @error "R2N: the selected subsolver cannot handle this problem (Hessian too dense for a direct sparse factorization). Use a Krylov subsolver (e.g. CGR2NSubsolver) or increase `fill_ratio`."
+    set_iter!(stats, 0)
+    set_objective!(stats, obj(nlp, x))
+    set_time!(stats, time() - start_time)
+    set_status!(stats, :exception)
+    return stats
+  end
+
   initialize!(solver.subsolver, nlp, x)
   H = get_operator(solver.subsolver)
 
