@@ -129,6 +129,7 @@ For advanced usage, first create a `R2NLSSolver` to preallocate the necessary me
 - `compute_cauchy_point::Bool = false`: if true, safeguards the step size by reverting to the Cauchy point `scp` if the calculated step `s` is too large relative to the Cauchy step (i.e., if `‖s‖ > θ2 * ‖scp‖`).
 - `inexact_cauchy_point::Bool = true`: if true and `compute_cauchy_point` is true, the Cauchy point is calculated using a computationally cheaper inexact formula; otherwise, it is calculated using the operator norm of the Jacobian.
 - `subsolver = QRMumpsSubsolver`: the subproblem solver type or instance. Pass a type (e.g., `QRMumpsSubsolver`, `LSMRSubsolver`, `LSQRSubsolver`, `CGLSSubsolver`) to let the solver instantiate it, or pass a pre-allocated instance of `AbstractR2NLSSubsolver`.
+  - Note: subsolver-specific options such as `fill_ratio` (density guard for the direct `QRMumpsSubsolver`) cannot be passed through `R2NLS`. To set them, pass a pre-built instance, e.g. `subsolver = QRMumpsSubsolver(nls; fill_ratio = 0.3)`.
 - `subsolver_verbose::Int = 0`: if > 0, display subsolver iteration details every `subsolver_verbose` iterations (only applicable for iterative subsolvers).
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum allowed time in seconds.
@@ -320,6 +321,19 @@ function SolverCore.solve!(
   s = solver.s
   scp = solver.scp
   ∇f = solver.gx
+
+  # Guard: some direct subsolvers (e.g. QRMumps) cannot handle a Jacobian that is
+  # too dense. In that case skip the (prohibitively expensive) factorization and
+  # return early with status :exception.
+  if is_unsupported(solver.subsolver)
+    @error "R2NLS: the selected subsolver cannot handle this problem (Jacobian too dense for a direct sparse factorization). Use a Krylov subsolver (e.g. LSMRSubsolver) or increase `fill_ratio`."
+    residual!(nls, x, r)
+    set_iter!(stats, 0)
+    set_objective!(stats, norm(r)^2 / 2)
+    set_time!(stats, time() - start_time)
+    set_status!(stats, :exception)
+    return stats
+  end
 
   # Ensure subsolver is up to date with initial x
   initialize!(solver.subsolver, nls, x)

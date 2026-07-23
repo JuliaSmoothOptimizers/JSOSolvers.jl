@@ -7,8 +7,8 @@ export AbstractR2NLSSubsolver, KrylovR2NLSSubsolver, QRMumpsR2NLSSubsolver
 # ==============================================================================
 
 mutable struct QRMumpsR2NLSSubsolver{T} <: AbstractR2NLSSubsolver{T}
-  spmat::qrm_spmat{T}
-  spfct::qrm_spfct{T}
+  spmat::Union{qrm_spmat{T}, Nothing}
+  spfct::Union{qrm_spfct{T}, Nothing}
   irn::Vector{Int}
   jcn::Vector{Int}
   val::Vector{T}
@@ -17,13 +17,41 @@ mutable struct QRMumpsR2NLSSubsolver{T} <: AbstractR2NLSSubsolver{T}
   n::Int
   nnzj::Int
   Jx::SparseMatrixCOO{T, Int}
+  fill_ratio::T     # density threshold used by the guard
+  unsupported::Bool # true when the Jacobian is too dense for the direct solver
 
-  function QRMumpsR2NLSSubsolver(nls::AbstractNLSModel{T}) where {T}
-    qrm_init()
+  function QRMumpsR2NLSSubsolver(nls::AbstractNLSModel{T}; fill_ratio::Real = 0.5) where {T}
     meta = nls.meta
     n = meta.nvar
     m = nls.nls_meta.nequ
     nnzj = nls.nls_meta.nnzj
+    fr = T(fill_ratio)
+
+    # Cheap O(1) density guard. A dense residual Jacobian has m*n nonzeros. When
+    # the pattern is too dense the QRMumps symbolic analyse/factorize phase (run
+    # eagerly by `qrm_analyse!` below) becomes prohibitively expensive and appears
+    # to hang. In that case we skip building the QRMumps object entirely and flag
+    # the subsolver as unsupported; R2NLS's `solve!` then returns early with
+    # status `:exception` instead of attempting a factorization.
+    dense_nnz = m * n
+    if nnzj > fr * dense_nnz
+      return new{T}(
+        nothing,
+        nothing,
+        Int[],
+        Int[],
+        T[],
+        T[],
+        m,
+        n,
+        nnzj,
+        SparseMatrixCOO(m, n, Int[], Int[], T[]),
+        fr,
+        true,
+      )
+    end
+
+    qrm_init()
 
     irn = Vector{Int}(undef, nnzj + n)
     jcn = Vector{Int}(undef, nnzj + n)
@@ -44,11 +72,14 @@ mutable struct QRMumpsR2NLSSubsolver{T} <: AbstractR2NLSSubsolver{T}
 
     qrm_analyse!(spmat, spfct; transp = 'n')
 
-    new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, Jx)
+    new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, Jx, fr, false)
   end
 end
 
-QRMumpsSubsolver(nls) = QRMumpsR2NLSSubsolver(nls)
+QRMumpsSubsolver(nls; fill_ratio::Real = 0.5) =
+  QRMumpsR2NLSSubsolver(nls; fill_ratio = fill_ratio)
+
+is_unsupported(sub::QRMumpsR2NLSSubsolver) = sub.unsupported
 
 function initialize!(sub::QRMumpsR2NLSSubsolver, nls, x)
   update_subsolver!(sub, nls, x)
