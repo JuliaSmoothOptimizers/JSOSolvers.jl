@@ -520,6 +520,7 @@ function SolverCore.solve!(
         if dot_ag > 0
             force_sigma_increase = true
         else
+          force_sigma_increase = false
           α, ft, nbk, nbG = armijo_goldstein(
             solver.h,
             f0_val,
