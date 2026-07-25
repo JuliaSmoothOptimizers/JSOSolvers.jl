@@ -18,23 +18,25 @@ mutable struct QRMumpsR2NLSSubsolver{T} <: AbstractR2NLSSubsolver{T}
   nnzj::Int
   Jx::SparseMatrixCOO{T, Int}
   fill_ratio::T     # density threshold used by the guard
+  min_matrix_size::Int # matrix entry threshold used by the guard
   unsupported::Bool # true when the Jacobian is too dense for the direct solver
 
-  function QRMumpsR2NLSSubsolver(nls::AbstractNLSModel{T}; fill_ratio::Real = 0.5) where {T}
+  function QRMumpsR2NLSSubsolver(
+    nls::AbstractNLSModel{T};
+    fill_ratio::Real = 0.5,
+    min_matrix_size::Int = 1_000,
+  ) where {T}
     meta = nls.meta
     n = meta.nvar
     m = nls.nls_meta.nequ
     nnzj = nls.nls_meta.nnzj
     fr = T(fill_ratio)
 
-    # Cheap O(1) density guard. A dense residual Jacobian has m*n nonzeros. When
-    # the pattern is too dense the QRMumps symbolic analyse/factorize phase (run
-    # eagerly by `qrm_analyse!` below) becomes prohibitively expensive and appears
-    # to hang. In that case we skip building the QRMumps object entirely and flag
-    # the subsolver as unsupported; R2NLS's `solve!` then returns early with
-    # status `:exception` instead of attempting a factorization.
+    # Cheap O(1) size and density guard. Large, dense Jacobians can make the eager
+    # QRMumps symbolic analysis prohibitively expensive, so skip building the
+    # QRMumps object in that case.
     dense_nnz = m * n
-    if nnzj > fr * dense_nnz
+    if dense_nnz > min_matrix_size && nnzj > fr * dense_nnz
       return new{T}(
         nothing,
         nothing,
@@ -47,6 +49,7 @@ mutable struct QRMumpsR2NLSSubsolver{T} <: AbstractR2NLSSubsolver{T}
         nnzj,
         SparseMatrixCOO(m, n, Int[], Int[], T[]),
         fr,
+        min_matrix_size,
         true,
       )
     end
@@ -72,12 +75,16 @@ mutable struct QRMumpsR2NLSSubsolver{T} <: AbstractR2NLSSubsolver{T}
 
     qrm_analyse!(spmat, spfct; transp = 'n')
 
-    new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, Jx, fr, false)
+    new{T}(spmat, spfct, irn, jcn, val, b_aug, m, n, nnzj, Jx, fr, min_matrix_size, false)
   end
 end
 
-QRMumpsSubsolver(nls; fill_ratio::Real = 0.5) =
-  QRMumpsR2NLSSubsolver(nls; fill_ratio = fill_ratio)
+QRMumpsSubsolver(nls; fill_ratio::Real = 0.5, min_matrix_size::Int = 1_000) =
+  QRMumpsR2NLSSubsolver(
+    nls;
+    fill_ratio = fill_ratio,
+    min_matrix_size = min_matrix_size,
+  )
 
 is_unsupported(sub::QRMumpsR2NLSSubsolver) = sub.unsupported
 

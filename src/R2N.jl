@@ -143,12 +143,12 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `subsolver = CGR2NSubsolver`: the subproblem solver type or instance.
-  - Note: subsolver-specific options such as `fill_ratio` (density guard for the direct HSL `MA57R2NSubsolver`/`MA97R2NSubsolver`) cannot be passed through `R2N`. To set them, pass a pre-built instance, e.g. `subsolver = MA57R2NSubsolver(nlp; fill_ratio = 0.3)`.
+  - Note: subsolver-specific options such as `fill_ratio` and `min_matrix_size` (size and density guards for the direct HSL `MA57R2NSubsolver`/`MA97R2NSubsolver`) cannot be passed through `R2N`. To set them, pass a pre-built instance, e.g. `subsolver = MA57R2NSubsolver(nlp; fill_ratio = 0.3, min_matrix_size = 1_000)`.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
 - `callback`: function called at each iteration, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
 - `callback_quasi_newton`: function called at each iteration, specifically to update the Hessian approximation of quasi-Newton models, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
 - `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
-- `always_accept_npc_ag::Bool = false`: if true, we skip the computation of the reduction ratio ρ for Goldstein steps taken along directions of negative curvature, unconditionally accepting them as very successful steps to aggressively escape saddle points.
+- `always_accept_npc_ag::Bool = false`: if true, we skip the computation of the reduction ratio ρ for Goldstein steps taken along directions of negative curvature, unconditionally accepting them as successful steps to aggressively escape saddle points.
 - `fast_local_convergence::Bool = false`: if true, we scale the regularization parameter σ by the norm of the current gradient on very successful iterations (using `γ3 * min(σ, norm(gx))`), which accelerates local convergence near a minimizer.
 - `npc_handler::Symbol = :ag`: the non_positive_curve handling strategy.
   - `:ag`: run line-search along NPC with Armijo-Goldstein conditions.
@@ -406,7 +406,10 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇fk)
   set_dual_residual!(stats, norm_∇fk)
 
-  σk = norm_∇fk == zero(T) ? one(T) : (2^round(log2(norm_∇fk + one(T))) / norm_∇fk)
+  σk = max(
+    σmin,
+    norm_∇fk == zero(T) ? one(T) : (2^round(log2(norm_∇fk + one(T))) / norm_∇fk),
+  )
   ρk = zero(T)
 
   fmin = min(-one(T), f0) / eps(T)
@@ -466,7 +469,8 @@ function SolverCore.solve!(
   callback_quasi_newton(nlp, solver, stats)
   callback(nlp, solver, stats)
   subtol = solver.subtol
-  σk = solver.σ
+  σk = max(σmin, solver.σ)
+  solver.σ = σk
 
   done = stats.status != :unknown
   ν_k = one(T)
@@ -492,8 +496,8 @@ function SolverCore.solve!(
       solver.subsolver(s, rhs, σk, atol, subtol, n; verbose = subsolver_verbose)
 
     calc_scp_needed = false
-    force_sigma_increase = false
-    if solver.subsolver isa HSLR2NSubsolver
+    force_sigma_increase = solver.subsolver isa HSLR2NSubsolver && !subsolver_solved
+    if solver.subsolver isa HSLR2NSubsolver && subsolver_solved
       num_neg, num_zero = get_inertia(solver.subsolver)
 
       if num_zero > 0
@@ -515,7 +519,9 @@ function SolverCore.solve!(
       end
     end
 
-    if !(solver.subsolver isa ShiftedLBFGSSolver) && npcCount >= 1
+     if !force_sigma_increase &&
+       !(solver.subsolver isa ShiftedLBFGSSolver) &&
+       npcCount >= 1
       if npc_handler == :ag
         is_npc_ag_step = true
         npcCount = 0
@@ -557,7 +563,7 @@ function SolverCore.solve!(
     end
 
     # Compute Cauchy step
-    if scp_flag == true || npc_handler == :cp || calc_scp_needed
+    if !force_sigma_increase && (scp_flag == true || npc_handler == :cp || calc_scp_needed)
       mul!(Hs, H, ∇fk)
       dot_gHg = dot(∇fk, Hs)
       σ_norm_g2 = σk * norm_∇fk^2
@@ -651,9 +657,9 @@ function SolverCore.solve!(
         # Update Sigma on Success
         if ρk >= η2
           if fast_local_convergence
-            σk = γ3 * min(σk, norm_∇fk)
+            σk = max(σmin, γ3 * min(σk, norm_∇fk))
           else
-            σk = γ3 * σk
+            σk = max(σmin, γ3 * σk)
           end
         else
           σk = γ1 * σk
@@ -680,7 +686,8 @@ function SolverCore.solve!(
     callback(nlp, solver, stats)
 
     norm_∇fk = stats.dual_feas
-    σk = solver.σ
+    σk = max(σmin, solver.σ)
+    solver.σ = σk
     subtol = solver.subtol
     optimal = norm_∇fk ≤ ϵ
 

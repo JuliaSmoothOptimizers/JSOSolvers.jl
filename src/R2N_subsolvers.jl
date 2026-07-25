@@ -136,6 +136,7 @@ mutable struct HSLR2NSubsolver{T, S} <: AbstractR2NSubsolver{T}
   work::Vector{T} # workspace for solves (used for MA57)
   _finalized::Bool
   fill_ratio::T   # density threshold used by the guard
+  min_matrix_size::Int # matrix entry threshold used by the guard
   unsupported::Bool # true when the Hessian is too dense for the direct solver
 end
 
@@ -143,20 +144,18 @@ function HSLR2NSubsolver(
   nlp::AbstractNLPModel{T, V};
   hsl_constructor = ma97_coord,
   fill_ratio::Real = 0.5,
+  min_matrix_size::Int = 1_000,
 ) where {T, V}
   LIBHSL_isfunctional() || error("HSL library is not functional")
   n = nlp.meta.nvar
   nnzh = nlp.meta.nnzh
   fr = T(fill_ratio)
 
-  # Cheap O(1) density guard. A dense symmetric Hessian has n(n+1)/2 nonzeros.
-  # When the pattern is too dense the HSL symbolic analyse/factorize phase (run
-  # eagerly by `hsl_constructor` below) becomes prohibitively expensive and
-  # appears to hang. In that case we skip building the HSL object entirely and
-  # flag the subsolver as unsupported; R2N's `solve!` then returns early with
-  # status `:exception` instead of attempting a factorization.
+  # Cheap O(1) size and density guard. A dense symmetric Hessian has n(n+1)/2
+  # nonzeros. Large, dense patterns can make the eager HSL symbolic analysis
+  # prohibitively expensive, so skip building the HSL object in that case.
   dense_nnz = (n * (n + 1)) ÷ 2
-  if nnzh > fr * dense_nnz
+  if dense_nnz > min_matrix_size && nnzh > fr * dense_nnz
     return HSLR2NSubsolver{T, Nothing}(
       nothing,
       hsl_constructor,
@@ -168,6 +167,7 @@ function HSLR2NSubsolver(
       T[],
       true,
       fr,
+      min_matrix_size,
       true,
     )
   end
@@ -210,6 +210,7 @@ function HSLR2NSubsolver(
     work,
     false,
     fr,
+    min_matrix_size,
     false,
   )
   finalizer(finalize_subsolver!, sub)
@@ -242,10 +243,20 @@ function finalize_subsolver!(sub::HSLR2NSubsolver)
   return nothing
 end
 
-MA97R2NSubsolver(nlp; fill_ratio::Real = 0.5) =
-  HSLR2NSubsolver(nlp; hsl_constructor = ma97_coord, fill_ratio = fill_ratio)
-MA57R2NSubsolver(nlp; fill_ratio::Real = 0.5) =
-  HSLR2NSubsolver(nlp; hsl_constructor = ma57_coord, fill_ratio = fill_ratio)
+MA97R2NSubsolver(nlp; fill_ratio::Real = 0.5, min_matrix_size::Int = 1_000) =
+  HSLR2NSubsolver(
+    nlp;
+    hsl_constructor = ma97_coord,
+    fill_ratio = fill_ratio,
+    min_matrix_size = min_matrix_size,
+  )
+MA57R2NSubsolver(nlp; fill_ratio::Real = 0.5, min_matrix_size::Int = 1_000) =
+  HSLR2NSubsolver(
+    nlp;
+    hsl_constructor = ma57_coord,
+    fill_ratio = fill_ratio,
+    min_matrix_size = min_matrix_size,
+  )
 
 is_unsupported(sub::HSLR2NSubsolver) = sub.unsupported
 
@@ -276,7 +287,7 @@ end
 function _hsl_factor_and_solve!(sub::HSLR2NSubsolver{T, S}, g, s) where {T, S <: Ma97{T}}
   ma97_factorize!(sub.hsl_obj)
   if sub.hsl_obj.info.flag < 0
-    return false, :err, 0, 0
+    return false, :subsolver_failed_ma97, 0, 0
   end
   s .= g
   ma97_solve!(sub.hsl_obj, s)
@@ -330,7 +341,7 @@ function reset_subsolver!(sub::HSLR2NSubsolver{T}, nlp::AbstractNLPModel, x) whe
   # 2b. Re-apply the density guard for the new problem. If too dense, skip the
   # expensive rebuild (symbolic analyse) and flag the subsolver as unsupported.
   dense_nnz = (n * (n + 1)) ÷ 2
-  if nnzh > sub.fill_ratio * dense_nnz
+  if dense_nnz > sub.min_matrix_size && nnzh > sub.fill_ratio * dense_nnz
     sub.unsupported = true
     return nothing
   end

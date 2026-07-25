@@ -129,7 +129,7 @@ For advanced usage, first create a `R2NLSSolver` to preallocate the necessary me
 - `compute_cauchy_point::Bool = false`: if true, safeguards the step size by reverting to the Cauchy point `scp` if the calculated step `s` is too large relative to the Cauchy step (i.e., if `‖s‖ > θ2 * ‖scp‖`).
 - `inexact_cauchy_point::Bool = true`: if true and `compute_cauchy_point` is true, the Cauchy point is calculated using a computationally cheaper inexact formula; otherwise, it is calculated using the operator norm of the Jacobian.
 - `subsolver = QRMumpsSubsolver`: the subproblem solver type or instance. Pass a type (e.g., `QRMumpsSubsolver`, `LSMRSubsolver`, `LSQRSubsolver`, `CGLSSubsolver`) to let the solver instantiate it, or pass a pre-allocated instance of `AbstractR2NLSSubsolver`.
-  - Note: subsolver-specific options such as `fill_ratio` (density guard for the direct `QRMumpsSubsolver`) cannot be passed through `R2NLS`. To set them, pass a pre-built instance, e.g. `subsolver = QRMumpsSubsolver(nls; fill_ratio = 0.3)`.
+  - Note: subsolver-specific options such as `fill_ratio` and `min_matrix_size` (size and density guards for the direct `QRMumpsSubsolver`) cannot be passed through `R2NLS`. To set them, pass a pre-built instance, e.g. `subsolver = QRMumpsSubsolver(nls; fill_ratio = 0.3, min_matrix_size = 1_000)`.
 - `subsolver_verbose::Int = 0`: if > 0, display subsolver iteration details every `subsolver_verbose` iterations (only applicable for iterative subsolvers).
 - `max_eval::Int = -1`: maximum number of objective function evaluations.
 - `max_time::Float64 = 30.0`: maximum allowed time in seconds.
@@ -349,7 +349,10 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇f)
 
   # Heuristic for initial σ
-  solver.σ = norm_∇fk == zero(T) ? one(T) : (2^round(log2(norm_∇fk + one(T))) / norm_∇fk)
+  solver.σ = max(
+    σmin,
+    norm_∇fk == zero(T) ? one(T) : (2^round(log2(norm_∇fk + one(T))) / norm_∇fk),
+  )
   # Stopping criterion: 
   unbounded = false
   ρk = zero(T)
@@ -409,6 +412,7 @@ function SolverCore.solve!(
   solver.subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * solver.subtol))
 
   callback(nls, solver, stats)
+  solver.σ = max(σmin, solver.σ)
 
   # retrieve values again in case the user changed them in the callback
 
@@ -497,6 +501,7 @@ function SolverCore.solve!(
     set_dual_residual!(stats, norm_∇fk)
 
     callback(nls, solver, stats)
+    solver.σ = max(σmin, solver.σ)
 
     norm_∇fk = stats.dual_feas
 
