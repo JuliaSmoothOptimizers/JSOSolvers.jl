@@ -1,14 +1,11 @@
 # stdlib
 using Printf, LinearAlgebra, Logging, SparseArrays, Test
-using CUDA
 # additional packages
 using ADNLPModels, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools, Krylov
 using NLPModelsTest, SolverParameters
 
 # this package
 using JSOSolvers
-
-include("test-gpu.jl")
 
 @testset "Test parameterset" begin
   @testset "Test unconstrained parameters $paramset" for (paramset, fun) in (
@@ -49,6 +46,39 @@ end
   SolverCore.solve!(solver, nls, stats, atol = 0.0, rtol = 0.0, Fatol = 1e-6, Frtol = 0.0)
   @test stats.status_reliable && stats.status == :small_residual
   @test stats.objective_reliable && isapprox(stats.objective, 0, atol = 1e-6)
+end
+
+@testset "Test R2N direct subsolver guard" begin
+  nls = ADNLSModel(x -> [x[1] - 1; 2 * (x[2] - x[1]^2)], [-1.2; 1.0], 2)
+  @test !is_unsupported(QRMumpsSubsolver(nls))
+  @test is_unsupported(QRMumpsSubsolver(nls; min_matrix_size = 0))
+end
+
+@testset "Test R2N regularization lower bounds" begin
+  σmin = 10.0
+  nlp = ADNLPModel(x -> (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2, [-1.2; 1.0])
+  r2n_callback_called = Ref(false)
+  function r2n_sigma_callback(nlp, solver, stats)
+    r2n_callback_called[] = true
+    @test solver.σ >= σmin
+  end
+  R2N(nlp; σmin = σmin, callback = r2n_sigma_callback, max_iter = 3)
+  @test r2n_callback_called[]
+
+  nls = ADNLSModel(x -> [x[1] - 1; 2 * (x[2] - x[1]^2)], [-1.2; 1.0], 2)
+  r2nls_callback_called = Ref(false)
+  function r2nls_sigma_callback(nls, solver, stats)
+    r2nls_callback_called[] = true
+    @test solver.σ >= σmin
+  end
+  R2NLS(
+    nls;
+    σmin = σmin,
+    subsolver = LSMRSubsolver,
+    callback = r2nls_sigma_callback,
+    max_iter = 3,
+  )
+  @test r2nls_callback_called[]
 end
 
 @testset "Test iteration limit" begin
