@@ -16,6 +16,8 @@ Parameter set for the R2N solver. Controls algorithmic tolerances and step accep
 - `δ1 = T(0.5)`: Cauchy point calculation parameter.
 - `σmin = eps(T)`: Minimum regularization parameter.
 - `non_mono_size = 1`: Window size for non-monotone acceptance.
+- `bk_max = 10`: Maximum number of backtracking (Armijo) steps in the NPC line search.
+- `bG_max = 10`: Maximum number of Goldstein (extrapolation) steps in the NPC line search.
 """
 struct R2NParameterSet{T} <: AbstractParameterSet
   θ1::Parameter{T, RealInterval{T}}
@@ -33,6 +35,8 @@ struct R2NParameterSet{T} <: AbstractParameterSet
   ls_decrease::Parameter{T, RealInterval{T}}
   ls_min_alpha::Parameter{T, RealInterval{T}}
   ls_max_alpha::Parameter{T, RealInterval{T}}
+  bk_max::Parameter{Int, IntegerRange{Int}}
+  bG_max::Parameter{Int, IntegerRange{Int}}
 end
 
 # Default parameter values
@@ -61,6 +65,8 @@ const R2N_ls_min_alpha = DefaultParameter(nlp -> begin
   max(T(1e-8), nextfloat(zero(T)))
 end, "max(T(1e-8), nextfloat(zero(T)))")
 const R2N_ls_max_alpha = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1e2), "T(1e2)")
+const R2N_bk_max = DefaultParameter(10)
+const R2N_bG_max = DefaultParameter(10)
 
 function R2NParameterSet(
   nlp::AbstractNLPModel;
@@ -79,6 +85,8 @@ function R2NParameterSet(
   ls_decrease::T = get(R2N_ls_decrease, nlp),
   ls_min_alpha::T = get(R2N_ls_min_alpha, nlp),
   ls_max_alpha::T = get(R2N_ls_max_alpha, nlp),
+  bk_max::Int = get(R2N_bk_max, nlp),
+  bG_max::Int = get(R2N_bG_max, nlp),
 ) where {T}
   @assert zero(T) < θ1 < one(T) "θ1 must satisfy 0 < θ1 < 1"
   @assert θ2 > one(T) "θ2 must satisfy θ2 > 1"
@@ -103,6 +111,8 @@ function R2NParameterSet(
     Parameter(ls_decrease, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(ls_min_alpha, RealInterval(zero(T), T(Inf), lower_open = true, upper_open = true)),
     Parameter(ls_max_alpha, RealInterval(zero(T), T(Inf), lower_open = true, upper_open = true)),
+    Parameter(bk_max, IntegerRange(1, typemax(Int))),
+    Parameter(bG_max, IntegerRange(1, typemax(Int))),
   )
 end
 
@@ -206,6 +216,8 @@ function R2NSolver(
   ls_decrease = get(R2N_ls_decrease, nlp),
   ls_min_alpha = get(R2N_ls_min_alpha, nlp),
   ls_max_alpha = get(R2N_ls_max_alpha, nlp),
+  bk_max::Int = get(R2N_bk_max, nlp),
+  bG_max::Int = get(R2N_bG_max, nlp),
 ) where {T, V}
   params = R2NParameterSet(
     nlp;
@@ -224,6 +236,8 @@ function R2NSolver(
     ls_decrease = ls_decrease,
     ls_min_alpha = ls_min_alpha,
     ls_max_alpha = ls_max_alpha,
+    bk_max = bk_max,
+    bG_max = bG_max,
   )
 
   value(params.non_mono_size) >= 1 || error("non_mono_size must be greater than or equal to 1")
@@ -296,6 +310,8 @@ end
   ls_decrease::Real = get(R2N_ls_decrease, nlp),
   ls_min_alpha::Real = get(R2N_ls_min_alpha, nlp),
   ls_max_alpha::Real = get(R2N_ls_max_alpha, nlp),
+  bk_max::Int = get(R2N_bk_max, nlp),
+  bG_max::Int = get(R2N_bG_max, nlp),
   kwargs...,
 ) where {T, V}
   sub_instance = (subsolver isa Type || subsolver isa Function) ? subsolver(nlp) : subsolver
@@ -317,6 +333,8 @@ end
     ls_decrease = convert(T, ls_decrease),
     ls_min_alpha = convert(T, ls_min_alpha),
     ls_max_alpha = convert(T, ls_max_alpha),
+    bk_max = bk_max,
+    bG_max = bG_max,
   )
   try
     return solve!(solver, nlp; kwargs...)
@@ -367,6 +385,8 @@ function SolverCore.solve!(
   ls_c = value(params.ls_c)
   ls_increase = value(params.ls_increase)
   ls_decrease = value(params.ls_decrease)
+  bk_max = value(params.bk_max)
+  bG_max = value(params.bG_max)
 
   start_time = time()
   set_time!(stats, 0.0)
@@ -549,12 +569,18 @@ function SolverCore.solve!(
             τ₁ = 1 - ls_c,
             γ₀ = ls_decrease,
             γ₁ = ls_increase,
-            bk_max = 10,
-            bG_max = 10,
+            bk_max = bk_max,
+            bG_max = bG_max,
             verbose = false
           )
-          @. s = α * dir
-          fck_computed = true
+          # AG budget exhausted: treat as failure and increase σ instead of taking the step.
+          if nbk >= bk_max || nbG >= bG_max
+            force_sigma_increase = true
+            is_npc_ag_step = false
+          else
+            @. s = α * dir
+            fck_computed = true
+          end
         end
       elseif npc_handler == :prev
         npcCount = 0
