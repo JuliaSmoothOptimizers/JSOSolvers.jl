@@ -2,7 +2,12 @@ using HSL_jll
 using HSL
 if LIBHSL_isfunctional()
   @testset "Testing HSL Subsolvers & Memory Safety" begin
-    
+    dense_nlp = ADNLPModel(x -> sum(abs2, x), ones(2))
+    small_dense_subsolver = MA97R2NSubsolver(dense_nlp)
+    @test !is_unsupported(small_dense_subsolver)
+    finalize_subsolver!(small_dense_subsolver)
+    @test is_unsupported(MA97R2NSubsolver(dense_nlp; min_matrix_size = 0))
+
     for (name, subsolver_constructor, extra_kwargs) in [
       ("R2N_ma97",    MA97R2NSubsolver, NamedTuple()),
       ("R2N_ma97_ag", MA97R2NSubsolver, (npc_handler = :ag,)),
