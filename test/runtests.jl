@@ -1,14 +1,16 @@
 # stdlib
 using Printf, LinearAlgebra, Logging, SparseArrays, Test
-using CUDA
 # additional packages
-using ADNLPModels, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
+using ADNLPModels, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools, Krylov
 using NLPModelsTest, SolverParameters
 
 # this package
 using JSOSolvers
 
-include("test-gpu.jl")
+if lowercase(get(ENV, "JSOSOLVERS_TEST_CUDA", "false")) in ("1", "true", "yes")
+  @eval using CUDA
+  include("test-gpu.jl")
+end
 
 @testset "Test parameterset" begin
   @testset "Test unconstrained parameters $paramset" for (paramset, fun) in (
@@ -16,6 +18,7 @@ include("test-gpu.jl")
     (TRONParameterSet, tron),
     (TRUNKParameterSet, trunk),
     (FOMOParameterSet, fomo),
+    (R2NParameterSet, R2N),
   )
     nlp = BROWNDEN()
     params = eval(paramset)(nlp)
@@ -29,6 +32,7 @@ include("test-gpu.jl")
   @testset "Test unconstrained NLS parameters $paramset" for (paramset, fun) in (
     (TRONLSParameterSet, tron),
     (TRUNKLSParameterSet, trunk),
+    (R2NLSParameterSet, R2NLS),
   )
     nls = MGH01()
     params = eval(paramset)(nls)
@@ -40,7 +44,7 @@ include("test-gpu.jl")
   end
 end
 
-@testset "Test small residual checks $solver" for solver in (:TrunkSolverNLS, :TronSolverNLS)
+@testset "Test small residual checks $solver" for solver in (:TrunkSolverNLS, :TronSolverNLS, :R2NLSSolver)
   nls = ADNLSModel(x -> [x[1] - 1; sin(x[2])], [-1.2; 1.0], 2)
   stats = GenericExecutionStats(nls)
   solver = eval(solver)(nls)
@@ -49,8 +53,41 @@ end
   @test stats.objective_reliable && isapprox(stats.objective, 0, atol = 1e-6)
 end
 
+@testset "Test R2N direct subsolver guard" begin
+  nls = ADNLSModel(x -> [x[1] - 1; 2 * (x[2] - x[1]^2)], [-1.2; 1.0], 2)
+  @test !is_unsupported(QRMumpsSubsolver(nls))
+  @test is_unsupported(QRMumpsSubsolver(nls; min_matrix_size = 0))
+end
+
+@testset "Test R2N regularization lower bounds" begin
+  σmin = 10.0
+  nlp = ADNLPModel(x -> (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2, [-1.2; 1.0])
+  r2n_callback_called = Ref(false)
+  function r2n_sigma_callback(nlp, solver, stats)
+    r2n_callback_called[] = true
+    @test solver.σ >= σmin
+  end
+  R2N(nlp; σmin = σmin, callback = r2n_sigma_callback, max_iter = 3)
+  @test r2n_callback_called[]
+
+  nls = ADNLSModel(x -> [x[1] - 1; 2 * (x[2] - x[1]^2)], [-1.2; 1.0], 2)
+  r2nls_callback_called = Ref(false)
+  function r2nls_sigma_callback(nls, solver, stats)
+    r2nls_callback_called[] = true
+    @test solver.σ >= σmin
+  end
+  R2NLS(
+    nls;
+    σmin = σmin,
+    subsolver = LSMRSubsolver,
+    callback = r2nls_sigma_callback,
+    max_iter = 3,
+  )
+  @test r2nls_callback_called[]
+end
+
 @testset "Test iteration limit" begin
-  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk)
+  @testset "$fun" for fun in (R2, R2N, fomo, lbfgs, tron, trunk)
     f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
     nlp = ADNLPModel(f, [-1.2; 1.0])
 
@@ -58,7 +95,7 @@ end
     @test stats.status == :max_iter
   end
 
-  @testset "$(fun)-NLS" for fun in (tron, trunk)
+  @testset "$(fun)-NLS" for fun in (R2NLS, tron, trunk)
     f(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
     nlp = ADNLSModel(f, [-1.2; 1.0], 2)
 
@@ -68,18 +105,31 @@ end
 end
 
 @testset "Test unbounded below" begin
-  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk)
+  @testset "$name" for (name, solver) in [
+    ("trunk", trunk),
+    ("lbfgs", lbfgs),
+    ("tron", tron),
+    ("R2", R2),
+    ("R2N", R2N),
+    (
+      "R2N_ShiftedLBFGS",
+      (nlp; kwargs...) ->
+        R2N(LBFGSModel(nlp), subsolver = ShiftedLBFGSSolver; kwargs...),
+    ),
+    ("fomo", fomo),
+  ]
     T = Float64
     x0 = [T(0)]
     f(x) = -exp(x[1])
     nlp = ADNLPModel(f, x0)
 
-    stats = eval(fun)(nlp)
+    stats = solver(nlp)
     @test stats.status == :unbounded
     @test stats.objective < -one(T) / eps(T)
   end
 end
 
+include("test_hsl_subsolver.jl")
 include("restart.jl")
 include("callback.jl")
 include("consistency.jl")
