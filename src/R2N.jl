@@ -165,6 +165,7 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
   - `:sigma`: increase the regularization parameter σ.
   - `:prev`: if subsolver return after first iteration, increase the sigma, but if subsolver return after second iteration, set s_k = s_k^(t-1).
   - `:cp`: set s_k to Cauchy point.
+  - Note: For exact direct subsolvers (e.g., `MA57R2NSubsolver`), an exact solution to an indefinite shifted system cannot simultaneously be a strict descent direction. If the factorized matrix is singular or indefinite, the solver automatically rejects the step and increases σ, bypassing this handler.
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
@@ -515,27 +516,15 @@ function SolverCore.solve!(
     subsolver_solved, sub_stats, subiter, npcCount =
       solver.subsolver(s, rhs, σk, atol, subtol, n; verbose = subsolver_verbose)
 
-    calc_scp_needed = false
     force_sigma_increase = solver.subsolver isa HSLR2NSubsolver && !subsolver_solved
     if solver.subsolver isa HSLR2NSubsolver && subsolver_solved
       num_neg, num_zero = get_inertia(solver.subsolver)
 
-      if num_zero > 0
+      # If the matrix is singular or indefinite, the exact step is not a minimizer.
+      # Because exact solutions cannot be used as strict descent NPC directions,
+      # we immediately reject the step and increase sigma.
+      if num_zero > 0 || num_neg > 0
         force_sigma_increase = true
-      end
-
-      if !force_sigma_increase && num_neg > 0
-        mul!(Hs, H, s)
-        curv_s = dot(s, Hs)
-
-        if curv_s < 0
-          npcCount = 1
-          if npc_handler == :prev
-            npc_handler = :ag  #Force the npc_handler to be ag and not :prev since we can not have that behavior with HSL subsolver
-          end
-        else
-          calc_scp_needed = true
-        end
       end
     end
 
@@ -545,8 +534,9 @@ function SolverCore.solve!(
       if npc_handler == :ag
         is_npc_ag_step = true
         npcCount = 0
-        # If it's HSL, `s` is already our NPC direction
-        dir = solver.subsolver isa HSLR2NSubsolver ? s : get_npc_direction(solver.subsolver)
+        
+        # strictly for Krylov solvers, which extract valid NPC directions.
+        dir = get_npc_direction(solver.subsolver)
 
         # Ensure line search model points to current x and dir
         SolverTools.redirect!(solver.h, x, dir)
@@ -589,7 +579,7 @@ function SolverCore.solve!(
     end
 
     # Compute Cauchy step
-    if !force_sigma_increase && (scp_flag == true || npc_handler == :cp || calc_scp_needed)
+    if !force_sigma_increase && (scp_flag == true || npc_handler == :cp)
       mul!(Hs, H, ∇fk)
       dot_gHg = dot(∇fk, Hs)
       σ_norm_g2 = σk * norm_∇fk^2
