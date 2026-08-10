@@ -349,10 +349,7 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇f)
 
   # Heuristic for initial σ
-  solver.σ = max(
-    σmin,
-    norm_∇fk == zero(T) ? one(T) : (2^round(log2(norm_∇fk + one(T))) / norm_∇fk),
-  )
+  solver.σ = max(σmin, T(1e-4) * norm_∇fk) # initial σ is proportional to the gradient norm, we also don't need it to be too small, so we set a lower bound of 1e-4
   # Stopping criterion: 
   unbounded = false
   ρk = zero(T)
@@ -419,6 +416,7 @@ function SolverCore.solve!(
   done = stats.status != :unknown
   compute_cauchy_point = value(params.compute_cauchy_point)
   inexact_cauchy_point = value(params.inexact_cauchy_point)
+  successful_iters = 0
 
   while !done
 
@@ -460,7 +458,7 @@ function SolverCore.solve!(
     if ΔTk <= eps(T) * max(one(T), abs(stats.objective))
       ρk = -T(Inf) # this case should not happen, but we set ρk to -Inf to ensure the step is rejected if it does
     elseif non_mono_size > 1
-      k = mod(stats.iter, non_mono_size) + 1
+      k = mod(successful_iters, non_mono_size) + 1
       solver.obj_vec[k] = stats.objective
       ft_max = maximum(solver.obj_vec)
       ρk = (ft_max - ft) / (ft_max - stats.objective + ΔTk)
@@ -472,6 +470,7 @@ function SolverCore.solve!(
     step_accepted = ρk >= η1
 
     if step_accepted # Step Accepted
+      successful_iters += 1
       x .= xt
       r .= rt
       f = ft
@@ -496,7 +495,9 @@ function SolverCore.solve!(
     set_iter!(stats, stats.iter + 1)
     set_time!(stats, time() - start_time)
 
-    solver.subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * solver.subtol))
+    if step_accepted
+      solver.subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * solver.subtol))
+    end
 
     set_dual_residual!(stats, norm_∇fk)
 
@@ -506,7 +507,7 @@ function SolverCore.solve!(
     norm_∇fk = stats.dual_feas
 
     stationary = norm_∇fk ≤ ϵ
-    small_residual = 2 * √f ≤ ϵF
+    small_residual = resid_norm ≤ ϵF # same as 2 * √f ≤ ϵF
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       dir_stat = step_accepted ? "↘" : "↗"
