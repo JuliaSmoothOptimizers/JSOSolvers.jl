@@ -349,7 +349,7 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇f)
 
   # Heuristic for initial σ
-  solver.σ = max(σmin, T(1e-4) * norm_∇fk) # initial σ is proportional to the gradient norm, we also don't need it to be too small, so we set a lower bound of 1e-4
+  solver.σ = max(σmin, T(1e-4) * norm_∇fk) # initial σ is scaled proportionally to the gradient norm
   # Stopping criterion: 
   unbounded = false
   ρk = zero(T)
@@ -507,7 +507,7 @@ function SolverCore.solve!(
     norm_∇fk = stats.dual_feas
 
     stationary = norm_∇fk ≤ ϵ
-    small_residual = resid_norm ≤ ϵF # same as 2 * √f ≤ ϵF
+    small_residual = resid_norm ≤ ϵF # same as √2 * √f ≤ ϵF
 
     if verbose > 0 && mod(stats.iter, verbose) == 0
       dir_stat = step_accepted ? "↘" : "↗"
