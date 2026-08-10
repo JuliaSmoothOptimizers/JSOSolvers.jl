@@ -15,29 +15,31 @@ RTOL = 1.0e-6
 
 println("===================================== freuroth =====================================")
 nlp = freuroth(type = T ,n = 100)
-stats =  R2N(nlp; subsolver=MA57R2NSubsolver(nlp), npc_handler=:ag,  verbose=1, rtol=RTOL, atol=ATOL)
+stats =  R2N(nlp; subsolver=MA57R2NSubsolver(nlp), npc_handler=:ag,  verbose=1, rtol=RTOL, atol=ATOL, scp_flag=true)
+print("Stats: ", stats)
+
 
 println("===================================== genhumps_WITH_MINRES =====================================")
 nlp = genhumps(type = T, n = 100)
 stats =  R2N(nlp; subsolver=MinresQlpR2NSubsolver, npc_handler=:ag,  verbose=100, rtol=RTOL, atol=ATOL)
-
 print("Stats: ", stats)
-# println("===================================== genhumps_WITH_MINRES_sigma =====================================")
-# nlp = genhumps(type = T, n = 100)
-# stats =  R2N(nlp; subsolver=MinresQlpR2NSubsolver(nlp), npc_handler=:sigma,  verbose=100, rtol=RTOL, atol=ATOL, maxiter=1000)
-# print("Stats: ", stats)
+
+println("===================================== genhumps_WITH_MINRES_sigma =====================================")
+nlp = genhumps(type = T, n = 100)
+stats =  R2N(nlp; subsolver=MinresQlpR2NSubsolver(nlp), npc_handler=:sigma,  verbose=100, rtol=RTOL, atol=ATOL, max_iter=2000)
+print("Stats: ", stats)
 
 
 println("===================================== genhumps =====================================")
 nlp = genhumps(type = T, n = 100)
-stats =  R2N(nlp; subsolver=MA57R2NSubsolver(nlp), npc_handler=:ag,  verbose=100, rtol=RTOL, atol=ATOL)
+stats =  R2N(nlp; subsolver=MA57R2NSubsolver(nlp), npc_handler=:ag,  verbose=100, rtol=RTOL, atol=ATOL, scp_flag=true)
 print("Stats: ", stats)
 
 
-println("===================================== genhumps_γ2 =====================================")
-nlp = genhumps(type = T, n = 100)
-stats =  R2N(nlp; subsolver=MA57R2NSubsolver(nlp), npc_handler=:ag, γ2=100.0 ,verbose=100, rtol=RTOL, atol=ATOL)
-print("Stats: ", stats)
+# println("===================================== genhumps_γ2 =====================================")
+# nlp = genhumps(type = T, n = 100)
+# stats =  R2N(nlp; subsolver=MA57R2NSubsolver(nlp), npc_handler=:ag, γ2=100.0 ,verbose=100, rtol=RTOL, atol=ATOL)
+# print("Stats: ", stats)
 
 # println("===================================== indef_mod =====================================")
 # nlp = genrose(type = T ,n = 100)
