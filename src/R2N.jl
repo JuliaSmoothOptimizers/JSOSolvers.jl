@@ -157,7 +157,7 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
 - `callback`: function called at each iteration, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
 - `callback_quasi_newton`: function called at each iteration, specifically to update the Hessian approximation of quasi-Newton models, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
-- `scp_flag::Bool = true`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
+- `scp_flag::Bool = false`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
 - `always_accept_npc_ag::Bool = false`: if true, we skip the computation of the reduction ratio ρ for Goldstein steps taken along directions of negative curvature, unconditionally accepting them as successful steps to aggressively escape saddle points.
 - `fast_local_convergence::Bool = false`: if true, we scale the regularization parameter σ by the norm of the current gradient on very successful iterations (using `γ3 * min(σ, norm(gx))`), which accelerates local convergence near a minimizer.
 - `npc_handler::Symbol = :ag`: the non_positive_curve handling strategy.
@@ -358,7 +358,7 @@ function SolverCore.solve!(
   verbose::Int = 0,
   subsolver_verbose::Int = 0,
   npc_handler::Symbol = :ag,
-  scp_flag::Bool = true,
+  scp_flag::Bool = false,
   always_accept_npc_ag::Bool = false,
   fast_local_convergence::Bool = false,
 ) where {T, V}
@@ -504,6 +504,7 @@ function SolverCore.solve!(
   subiter = 0
   dir_stat = ""
   is_npc_ag_step = false # Determine if we took an NPC Goldstein step this iteration
+  successful_iters = 0 # used for non-monotone acceptance
 
   while !done
     npcCount = 0
@@ -517,6 +518,7 @@ function SolverCore.solve!(
       solver.subsolver(s, rhs, σk, atol, subtol, n; verbose = subsolver_verbose)
 
     force_sigma_increase = solver.subsolver isa HSLR2NSubsolver && !subsolver_solved
+
     if solver.subsolver isa HSLR2NSubsolver && subsolver_solved
       num_neg, num_zero = get_inertia(solver.subsolver)
 
@@ -627,10 +629,10 @@ function SolverCore.solve!(
       # 2. Standard Model Predicted Reduction
       else
         mul!(Hs, H, s)
-        dot_sHs = dot(s, Hs)    # s' (H + σI) s
+        dot_sHs = dot(s, Hs)    # s'H s
         dot_ag = dot(s, ∇fk)    # ∇f' s
 
-        # Predicted Reduction: m(0) - m(s) = -g's - 0.5 s'Bs
+        # Predicted Reduction of the unregularized model: φ(0) - φ(s) = -g's - 0.5 s'Hs
         ΔTk = -dot_ag - dot_sHs / 2
 
         if ΔTk <= eps(T) * max(one(T), abs(stats.objective))
@@ -645,7 +647,7 @@ function SolverCore.solve!(
           end
 
           if non_mono_size > 1
-            k = mod(stats.iter, non_mono_size) + 1
+            k = mod(successful_iters, non_mono_size) + 1
             solver.obj_vec[k] = stats.objective
             ft_max = maximum(solver.obj_vec)
             ρk = (ft_max - ft) / (ft_max - stats.objective + ΔTk)
@@ -658,6 +660,7 @@ function SolverCore.solve!(
 
       # 3. Process the Step  
       if step_accepted
+        successful_iters += 1
         x .= xt
         grad!(nlp, x, ∇fk)
 
@@ -691,8 +694,9 @@ function SolverCore.solve!(
 
     set_iter!(stats, stats.iter + 1)
     set_time!(stats, time() - start_time)
-
-    subtol = max(√eps(T), min(T(0.1), √norm_∇fk, T(0.9) * subtol))
+    if step_accepted
+      subtol = max(√eps(T), min(T(0.1), √norm_∇fk, T(0.9) * subtol))
+    end
     set_dual_residual!(stats, norm_∇fk)
 
     solver.σ = σk

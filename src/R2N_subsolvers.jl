@@ -312,9 +312,22 @@ end
 get_operator(sub::HSLR2NSubsolver) = sub
 
 function get_operator_norm(sub::HSLR2NSubsolver)
-  # Cheap estimate of norm using the stored values
-  # Exclude the shift values (last n elements) which are at indices nnzh+1:end
-  return norm(view(sub.vals, 1:sub.nnzh), Inf)
+  # Calculate the matrix infinity norm (maximum absolute row sum)
+  # Exclude the shift values which are at indices nnzh+1:end
+  row_sums = zeros(T, sub.n)
+  
+  @inbounds for k = 1:sub.nnzh
+    i = sub.rows[k]
+    j = sub.cols[k]
+    v = abs(sub.vals[k])
+    
+    row_sums[i] += v
+    if i != j
+      row_sums[j] += v
+    end
+  end
+  
+  return maximum(row_sums)
 end
 
 # Helper to support `mul!` for HSL subsolver
