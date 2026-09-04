@@ -273,7 +273,7 @@ function SolverCore.solve!(
   mul!(∇f, A', r)
   ∇fNorm2 = nrm2(n, ∇f)
   ϵ = atol + rtol * ∇fNorm2
-  ϵF = Fatol + Frtol * 2 * √f
+  ϵF = Fatol + Frtol * √(2 * f)
   tr = solver.tr
   tr.radius = min(max(∇fNorm2 / 10, one(T)), T(100))
 
@@ -291,7 +291,7 @@ function SolverCore.solve!(
   temp = solver.temp
 
   optimal = ∇fNorm2 ≤ ϵ
-  small_residual = 2 * √f ≤ ϵF
+  small_residual = √(2 * f) ≤ ϵF
 
   set_iter!(stats, 0)
   set_objective!(stats, f)
@@ -479,7 +479,7 @@ function SolverCore.solve!(
       ])
 
     optimal = ∇fNorm2 ≤ ϵ
-    small_residual = 2 * √f ≤ ϵF
+    small_residual = √(2 * f) ≤ ϵF
 
     set_status!(
       stats,

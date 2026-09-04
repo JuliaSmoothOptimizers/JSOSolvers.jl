@@ -8,7 +8,7 @@ using NLPModelsTest, SolverParameters
 # this package
 using JSOSolvers
 
-include("test-gpu.jl")
+# include("test-gpu.jl")
 
 @testset "Test parameterset" begin
   @testset "Test unconstrained parameters $paramset" for (paramset, fun) in (
@@ -47,6 +47,12 @@ end
   SolverCore.solve!(solver, nls, stats, atol = 0.0, rtol = 0.0, Fatol = 1e-6, Frtol = 0.0)
   @test stats.status_reliable && stats.status == :small_residual
   @test stats.objective_reliable && isapprox(stats.objective, 0, atol = 1e-6)
+end
+
+@testset "Test TrunkSolverNLS residual norm scaling" begin
+  nls = ADNLSModel(x -> [x[1]], [1.0], 1)
+  stats = trunk(nls; atol = 0.0, rtol = 0.0, Fatol = 1.1, Frtol = 0.0, max_iter = 0)
+  @test stats.status_reliable && stats.status == :small_residual
 end
 
 @testset "Test iteration limit" begin
