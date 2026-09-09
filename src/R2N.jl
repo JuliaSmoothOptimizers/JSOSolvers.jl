@@ -153,7 +153,7 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `subsolver = CGR2NSubsolver`: the subproblem solver type or instance.
-  - Note: subsolver-specific options such as `fill_ratio` and `min_matrix_size` (size and density guards for the direct HSL `MA57R2NSubsolver`/`MA97R2NSubsolver`) cannot be passed through `R2N`. To set them, pass a pre-built instance, e.g. `subsolver = MA57R2NSubsolver(nlp; fill_ratio = 0.3, min_matrix_size = 1_000)`.
+  - Note: HSL guards `fill_ratio`, `min_matrix_size`, `max_nvar`, and `max_nnzh` must be passed to a pre-built subsolver, e.g. `subsolver = MA57R2NSubsolver(nlp; max_nvar = 100_000, max_nnzh = 5_000_000)`. `max_nvar` is compared against `nlp.meta.nvar` and `max_nnzh` against `nlp.meta.nnzh` (the number of stored lower-triangular Hessian nonzeros). Both default to `typemax(Int)` (no additional limit). If either limit (or the `fill_ratio`/`min_matrix_size` density guard) trips, HSL allocation and symbolic analysis are skipped and `R2N` returns status `:exception`. These are cheap input-size checks, not bounds on factorization memory or runtime.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
 - `callback`: function called at each iteration, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
 - `callback_quasi_newton`: function called at each iteration, specifically to update the Hessian approximation of quasi-Newton models, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
@@ -180,6 +180,16 @@ stats = R2N(nlp)
 "Execution stats: first-order stationary"
 
 ```
+
+Passing a pre-built HSL subsolver with input-size guards (e.g. to bail out on very
+large problems instead of paying HSL's eager symbolic analysis):
+```julia
+using JSOSolvers, ADNLPModels
+nlp = ADNLPModel(x -> sum(x.^2), ones(3))
+sub = MA57R2NSubsolver(nlp; max_nvar = 100_000, max_nnzh = 5_000_000)
+stats = R2N(nlp; subsolver = sub)
+```
+Same pattern works for `MA97R2NSubsolver`. If a guard trips, `stats.status == :exception`.
 
 """
 mutable struct R2NSolver{T, V, Sub <: AbstractR2NSubsolver{T}, M <: AbstractNLPModel{T, V}} <:
@@ -408,7 +418,7 @@ function SolverCore.solve!(
   # that is too dense. In that case skip the (prohibitively expensive)
   # factorization and return early with status :exception.
   if is_unsupported(solver.subsolver)
-    @error "R2N: the selected subsolver cannot handle this problem (Hessian too dense for a direct sparse factorization). Use a Krylov subsolver (e.g. CGR2NSubsolver) or increase `fill_ratio`."
+    @error "R2N: skipping HSL because the problem exceeds a size or density limit (max_nvar, max_nnzh, fill_ratio). Use a Krylov subsolver (e.g. CGR2NSubsolver) or adjust the HSL limits."
     set_iter!(stats, 0)
     set_objective!(stats, obj(nlp, x))
     set_time!(stats, time() - start_time)

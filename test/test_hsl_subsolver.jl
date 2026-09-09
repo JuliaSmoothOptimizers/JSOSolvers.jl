@@ -1,5 +1,24 @@
 using HSL_jll
 using HSL
+@testset "HSL input-size guards" begin
+  nlp = ADNLPModel(x -> sum(abs2, x), ones(2))
+  for constructor in (MA57R2NSubsolver, MA97R2NSubsolver)
+    @test_throws ArgumentError constructor(nlp; max_nvar = -1)
+    @test_throws ArgumentError constructor(nlp; max_nnzh = -1)
+    for limits in ((max_nvar = 1,), (max_nnzh = nlp.meta.nnzh - 1,))
+      sub = constructor(nlp; limits...)
+      @test JSOSolvers.is_unsupported(sub)
+      @test sub.hsl_obj === nothing
+      @test isempty(sub.rows) && isempty(sub.cols) && isempty(sub.vals)
+      JSOSolvers.reset_subsolver!(sub, nlp, nlp.meta.x0)
+      @test JSOSolvers.is_unsupported(sub)
+      stats = @test_logs (:error, r"skipping HSL") R2N(nlp; subsolver = sub)
+      @test stats.status == :exception
+      @test stats.iter == 0
+    end
+  end
+end
+
 if LIBHSL_isfunctional()
   @testset "Testing HSL Subsolvers & Memory Safety" begin
     dense_nlp = ADNLPModel(x -> sum(abs2, x), ones(2))

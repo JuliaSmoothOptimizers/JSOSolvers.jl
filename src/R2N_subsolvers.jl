@@ -125,6 +125,28 @@ end
 #   HSL Subsolver (MA97 / MA57)
 # ==============================================================================
 
+"""
+    HSLR2NSubsolver(nlp; hsl_constructor = ma97_coord,
+                    fill_ratio = 0.5, min_matrix_size = 1_000,
+                    max_nvar = typemax(Int), max_nnzh = typemax(Int))
+
+Direct sparse subsolver for [`R2N`](@ref) backed by HSL (`ma57_coord` or `ma97_coord`).
+
+Before touching HSL, a cheap input-size and density guard is applied. If any of
+
+- `nlp.meta.nvar > max_nvar`,
+- `nlp.meta.nnzh > max_nnzh` (`nnzh` counts stored lower-triangular Hessian nonzeros), or
+- `nnzh > fill_ratio * n(n+1)/2` when `n(n+1)/2 > min_matrix_size`
+
+is true, the constructor returns an "unsupported" placeholder: no HSL object is
+allocated, no symbolic analysis is run, and [`is_unsupported`](@ref) returns `true`.
+`R2N` then short-circuits to status `:exception`. Use this to avoid HSL's eager
+symbolic analysis on large or dense problems (e.g. `n ≈ 120_000`).
+
+Negative `max_nvar`/`max_nnzh` raise `ArgumentError`. `LIBHSL_isfunctional()` is only
+checked when the guard is not triggered, so unsupported placeholders can be built
+without a working HSL library.
+"""
 mutable struct HSLR2NSubsolver{T, S} <: AbstractR2NSubsolver{T}
   hsl_obj::S
   hsl_constructor::Function
@@ -137,6 +159,8 @@ mutable struct HSLR2NSubsolver{T, S} <: AbstractR2NSubsolver{T}
   _finalized::Bool
   fill_ratio::T   # density threshold used by the guard
   min_matrix_size::Int # matrix entry threshold used by the guard
+  max_nvar::Int
+  max_nnzh::Int
   unsupported::Bool # true when the Hessian is too dense for the direct solver
 end
 
@@ -145,8 +169,11 @@ function HSLR2NSubsolver(
   hsl_constructor = ma97_coord,
   fill_ratio::Real = 0.5,
   min_matrix_size::Int = 1_000,
+  max_nvar::Int = typemax(Int),
+  max_nnzh::Int = typemax(Int),
 ) where {T, V}
-  LIBHSL_isfunctional() || error("HSL library is not functional")
+  max_nvar >= 0 || throw(ArgumentError("max_nvar must be nonnegative"))
+  max_nnzh >= 0 || throw(ArgumentError("max_nnzh must be nonnegative"))
   n = nlp.meta.nvar
   nnzh = nlp.meta.nnzh
   fr = T(fill_ratio)
@@ -155,7 +182,8 @@ function HSLR2NSubsolver(
   # nonzeros. Large, dense patterns can make the eager HSL symbolic analysis
   # prohibitively expensive, so skip building the HSL object in that case.
   dense_nnz = (n * (n + 1)) ÷ 2
-  if dense_nnz > min_matrix_size && nnzh > fr * dense_nnz
+  if n > max_nvar || nnzh > max_nnzh ||
+     (dense_nnz > min_matrix_size && nnzh > fr * dense_nnz)
     return HSLR2NSubsolver{T, Nothing}(
       nothing,
       hsl_constructor,
@@ -168,10 +196,13 @@ function HSLR2NSubsolver(
       true,
       fr,
       min_matrix_size,
+      max_nvar,
+      max_nnzh,
       true,
     )
   end
 
+  LIBHSL_isfunctional() || error("HSL library is not functional")
   total_nnz = nnzh + n
 
   rows = Vector{Int}(undef, total_nnz)
@@ -211,6 +242,8 @@ function HSLR2NSubsolver(
     false,
     fr,
     min_matrix_size,
+    max_nvar,
+    max_nnzh,
     false,
   )
   finalizer(finalize_subsolver!, sub)
@@ -243,19 +276,48 @@ function finalize_subsolver!(sub::HSLR2NSubsolver)
   return nothing
 end
 
-MA97R2NSubsolver(nlp; fill_ratio::Real = 0.5, min_matrix_size::Int = 1_000) =
+"""
+    MA97R2NSubsolver(nlp; fill_ratio = 0.5, min_matrix_size = 1_000,
+                    max_nvar = typemax(Int), max_nnzh = typemax(Int))
+
+[`HSLR2NSubsolver`](@ref) using `ma97_coord`. Same guards and keyword semantics.
+"""
+MA97R2NSubsolver(
+  nlp;
+  fill_ratio::Real = 0.5,
+  min_matrix_size::Int = 1_000,
+  max_nvar::Int = typemax(Int),
+  max_nnzh::Int = typemax(Int),
+) =
   HSLR2NSubsolver(
     nlp;
     hsl_constructor = ma97_coord,
     fill_ratio = fill_ratio,
     min_matrix_size = min_matrix_size,
+    max_nvar = max_nvar,
+    max_nnzh = max_nnzh,
   )
-MA57R2NSubsolver(nlp; fill_ratio::Real = 0.5, min_matrix_size::Int = 1_000) =
+
+"""
+    MA57R2NSubsolver(nlp; fill_ratio = 0.5, min_matrix_size = 1_000,
+                    max_nvar = typemax(Int), max_nnzh = typemax(Int))
+
+[`HSLR2NSubsolver`](@ref) using `ma57_coord`. Same guards and keyword semantics.
+"""
+MA57R2NSubsolver(
+  nlp;
+  fill_ratio::Real = 0.5,
+  min_matrix_size::Int = 1_000,
+  max_nvar::Int = typemax(Int),
+  max_nnzh::Int = typemax(Int),
+) =
   HSLR2NSubsolver(
     nlp;
     hsl_constructor = ma57_coord,
     fill_ratio = fill_ratio,
     min_matrix_size = min_matrix_size,
+    max_nvar = max_nvar,
+    max_nnzh = max_nnzh,
   )
 
 is_unsupported(sub::HSLR2NSubsolver) = sub.unsupported
@@ -354,7 +416,8 @@ function reset_subsolver!(sub::HSLR2NSubsolver{T}, nlp::AbstractNLPModel, x) whe
   # 2b. Re-apply the density guard for the new problem. If too dense, skip the
   # expensive rebuild (symbolic analyse) and flag the subsolver as unsupported.
   dense_nnz = (n * (n + 1)) ÷ 2
-  if dense_nnz > sub.min_matrix_size && nnzh > sub.fill_ratio * dense_nnz
+  if n > sub.max_nvar || nnzh > sub.max_nnzh ||
+     (dense_nnz > sub.min_matrix_size && nnzh > sub.fill_ratio * dense_nnz)
     sub.unsupported = true
     return nothing
   end
