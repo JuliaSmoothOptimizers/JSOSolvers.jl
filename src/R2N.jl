@@ -159,7 +159,7 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `callback_quasi_newton`: function called at each iteration, specifically to update the Hessian approximation of quasi-Newton models, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
 - `scp_flag::Bool = false`: if true, we compare the norm of the calculate step with `θ2 * norm(scp)`, each iteration, selecting the smaller step.
 - `always_accept_npc_ag::Bool = false`: if true, we skip the computation of the reduction ratio ρ for Goldstein steps taken along directions of negative curvature, unconditionally accepting them as successful steps to aggressively escape saddle points.
-- `fast_local_convergence::Bool = false`: if true, we scale the regularization parameter σ by the norm of the current gradient on very successful iterations (using `γ3 * min(σ, norm(gx))`), which accelerates local convergence near a minimizer.
+- `fast_local_convergence::Bool = true`: if true, we scale the regularization parameter σ by the norm of the current gradient on very successful iterations (using `γ3 * min(σ, norm(gx))`), which accelerates local convergence near a minimizer.
 - `npc_handler::Symbol = :ag`: the non_positive_curve handling strategy.
   - `:ag`: run line-search along NPC with Armijo-Goldstein conditions.
   - `:sigma`: increase the regularization parameter σ.
@@ -370,7 +370,7 @@ function SolverCore.solve!(
   npc_handler::Symbol = :ag,
   scp_flag::Bool = false,
   always_accept_npc_ag::Bool = false,
-  fast_local_convergence::Bool = false,
+  fast_local_convergence::Bool = true,
 ) where {T, V}
   unconstrained(nlp) || error("R2N should only be called on unconstrained problems.")
 
