@@ -59,11 +59,15 @@ end
     @test !JSOSolvers.qrmumps_guard_triggered(m, n, 5n, 0.5, emax, typemax(Int), typemax(Int))
   end
 
-  # a dense problem below the threshold is actually solved, not skipped
-  dense_n = 60
-  dense_nls = ADNLSModel(x -> [sum(x) - 1; x .- 1], ones(dense_n), dense_n + 1)
-  @test dense_nls.nls_meta.nnzj >
-        0.5 * JSOSolvers.dense_jacobian_entries(dense_nls.nls_meta.nequ, dense_n)
+  # A dense problem below the threshold is actually solved, not skipped. Every
+  # residual component depends on every variable, so the Jacobian is structurally
+  # dense; the trailing row makes the system inconsistent, leaving a nonzero
+  # residual at the solution.
+  dense_n = 30
+  dense_nls =
+    ADNLSModel(x -> vcat(sum(x) .+ x .- 1, 3 * sum(x) + 2), ones(dense_n), dense_n + 1)
+  dense_m = dense_nls.nls_meta.nequ
+  @test dense_nls.nls_meta.nnzj > 0.5 * JSOSolvers.dense_jacobian_entries(dense_m, dense_n)
   dense_sub = QRMumpsSubsolver(dense_nls)
   @test !is_unsupported(dense_sub)
   @test R2NLS(dense_nls; subsolver = dense_sub).status == :first_order
