@@ -6,7 +6,6 @@ using HSL
     @test_throws ArgumentError constructor(nlp; max_nvar = -1)
     @test_throws ArgumentError constructor(nlp; max_nnzh = -1)
     @test_throws ArgumentError constructor(nlp; dense_max_nvar = -1)
-    @test_throws ArgumentError constructor(nlp; min_matrix_size = -1)
     for limits in (
       (max_nvar = 1,),
       (max_nnzh = nlp.meta.nnzh - 1,),
@@ -32,37 +31,35 @@ if LIBHSL_isfunctional()
     small_dense_subsolver = MA97R2NSubsolver(dense_nlp)
     @test !is_unsupported(small_dense_subsolver)
     finalize_subsolver!(small_dense_subsolver)
-    @test is_unsupported(MA97R2NSubsolver(dense_nlp; min_matrix_size = 0))
     @test is_unsupported(MA97R2NSubsolver(dense_nlp; dense_max_nvar = 0))
 
     # `dense_max_nvar` is the largest `n` whose dense Hessian is still accepted:
     # the default keeps moderately sized dense problems (e.g. n = 5_000) on HSL
     # and only rejects the ones above it.
     @test JSOSolvers.dense_hessian_entries(5_000) == (5_000 * 5_001) ÷ 2
-    for n in (2, 500, 5_000, JSOSolvers.DEFAULT_HSL_DENSE_MAX_NVAR)
-      dense_nnzh = JSOSolvers.dense_hessian_entries(n)
+    nmax = JSOSolvers.DEFAULT_HSL_DENSE_MAX_NVAR
+    for n in (2, 500, 5_000, nmax)
       @test !JSOSolvers.hsl_guard_triggered(
         n,
-        dense_nnzh,
+        JSOSolvers.dense_hessian_entries(n),
         0.5,
-        JSOSolvers.dense_hessian_entries(JSOSolvers.DEFAULT_HSL_DENSE_MAX_NVAR),
+        nmax,
         typemax(Int),
         typemax(Int),
       )
     end
-    let n = JSOSolvers.DEFAULT_HSL_DENSE_MAX_NVAR + 1
-      min_size = JSOSolvers.dense_hessian_entries(JSOSolvers.DEFAULT_HSL_DENSE_MAX_NVAR)
+    let n = nmax + 1
       # dense above the threshold is rejected ...
       @test JSOSolvers.hsl_guard_triggered(
         n,
         JSOSolvers.dense_hessian_entries(n),
         0.5,
-        min_size,
+        nmax,
         typemax(Int),
         typemax(Int),
       )
       # ... but a genuinely sparse Hessian of the same size still goes to HSL
-      @test !JSOSolvers.hsl_guard_triggered(n, 5n, 0.5, min_size, typemax(Int), typemax(Int))
+      @test !JSOSolvers.hsl_guard_triggered(n, 5n, 0.5, nmax, typemax(Int), typemax(Int))
     end
 
     # a dense problem below the threshold is actually solved, not skipped

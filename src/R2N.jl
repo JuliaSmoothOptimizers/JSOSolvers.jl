@@ -153,7 +153,7 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
 - `subsolver = CGR2NSubsolver`: the subproblem solver type or instance.
-  - Note: HSL guards `fill_ratio`, `dense_max_nvar`, `min_matrix_size`, `max_nvar`, and `max_nnzh` must be passed to a pre-built subsolver, e.g. `subsolver = MA57R2NSubsolver(nlp; max_nvar = 100_000, max_nnzh = 5_000_000)`. `max_nvar` is compared against `nlp.meta.nvar` and `max_nnzh` against `nlp.meta.nnzh` (the number of stored lower-triangular Hessian nonzeros). Both default to `typemax(Int)` (no additional limit). The `fill_ratio` density guard only applies to Hessians with more than `min_matrix_size` entries, which defaults to a dense `dense_max_nvar × dense_max_nvar` Hessian (`dense_max_nvar = 10_000`), so dense problems up to that size are still factorized by HSL. If any guard trips, HSL allocation and symbolic analysis are skipped and `R2N` returns status `:exception`. These are cheap input-size checks, not bounds on factorization memory or runtime.
+  - Note: HSL guards `fill_ratio`, `dense_max_nvar`, `max_nvar`, and `max_nnzh` must be passed to a pre-built subsolver, e.g. `subsolver = MA57R2NSubsolver(nlp; max_nvar = 100_000, max_nnzh = 5_000_000)`. `max_nvar` is compared against `nlp.meta.nvar` and `max_nnzh` against `nlp.meta.nnzh` (the number of stored lower-triangular Hessian nonzeros). Both default to `typemax(Int)` (no additional limit). The `fill_ratio` density guard only applies once `nvar > dense_max_nvar` (default `12_000`), so dense problems up to that size are still factorized by HSL. If any guard trips, HSL allocation and symbolic analysis are skipped and `R2N` returns status `:exception`. These are cheap input-size checks, not bounds on factorization memory or runtime.
 - `subsolver_verbose::Int = 0`: if > 0, display iteration information every `subsolver_verbose` iteration of the subsolver if KrylovWorkspace type is selected.
 - `callback`: function called at each iteration, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
 - `callback_quasi_newton`: function called at each iteration, specifically to update the Hessian approximation of quasi-Newton models, see [`Callbacks`](https://jso.dev/JSOSolvers.jl/stable/#Callbacks) section.
@@ -191,7 +191,7 @@ stats = R2N(nlp; subsolver = sub)
 ```
 Same pattern works for `MA97R2NSubsolver`. If a guard trips, `stats.status == :exception`.
 
-Dense Hessians are only rejected above `dense_max_nvar` (default `10_000`), so a
+Dense Hessians are only rejected above `dense_max_nvar` (default `12_000`), so a
 dense `n = 5_000` problem is still factorized. Lower it to reject dense problems
 earlier, or raise it to allow bigger dense ones:
 ```julia

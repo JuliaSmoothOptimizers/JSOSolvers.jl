@@ -141,20 +141,17 @@ Number of stored entries of a dense symmetric `n × n` Hessian, `n(n+1)/2`.
 dense_hessian_entries(n::Int) = (n * (n + 1)) ÷ 2
 
 # Cheap O(1) size and density guard shared by the constructor and
-# `reset_subsolver!`. The `fill_ratio` density test only kicks in once the
-# Hessian has more than `min_matrix_size` entries, so dense but moderately sized
-# problems are still factorized by HSL.
-function hsl_guard_triggered(n, nnzh, fill_ratio, min_matrix_size, max_nvar, max_nnzh)
+# `reset_subsolver!`. Below `dense_max_nvar` even a fully dense Hessian is cheap
+# enough to factorize, so the density test only arms above that size.
+function hsl_guard_triggered(n, nnzh, fill_ratio, dense_max_nvar, max_nvar, max_nnzh)
   n > max_nvar && return true
   nnzh > max_nnzh && return true
-  dense_nnz = dense_hessian_entries(n)
-  return dense_nnz > min_matrix_size && nnzh > fill_ratio * dense_nnz
+  return n > dense_max_nvar && nnzh > fill_ratio * dense_hessian_entries(n)
 end
 
 """
     HSLR2NSubsolver(nlp; hsl_constructor = ma97_coord,
-                    fill_ratio = 0.5, dense_max_nvar = 10_000,
-                    min_matrix_size = dense_hessian_entries(dense_max_nvar),
+                    fill_ratio = 0.5, dense_max_nvar = 12_000,
                     max_nvar = typemax(Int), max_nnzh = typemax(Int))
 
 Direct sparse subsolver for [`R2N`](@ref) backed by HSL (`ma57_coord` or `ma97_coord`).
@@ -163,7 +160,7 @@ Before touching HSL, a cheap input-size and density guard is applied. If any of
 
 - `nlp.meta.nvar > max_nvar`,
 - `nlp.meta.nnzh > max_nnzh` (`nnzh` counts stored lower-triangular Hessian nonzeros), or
-- `nnzh > fill_ratio * n(n+1)/2` when `n(n+1)/2 > min_matrix_size`
+- `nnzh > fill_ratio * n(n+1)/2` when `n > dense_max_nvar`
 
 is true, the constructor returns an "unsupported" placeholder: no HSL object is
 allocated, no symbolic analysis is run, and [`is_unsupported`](@ref) returns `true`.
@@ -172,23 +169,19 @@ symbolic analysis on problems that are too big to factorize (e.g. `n ≈ 120_000
 
 # Density guard and problem size
 
-The `fill_ratio` density test only applies once the Hessian is large enough, i.e.
-when it has more than `min_matrix_size` entries. A dense Hessian is cheap to
-factorize at moderate `n`, so `min_matrix_size` defaults to the entry count of a
-dense `dense_max_nvar × dense_max_nvar` Hessian: any problem with
-`n ≤ dense_max_nvar` is handed to HSL no matter how dense it is, and the density
-test only starts rejecting problems above that size. With the default
-`dense_max_nvar = 10_000`, a dense `n = 5_000` problem still runs through HSL.
+A dense Hessian is cheap enough to factorize at moderate `n`, so the `fill_ratio`
+density test only applies once `n > dense_max_nvar`: any problem with
+`n ≤ dense_max_nvar` is handed to HSL no matter how dense it is. With the default
+`dense_max_nvar = 12_000`, a dense `n = 5_000` problem still runs through HSL.
 
 Set `dense_max_nvar` to the largest `n` for which you accept factorizing a dense
-Hessian (work grows like `n³`, storage like `n²`), or set `min_matrix_size`
-directly if you prefer to think in matrix entries. `dense_max_nvar = 0` restores
+Hessian (work grows like `n³`, storage like `n²`). `dense_max_nvar = 0` restores
 the "reject every dense Hessian" behaviour, while `max_nvar`/`max_nnzh` stay hard
 caps that apply regardless of density.
 
-Negative `max_nvar`, `max_nnzh`, `dense_max_nvar` or `min_matrix_size` raise
-`ArgumentError`. `LIBHSL_isfunctional()` is only checked when the guard is not
-triggered, so unsupported placeholders can be built without a working HSL library.
+Negative `max_nvar`, `max_nnzh` or `dense_max_nvar` raise `ArgumentError`.
+`LIBHSL_isfunctional()` is only checked when the guard is not triggered, so
+unsupported placeholders can be built without a working HSL library.
 """
 mutable struct HSLR2NSubsolver{T, S} <: AbstractR2NSubsolver{T}
   hsl_obj::S
@@ -201,7 +194,7 @@ mutable struct HSLR2NSubsolver{T, S} <: AbstractR2NSubsolver{T}
   work::Vector{T} # workspace for solves (used for MA57)
   _finalized::Bool
   fill_ratio::T   # density threshold used by the guard
-  min_matrix_size::Int # matrix entry threshold used by the guard
+  dense_max_nvar::Int # largest nvar whose dense Hessian is still accepted
   max_nvar::Int
   max_nnzh::Int
   unsupported::Bool # true when the Hessian is too dense for the direct solver
@@ -212,21 +205,19 @@ function HSLR2NSubsolver(
   hsl_constructor = ma97_coord,
   fill_ratio::Real = 0.5,
   dense_max_nvar::Int = DEFAULT_HSL_DENSE_MAX_NVAR,
-  min_matrix_size::Int = dense_hessian_entries(dense_max_nvar),
   max_nvar::Int = typemax(Int),
   max_nnzh::Int = typemax(Int),
 ) where {T, V}
   max_nvar >= 0 || throw(ArgumentError("max_nvar must be nonnegative"))
   max_nnzh >= 0 || throw(ArgumentError("max_nnzh must be nonnegative"))
   dense_max_nvar >= 0 || throw(ArgumentError("dense_max_nvar must be nonnegative"))
-  min_matrix_size >= 0 || throw(ArgumentError("min_matrix_size must be nonnegative"))
   n = nlp.meta.nvar
   nnzh = nlp.meta.nnzh
   fr = T(fill_ratio)
 
   # Skip building the HSL object (and its eager symbolic analysis) when the
-  # problem is too large, or dense *and* larger than `min_matrix_size` entries.
-  if hsl_guard_triggered(n, nnzh, fr, min_matrix_size, max_nvar, max_nnzh)
+  # problem is too large, or dense *and* larger than `dense_max_nvar`.
+  if hsl_guard_triggered(n, nnzh, fr, dense_max_nvar, max_nvar, max_nnzh)
     return HSLR2NSubsolver{T, Nothing}(
       nothing,
       hsl_constructor,
@@ -238,7 +229,7 @@ function HSLR2NSubsolver(
       T[],
       true,
       fr,
-      min_matrix_size,
+      dense_max_nvar,
       max_nvar,
       max_nnzh,
       true,
@@ -284,7 +275,7 @@ function HSLR2NSubsolver(
     work,
     false,
     fr,
-    min_matrix_size,
+    dense_max_nvar,
     max_nvar,
     max_nnzh,
     false,
@@ -320,8 +311,7 @@ function finalize_subsolver!(sub::HSLR2NSubsolver)
 end
 
 """
-    MA97R2NSubsolver(nlp; fill_ratio = 0.5, dense_max_nvar = 10_000,
-                    min_matrix_size = dense_hessian_entries(dense_max_nvar),
+    MA97R2NSubsolver(nlp; fill_ratio = 0.5, dense_max_nvar = 12_000,
                     max_nvar = typemax(Int), max_nnzh = typemax(Int))
 
 [`HSLR2NSubsolver`](@ref) using `ma97_coord`. Same guards and keyword semantics.
@@ -330,7 +320,6 @@ MA97R2NSubsolver(
   nlp;
   fill_ratio::Real = 0.5,
   dense_max_nvar::Int = DEFAULT_HSL_DENSE_MAX_NVAR,
-  min_matrix_size::Int = dense_hessian_entries(dense_max_nvar),
   max_nvar::Int = typemax(Int),
   max_nnzh::Int = typemax(Int),
 ) =
@@ -338,14 +327,13 @@ MA97R2NSubsolver(
     nlp;
     hsl_constructor = ma97_coord,
     fill_ratio = fill_ratio,
-    min_matrix_size = min_matrix_size,
+    dense_max_nvar = dense_max_nvar,
     max_nvar = max_nvar,
     max_nnzh = max_nnzh,
   )
 
 """
-    MA57R2NSubsolver(nlp; fill_ratio = 0.5, dense_max_nvar = 10_000,
-                    min_matrix_size = dense_hessian_entries(dense_max_nvar),
+    MA57R2NSubsolver(nlp; fill_ratio = 0.5, dense_max_nvar = 12_000,
                     max_nvar = typemax(Int), max_nnzh = typemax(Int))
 
 [`HSLR2NSubsolver`](@ref) using `ma57_coord`. Same guards and keyword semantics.
@@ -354,7 +342,6 @@ MA57R2NSubsolver(
   nlp;
   fill_ratio::Real = 0.5,
   dense_max_nvar::Int = DEFAULT_HSL_DENSE_MAX_NVAR,
-  min_matrix_size::Int = dense_hessian_entries(dense_max_nvar),
   max_nvar::Int = typemax(Int),
   max_nnzh::Int = typemax(Int),
 ) =
@@ -362,7 +349,7 @@ MA57R2NSubsolver(
     nlp;
     hsl_constructor = ma57_coord,
     fill_ratio = fill_ratio,
-    min_matrix_size = min_matrix_size,
+    dense_max_nvar = dense_max_nvar,
     max_nvar = max_nvar,
     max_nnzh = max_nnzh,
   )
@@ -462,7 +449,7 @@ function reset_subsolver!(sub::HSLR2NSubsolver{T}, nlp::AbstractNLPModel, x) whe
 
   # 2b. Re-apply the density guard for the new problem. If too dense, skip the
   # expensive rebuild (symbolic analyse) and flag the subsolver as unsupported.
-  if hsl_guard_triggered(n, nnzh, sub.fill_ratio, sub.min_matrix_size, sub.max_nvar, sub.max_nnzh)
+  if hsl_guard_triggered(n, nnzh, sub.fill_ratio, sub.dense_max_nvar, sub.max_nvar, sub.max_nnzh)
     sub.unsupported = true
     return nothing
   end

@@ -71,11 +71,6 @@ end
   stats = trunk(nls; atol = 0.0, rtol = 0.0, Fatol = 1.1, Frtol = 0.0, max_iter = 0)
   @test stats.status_reliable && stats.status == :small_residual
 end
-@testset "Test R2N direct subsolver guard" begin
-  nls = ADNLSModel(x -> [x[1] - 1; 2 * (x[2] - x[1]^2)], [-1.2; 1.0], 2)
-  @test !is_unsupported(QRMumpsSubsolver(nls))
-  @test is_unsupported(QRMumpsSubsolver(nls; min_matrix_size = 0))
-end
 
 @testset "Test R2N regularization lower bounds" begin
   σmin = 10.0
@@ -148,6 +143,7 @@ end
 end
 
 include("test_hsl_subsolver.jl")
+include("test_qrmumps_subsolver.jl")
 include("restart.jl")
 include("callback.jl")
 include("consistency.jl")
