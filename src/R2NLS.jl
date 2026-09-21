@@ -323,10 +323,10 @@ function SolverCore.solve!(
   ∇f = solver.gx
 
   # Guard: some direct subsolvers (e.g. QRMumps) cannot handle a Jacobian that is
-  # too dense. In that case skip the (prohibitively expensive) factorization and
-  # return early with status :exception.
+  # too large or too dense. In that case skip the (prohibitively expensive)
+  # factorization and return early with status :exception.
   if is_unsupported(solver.subsolver)
-    @error "R2NLS: the selected subsolver cannot handle this problem (Jacobian too dense for a direct sparse factorization). Use a Krylov subsolver (e.g. LSMRSubsolver) or increase `fill_ratio`."
+    @error "R2NLS: skipping qr_mumps because the problem exceeds a size or density limit (max_nvar, max_nnzj, dense_max_entries, fill_ratio). Use a Krylov subsolver (e.g. LSMRSubsolver) or adjust the qr_mumps limits."
     residual!(nls, x, r)
     set_iter!(stats, 0)
     set_objective!(stats, norm(r)^2 / 2)

@@ -15,7 +15,7 @@ using QRMumps
     @test JSOSolvers.is_unsupported(sub)
     @test sub.spmat === nothing && sub.spfct === nothing
     @test isempty(sub.irn) && isempty(sub.jcn) && isempty(sub.val)
-    stats = R2NLS(nls; subsolver = sub)
+    stats = @test_logs (:error, r"skipping qr_mumps") R2NLS(nls; subsolver = sub)
     @test stats.status == :exception
     @test stats.iter == 0
   end
