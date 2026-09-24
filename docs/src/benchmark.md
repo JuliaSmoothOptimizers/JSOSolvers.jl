@@ -131,3 +131,47 @@ print_pp_column(:neval_obj, stats) # with respect to number of objective evaluat
 ``` @example ex1
 print_pp_column(:neval_grad, stats) # with respect to number of gradient evaluations
 ```
+
+## Unconstrained Benchmark
+
+We can also benchmark unconstrained solvers, such as `R2N`, on the `pnames_unconstrained` subset we identified earlier. For instance, comparing `R2N` against `trunk`:
+
+```@example ex1
+cutest_unc_problems = (CUTEstModel(p) for p in pnames_unconstrained)
+
+solvers_unc = Dict(
+  :trunk => nlp -> trunk(
+    nlp,
+    max_time = max_time,
+    max_iter = typemax(Int64),
+    max_eval = typemax(Int64),
+    atol = tol,
+    rtol = tol,
+  ),
+  :R2N => nlp -> R2N(
+    nlp,
+    max_time = max_time,
+    max_iter = typemax(Int64),
+    max_eval = typemax(Int64),
+    atol = tol,
+    rtol = tol,
+  ),
+)
+
+stats_unc = bmark_solvers(solvers_unc, cutest_unc_problems)
+
+```
+
+We can explore the results and generate performance profiles for these unconstrained solvers just as we did before:
+
+```@example ex1
+pretty_stats(stats_unc[:R2N])
+
+```
+
+```@example ex1
+print_pp_column(:elapsed_time, stats_unc)
+
+```
+
+**Note on `R2NLS`:** To benchmark the `R2NLS` solver on nonlinear least-squares (NLS) problems, you can follow this exact same pattern by providing a collection of `AbstractNLSModel` instances instead of general `CUTEstModel`s.
