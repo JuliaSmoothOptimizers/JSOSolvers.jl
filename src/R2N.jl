@@ -712,7 +712,7 @@ function SolverCore.solve!(
     set_iter!(stats, stats.iter + 1)
     set_time!(stats, time() - start_time)
     if step_accepted
-      subtol = max(√eps(T), min(T(0.1), √norm_∇fk, T(0.9) * subtol))
+      subtol = max(rtol, min(T(0.1), √norm_∇fk, T(0.9) * subtol))
     end
     set_dual_residual!(stats, norm_∇fk)
 
