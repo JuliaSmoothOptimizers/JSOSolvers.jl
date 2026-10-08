@@ -93,7 +93,7 @@ function FOMOParameterSet(
     Parameter(γ1, RealInterval(T(0), T(1), lower_open = true, upper_open = true)),
     Parameter(γ2, RealInterval(T(1), T(Inf), lower_open = true, upper_open = true)),
     Parameter(γ3, RealInterval(T(0), T(1))),
-    Parameter(αmax, RealInterval(T(1), T(Inf), upper_open = true)),
+    Parameter(αmax, RealInterval(T(0), T(Inf), lower_open = true, upper_open = true)),
     Parameter(β, RealInterval(T(0), T(1), upper_open = true)),
     Parameter(θ1, RealInterval(T(0), T(1))),
     Parameter(θ2, RealInterval(T(0), T(1), upper_open = true)),
