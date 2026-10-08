@@ -151,6 +151,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `θ2 = $(FOMO_θ2)`: momentum contribution parameter for convergence condition (2). 
 - `M = $(FOMO_M)` : requires objective decrease over the `M` last iterates (nonmonotone context). `M=1` implies monotone behaviour. 
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
+- `α0 = nothing`: initial value of the step parameter (capped by `αmax`); if `nothing`, it is chosen from the initial gradient norm.
 - `step_backend = $(FOMO_step_backend)`: step computation mode. Options are `r2_step()` for quadratic regulation step and `tr_step()` for first-order trust-region.
 
 # Output
@@ -281,6 +282,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `M = $(FOMO_M)` : algorithm parameter, see [`FOMOParameterSet`](@ref).
 - `verbose::Int = 0`: if > 0, display iteration details every `verbose` iteration.
+- `α0 = nothing`: initial value of the step parameter (capped by `αmax`); if `nothing`, it is chosen from the initial gradient norm.
 - `step_backend = $(FOMO_step_backend)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
 
 # Output
@@ -399,6 +401,7 @@ function SolverCore.solve!(
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   verbose::Int = 0,
+  α0::Union{Nothing, T} = nothing,
 ) where {T, V}
   unconstrained(nlp) || error("fomo should only be called on unconstrained problems.")
 
@@ -441,7 +444,7 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇fk)
   set_dual_residual!(stats, norm_∇fk)
 
-  solver.α = init_alpha(norm_∇fk, step_backend)
+  solver.α = min(something(α0, init_alpha(norm_∇fk, step_backend)), αmax)
 
   # Stopping criterion: 
   fmin = min(-one(T), f0) / eps(T)
