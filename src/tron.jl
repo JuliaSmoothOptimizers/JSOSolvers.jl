@@ -121,6 +121,7 @@ mutable struct TronSolver{
   Sub <: KrylovWorkspace{T, T, V},
   Op <: AbstractLinearOperator{T},
   Aop <: AbstractLinearOperator{T},
+  B <: AbstractVector{Bool},
 } <: AbstractOptimizationSolver
   x::V
   xc::V
@@ -134,7 +135,7 @@ mutable struct TronSolver{
   H::Op
   tr::TRONTrustRegion{T, V}
 
-  ifix::BitVector
+  ifix::B
 
   cg_solver::Sub
   cg_rhs::V
@@ -169,7 +170,7 @@ function TronSolver(
   Op = typeof(H)
   tr = TRONTrustRegion(gt, min(one(T), max_radius - eps(T)); max_radius = max_radius, kwargs...)
 
-  ifix = BitVector(undef, nvar)
+  ifix = similar(x, Bool)
 
   cg_rhs = V(undef, nvar)
   cg_op_diag = V(undef, nvar)
@@ -177,7 +178,7 @@ function TronSolver(
 
   ZHZ = cg_op' * H * cg_op
   workspace = krylov_workspace(Val(subsolver), ZHZ, Hs)
-  return TronSolver{T, V, typeof(workspace), Op, typeof(ZHZ)}(
+  return TronSolver{T, V, typeof(workspace), Op, typeof(ZHZ), typeof(ifix)}(
     x,
     xc,
     temp,
@@ -630,13 +631,10 @@ function projected_newton!(
       continue
     end
 
-    gfnorm = 0
-    for i = 1:n
-      cgs_rhs[i] = ifix[i] ? 0 : -g[i]
-      gfnorm += cgs_rhs[i]^2
-      cgs_rhs[i] -= ifix[i] ? 0 : Hs[i]
-      cg_op_diag[i] = ifix[i] ? 0 : 1 # implictly changes cg_op and so ZHZ
-    end
+    cgs_rhs .= ifelse.(ifix, zero(T), .-g)
+    gfnorm = dot(cgs_rhs, cgs_rhs)
+    cgs_rhs .-= ifelse.(ifix, zero(T), Hs)
+    cg_op_diag .= ifelse.(ifix, zero(T), one(T)) # implictly changes cg_op and so ZHZ
 
     cg!(
       cg_solver,
@@ -660,11 +658,8 @@ function projected_newton!(
 
     mul!(Hs, H, s)
 
-    newnorm = 0
-    for i = 1:n
-      cgs_rhs[i] = ifix[i] ? 0 : Hs[i] + g[i]
-      newnorm += cgs_rhs[i]^2
-    end
+    cgs_rhs .= ifelse.(ifix, zero(T), Hs .+ g)
+    newnorm = dot(cgs_rhs, cgs_rhs)
 
     if √newnorm <= cgtol * √gfnorm
       exit_optimal = true

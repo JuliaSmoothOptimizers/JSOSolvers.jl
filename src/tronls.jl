@@ -121,6 +121,7 @@ mutable struct TronSolverNLS{
   Sub <: KrylovWorkspace{T, T, V},
   Op <: AbstractLinearOperator{T},
   Aop <: AbstractLinearOperator{T},
+  B <: AbstractVector{Bool},
 } <: AbstractOptimizationSolver
   x::V
   xc::V
@@ -137,7 +138,7 @@ mutable struct TronSolverNLS{
   A::Op
   As::V
 
-  ifix::BitVector
+  ifix::B
 
   ls_rhs::V
   ls_op_diag::V
@@ -180,7 +181,7 @@ function TronSolverNLS(
   A = jac_op_residual!(nlp, xc, Av, Atv)
   As = V(undef, nequ)
 
-  ifix = BitVector(undef, nvar)
+  ifix = similar(x, Bool)
 
   ls_rhs = V(undef, nequ)
   ls_op_diag = V(undef, nvar)
@@ -190,7 +191,7 @@ function TronSolverNLS(
   ls_subsolver = krylov_workspace(Val(subsolver), AZ, As)
   Sub = typeof(ls_subsolver)
 
-  return TronSolverNLS{T, V, Sub, typeof(A), typeof(AZ)}(
+  return TronSolverNLS{T, V, Sub, typeof(A), typeof(AZ), typeof(ifix)}(
     x,
     xc,
     temp,
@@ -660,9 +661,7 @@ function projected_gauss_newton!(
       continue
     end
 
-    for i = 1:n
-      ls_op_diag[i] = ifix[i] ? 0 : 1 # implictly changes ls_op and so AZ
-    end
+    ls_op_diag .= ifelse.(ifix, zero(T), one(T)) # implictly changes ls_op and so AZ
 
     ls_rhs .= .-As .- Fx
     krylov_solve!(
