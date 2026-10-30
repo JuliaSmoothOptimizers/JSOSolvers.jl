@@ -12,7 +12,7 @@ Parameter set for the R2NLS solver. Controls algorithmic tolerances and step acc
 - `θ2 = eps(T)^(-1)`: Maximum allowed ratio between the step and the Cauchy step (θ2 > 1).
 - `γ1 = T(1.5)`: Regularization increase factor on successful (but not very successful) step (1 < γ1 ≤ γ2).
 - `γ2 = T(2.5)`: Regularization increase factor on rejected step (γ1 ≤ γ2).
-- `γ3 = T(0.5)`: Regularization increase factor on very successful step (0 < γ3 ≤ 1).
+- `γ3 = T(0.5)`: Regularization decrease factor on very successful step (0 < γ3 ≤ 1).
 - `δ1 = T(0.5)`: Cauchy point scaling (0 < δ1 < 1). θ1 scales the step size when using the exact Cauchy point, while δ1 scales the step size inexact Cauchy point.
 - `σmin = eps(T)`: Smallest allowed regularization.
 - `non_mono_size = 1`: Window size for non-monotone acceptance.
@@ -159,7 +159,8 @@ mutable struct R2NLSSolver{T, V, Sub <: AbstractR2NLSSubsolver{T}} <: AbstractOp
   x::V         # Current iterate x_k
   xt::V        # Trial iterate x_{k+1}
   gx::V        # Gradient of the objective function: J' * F(x)
-  r::V        # Residual vector F(x)
+  gt::V        # Gradient at the trial point, used for the roundoff correction of the actual reduction
+  r::V       # Residual vector F(x)
   rt::V        # Residual vector at trial point F(xt)
   temp::V      # Temporary vector for intermediate calculations (e.g. J*v)
   subsolver::Sub # The solver for the linear least-squares subproblem
@@ -187,6 +188,7 @@ function R2NLSSolver(
   compute_cauchy_point::Bool = get(R2NLS_compute_cauchy_point, nls),
   inexact_cauchy_point::Bool = get(R2NLS_inexact_cauchy_point, nls),
 ) where {T, V}
+  sub = (subsolver isa Type || subsolver isa Function) ? subsolver(nls) : subsolver
   params = R2NLSParameterSet(
     nls;
     η1 = η1,
@@ -210,6 +212,7 @@ function R2NLSSolver(
   x = V(undef, nvar)
   xt = V(undef, nvar)
   gx = V(undef, nvar)
+  gt = V(undef, nvar)
   r = V(undef, nequ)
   rt = V(undef, nequ)
   temp = V(undef, nequ)
@@ -220,7 +223,7 @@ function R2NLSSolver(
   x .= nls.meta.x0
 
   # We pass the subsolver instance directly into the struct. No if/else checks needed!
-  R2NLSSolver(x, xt, gx, r, rt, temp, subsolver, obj_vec, one(T), s, scp, T(eps(T)^(1/5)), params)
+  R2NLSSolver(x, xt, gx, gt, r, rt, temp, sub, obj_vec, one(T), s, scp, T(eps(T)^(1/5)), params)
 end
 
 function SolverCore.reset!(solver::R2NLSSolver{T}) where {T}
@@ -234,6 +237,7 @@ function SolverCore.reset!(solver::R2NLSSolver{T}, nls::AbstractNLSModel) where 
   fill!(solver.obj_vec, typemin(T))
   solver.σ = T(eps(T)^(1 / 5))
   solver.subtol = one(T)
+  reset_subsolver!(solver.subsolver, nls, nls.meta.x0)
   solver
 end
 
@@ -288,7 +292,6 @@ function SolverCore.solve!(
   max_eval::Int = -1,
   max_iter::Int = typemax(Int),
   verbose::Int = 0,
-  scp_flag::Bool = true,
   subsolver_verbose::Int = 0,
 ) where {T, V}
   unconstrained(nls) || error("R2NLS should only be called on unconstrained problems.")
@@ -436,7 +439,7 @@ function SolverCore.solve!(
         ν_k = 2 * (1 - δ1) / γ_k
       else
         λmax = get_operator_norm(solver.subsolver)
-        ν_k = θ1 / (λmax + solver.σ)
+        ν_k = θ1 / (λmax^2 + solver.σ)  # λmax ≈ ‖J‖, so λmax² bounds ‖JᵀJ‖
       end
 
       @. scp = -ν_k * ∇f
@@ -448,22 +451,32 @@ function SolverCore.solve!(
     # 3. Acceptance
     xt .= x .+ s
     mul!(temp, Jx, s)
-    @. temp += r
-    pred_f = norm(temp)^2 / 2
-    ΔTk = stats.objective - pred_f
+    # ΔTk = ½‖r‖² - ½‖r + Js‖², computed directly so it does not cancel when small relative to f
+    ΔTk = -dot(∇f, s) - dot(temp, temp) / 2
 
-    residual!(nls, xt, rt)
-    resid_norm_t = norm(rt)
-    ft = resid_norm_t^2 / 2
-    if ΔTk <= eps(T) * max(one(T), abs(stats.objective))
-      ρk = -T(Inf) # this case should not happen, but we set ρk to -Inf to ensure the step is rejected if it does
-    elseif non_mono_size > 1
-      k = mod(successful_iters, non_mono_size) + 1
-      solver.obj_vec[k] = stats.objective
-      ft_max = maximum(solver.obj_vec)
-      ρk = (ft_max - ft) / (ft_max - stats.objective + ΔTk)
+    if ΔTk <= 0
+      ρk = -T(Inf) # model not decreased: reject the step
     else
-      ρk = (stats.objective - ft) / ΔTk
+      residual!(nls, xt, rt)
+      resid_norm_t = norm(rt)
+      ft = resid_norm_t^2 / 2
+
+      # Near roundoff, f - ft is dominated by rounding error: use the trapezoidal
+      # estimate f - ft ≈ -½ (∇f(x) + ∇f(xt))ᵀs instead (same test as SolverTools.aredpred!).
+      ared = stats.objective - ft
+      if ΔTk < 10_000 * eps(T) || abs(ared) < 10_000 * eps(T) * abs(stats.objective)
+        grad!(nls, xt, solver.gt, rt; recompute = false)
+        ared = -(dot(solver.gt, s) + dot(∇f, s)) / 2
+      end
+
+      if non_mono_size > 1
+        k = mod(successful_iters, non_mono_size) + 1
+        solver.obj_vec[k] = stats.objective
+        Δf_hist = maximum(solver.obj_vec) - stats.objective
+        ρk = (Δf_hist + ared) / (Δf_hist + ΔTk)
+      else
+        ρk = ared / ΔTk
+      end
     end
 
     # 4. Update regularization parameters and determine acceptance of the new candidate

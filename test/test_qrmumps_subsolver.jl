@@ -72,3 +72,19 @@ end
   @test !is_unsupported(dense_sub)
   @test R2NLS(dense_nls; subsolver = dense_sub).status == :first_order
 end
+
+@testset "R2NLS restart with a different Jacobian structure" begin
+  nls1 = ADNLSModel(x -> [x[1] - 1; 2 * (x[2] - x[1]^2)], [-1.2; 1.0], 2)
+  solver = R2NLSSolver(nls1) # QRMumps by default
+  stats = GenericExecutionStats(nls1)
+  SolverCore.solve!(solver, nls1, stats)
+  @test stats.status == :first_order
+
+  # same m and n, but a diagonal Jacobian, so qr_mumps must be rebuilt for a new nnzj
+  nls2 = ADNLSModel(x -> [x[1]; x[2]], [-1.2; 1.0], 2)
+  @test nls2.nls_meta.nnzj != nls1.nls_meta.nnzj # guards the premise of the test
+  SolverCore.reset!(solver, nls2)
+  SolverCore.solve!(solver, nls2, stats)
+  @test stats.status == :first_order
+  @test isapprox(stats.solution, [0.0; 0.0], atol = 1e-6)
+end

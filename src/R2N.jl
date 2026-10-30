@@ -33,8 +33,6 @@ struct R2NParameterSet{T} <: AbstractParameterSet
   ls_c::Parameter{T, RealInterval{T}}
   ls_increase::Parameter{T, RealInterval{T}}
   ls_decrease::Parameter{T, RealInterval{T}}
-  ls_min_alpha::Parameter{T, RealInterval{T}}
-  ls_max_alpha::Parameter{T, RealInterval{T}}
   bk_max::Parameter{Int, IntegerRange{Int}}
   bG_max::Parameter{Int, IntegerRange{Int}}
 end
@@ -60,11 +58,6 @@ const R2N_non_mono_size = DefaultParameter(1)
 const R2N_ls_c = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1e-4), "T(1e-4)")
 const R2N_ls_increase = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1.5), "T(1.5)")
 const R2N_ls_decrease = DefaultParameter(nlp -> eltype(nlp.meta.x0)(0.5), "T(0.5)")
-const R2N_ls_min_alpha = DefaultParameter(nlp -> begin
-  T = eltype(nlp.meta.x0)
-  max(T(1e-8), nextfloat(zero(T)))
-end, "max(T(1e-8), nextfloat(zero(T)))")
-const R2N_ls_max_alpha = DefaultParameter(nlp -> eltype(nlp.meta.x0)(1e2), "T(1e2)")
 const R2N_bk_max = DefaultParameter(10)
 const R2N_bG_max = DefaultParameter(10)
 
@@ -83,8 +76,6 @@ function R2NParameterSet(
   ls_c::T = get(R2N_ls_c, nlp),
   ls_increase::T = get(R2N_ls_increase, nlp),
   ls_decrease::T = get(R2N_ls_decrease, nlp),
-  ls_min_alpha::T = get(R2N_ls_min_alpha, nlp),
-  ls_max_alpha::T = get(R2N_ls_max_alpha, nlp),
   bk_max::Int = get(R2N_bk_max, nlp),
   bG_max::Int = get(R2N_bG_max, nlp),
 ) where {T}
@@ -109,8 +100,6 @@ function R2NParameterSet(
     Parameter(ls_c, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
     Parameter(ls_increase, RealInterval(one(T), T(Inf), lower_open = true, upper_open = true)),
     Parameter(ls_decrease, RealInterval(zero(T), one(T), lower_open = true, upper_open = true)),
-    Parameter(ls_min_alpha, RealInterval(zero(T), T(Inf), lower_open = true, upper_open = true)),
-    Parameter(ls_max_alpha, RealInterval(zero(T), T(Inf), lower_open = true, upper_open = true)),
     Parameter(bk_max, IntegerRange(1, typemax(Int))),
     Parameter(bG_max, IntegerRange(1, typemax(Int))),
   )
@@ -163,7 +152,7 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `npc_handler::Symbol = :ag`: the non_positive_curve handling strategy.
   - `:ag`: run line-search along NPC with Armijo-Goldstein conditions.
   - `:sigma`: increase the regularization parameter σ.
-  - `:prev`: if subsolver return after first iteration, increase the sigma, but if subsolver return after second iteration, set s_k = s_k^(t-1).
+  - `:prev`: use the subsolver's last iterate before negative curvature was detected, s_k = s_k^(t-1). If it is detected at the first iteration, the Krylov subsolver returns -∇f instead; σ is not increased in either case.
   - `:cp`: set s_k to Cauchy point.
   - Note: For exact direct subsolvers (e.g., `MA57R2NSubsolver`), an exact solution to an indefinite shifted system cannot simultaneously be a strict descent direction. If the factorized matrix is singular or indefinite, the solver automatically rejects the step and increases σ, bypassing this handler.
 
@@ -204,6 +193,7 @@ mutable struct R2NSolver{T, V, Sub <: AbstractR2NSubsolver{T}, M <: AbstractNLPM
   x::V              # Current iterate x_k
   xt::V             # Trial iterate x_{k+1}
   gx::V             # Gradient ∇f(x)
+  gt::V             # Gradient ∇f(xt), used for the roundoff correction of the actual reduction
   rhs::V            # RHS for subsolver (store -∇f)
   Hs::V             # Storage for H*s products
   s::V              # Step direction
@@ -232,11 +222,14 @@ function R2NSolver(
   ls_c = get(R2N_ls_c, nlp),
   ls_increase = get(R2N_ls_increase, nlp),
   ls_decrease = get(R2N_ls_decrease, nlp),
-  ls_min_alpha = get(R2N_ls_min_alpha, nlp),
-  ls_max_alpha = get(R2N_ls_max_alpha, nlp),
   bk_max::Int = get(R2N_bk_max, nlp),
   bG_max::Int = get(R2N_bG_max, nlp),
 ) where {T, V}
+  sub = (subsolver isa Type || subsolver isa Function) ? subsolver(nlp) : subsolver
+  if sub isa ShiftedLBFGSSolver && !(nlp isa LBFGSModel)
+    error("ShiftedLBFGSSolver can only be used by LBFGSModel")
+  end
+
   params = R2NParameterSet(
     nlp;
     η1 = η1,
@@ -252,8 +245,6 @@ function R2NSolver(
     ls_c = ls_c,
     ls_increase = ls_increase,
     ls_decrease = ls_decrease,
-    ls_min_alpha = ls_min_alpha,
-    ls_max_alpha = ls_max_alpha,
     bk_max = bk_max,
     bG_max = bG_max,
   )
@@ -264,14 +255,11 @@ function R2NSolver(
   x = V(undef, nvar)
   xt = V(undef, nvar)
   gx = V(undef, nvar)
+  gt = V(undef, nvar)
   rhs = V(undef, nvar)
   Hs = V(undef, nvar)
 
   x .= nlp.meta.x0
-
-  if subsolver isa ShiftedLBFGSSolver && !(nlp isa LBFGSModel)
-    error("ShiftedLBFGSSolver can only be used by LBFGSModel")
-  end
 
   σ = zero(T)
   s = V(undef, nvar)
@@ -281,16 +269,17 @@ function R2NSolver(
 
   h = LineModel(nlp, x, s)
 
-  return R2NSolver{T, V, typeof(subsolver), typeof(nlp)}(
+  return R2NSolver{T, V, typeof(sub), typeof(nlp)}(
     x,
     xt,
     gx,
+    gt,
     rhs,
     Hs,
     s,
     scp,
     obj_vec,
-    subsolver,
+    sub,
     h,
     subtol,
     σ,
@@ -326,13 +315,11 @@ end
   ls_c::Real = get(R2N_ls_c, nlp),
   ls_increase::Real = get(R2N_ls_increase, nlp),
   ls_decrease::Real = get(R2N_ls_decrease, nlp),
-  ls_min_alpha::Real = get(R2N_ls_min_alpha, nlp),
-  ls_max_alpha::Real = get(R2N_ls_max_alpha, nlp),
   bk_max::Int = get(R2N_bk_max, nlp),
   bG_max::Int = get(R2N_bG_max, nlp),
   kwargs...,
 ) where {T, V}
-  sub_instance = (subsolver isa Type || subsolver isa Function) ? subsolver(nlp) : subsolver
+  owns = subsolver isa Type || subsolver isa Function
   solver = R2NSolver(
     nlp;
     η1 = convert(T, η1),
@@ -345,19 +332,17 @@ end
     δ1 = convert(T, δ1),
     σmin = convert(T, σmin),
     non_mono_size = non_mono_size,
-    subsolver = sub_instance,
+    subsolver = subsolver,
     ls_c = convert(T, ls_c),
     ls_increase = convert(T, ls_increase),
     ls_decrease = convert(T, ls_decrease),
-    ls_min_alpha = convert(T, ls_min_alpha),
-    ls_max_alpha = convert(T, ls_max_alpha),
     bk_max = bk_max,
     bG_max = bG_max,
   )
   try
     return solve!(solver, nlp; kwargs...)
   finally
-    finalize_subsolver!(solver.subsolver)  # ← free Fortran handle NOW, not at GC
+    owns && finalize_subsolver!(solver.subsolver)  # free only subsolvers R2N built; user instances may be reused
   end
 end
 function SolverCore.solve!(
@@ -469,7 +454,7 @@ function SolverCore.solve!(
   if verbose > 0 && mod(stats.iter, verbose) == 0
     @info log_header(
       [:iter, :f, :dual, :norm_s, :σ, :ρ, :sub_iter, :dir, :sub_status],
-      [Int, Float64, Float64, Float64, Float64, Int, String, String],
+      [Int, Float64, Float64, Float64, Float64, Float64, Int, String, String],
       hdr_override = Dict(
         :f => "f(x)",
         :dual => "‖∇f‖",
@@ -526,6 +511,7 @@ function SolverCore.solve!(
   while !done
     npcCount = 0
     fck_computed = false
+    good_grad = false # true when solver.gt already holds ∇f(xt)
     is_npc_ag_step = false
 
     # Prepare RHS for subsolver (rhs = -∇f)
@@ -617,9 +603,11 @@ function SolverCore.solve!(
       if npc_handler == :cp && npcCount >= 1
         npcCount = 0
         s .= scp
+        is_npc_ag_step = false # s is no longer the NPC step: always_accept_npc_ag must not skip the ratio test
         fck_computed = false
       elseif norm(s) > θ2 * norm(scp)
         s .= scp
+        is_npc_ag_step = false
         fck_computed = false
       end
     end
@@ -652,24 +640,30 @@ function SolverCore.solve!(
         # Predicted Reduction of the unregularized model: φ(0) - φ(s) = -g's - 0.5 s'Hs
         ΔTk = -dot_ag - dot_sHs / 2
 
-        if ΔTk <= eps(T) * max(one(T), abs(stats.objective))
-          step_accepted = false
-          σk = γ2 * σk
-          solver.σ = σk
-          npcCount = 0
+        if ΔTk <= 0
+          step_accepted = false # model not decreased; σ is increased once in "Process the Step"
         else
           @. xt = x + s
           if !fck_computed
             ft = obj(nlp, xt)
           end
 
+          # Near roundoff, f - ft is dominated by rounding error: use the trapezoidal
+          # estimate f - ft ≈ -½ (∇f(x) + ∇f(xt))ᵀs instead (same test as SolverTools.aredpred!).
+          ared = stats.objective - ft
+          if ΔTk < 10_000 * eps(T) || abs(ared) < 10_000 * eps(T) * abs(stats.objective)
+            grad!(nlp, xt, solver.gt)
+            ared = -(dot(solver.gt, s) + dot_ag) / 2
+            good_grad = true
+          end
+
           if non_mono_size > 1
             k = mod(successful_iters, non_mono_size) + 1
             solver.obj_vec[k] = stats.objective
-            ft_max = maximum(solver.obj_vec)
-            ρk = (ft_max - ft) / (ft_max - stats.objective + ΔTk)
+            Δf_hist = maximum(solver.obj_vec) - stats.objective
+            ρk = (Δf_hist + ared) / (Δf_hist + ΔTk)
           else
-            ρk = (stats.objective - ft) / ΔTk
+            ρk = ared / ΔTk
           end
           step_accepted = ρk >= η1
         end
@@ -679,7 +673,11 @@ function SolverCore.solve!(
       if step_accepted
         successful_iters += 1
         x .= xt
-        grad!(nlp, x, ∇fk)
+        if good_grad
+          ∇fk .= solver.gt
+        else
+          grad!(nlp, x, ∇fk)
+        end
 
         if !(solver.subsolver isa ShiftedLBFGSSolver)
           update_subsolver!(solver.subsolver, nlp, x)

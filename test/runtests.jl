@@ -7,10 +7,8 @@ using NLPModelsTest, SolverParameters
 # this package
 using JSOSolvers
 
-if lowercase(get(ENV, "JSOSOLVERS_TEST_CUDA", "false")) in ("1", "true", "yes")
-  @eval using CUDA
-  include("test-gpu.jl")
-end
+using CUDA
+include("test-gpu.jl")
 
 @testset "Test parameterset" begin
   @testset "Test unconstrained parameters $paramset" for (paramset, fun) in (

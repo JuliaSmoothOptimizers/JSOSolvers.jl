@@ -49,13 +49,23 @@ end
   nlp.meta.x0 .= 2.0
   SolverCore.reset!(solver)
 
-  stats = SolverCore.solve!(solver, nlp, stats, atol = 1e-10, rtol = 1e-10)
+  # Disable the residual stop so every solver is held to the gradient tolerance:
+  # this problem has zero residual, so R2NLS would otherwise stop on ‖F‖ ≤ √eps first.
+  stats = SolverCore.solve!(
+    solver,
+    nlp,
+    stats,
+    atol = 1e-10,
+    rtol = 1e-10,
+    Fatol = 0.0,
+    Frtol = 0.0,
+  )
   @test stats.status == :first_order
   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)
 end
 
 @testset "Test restart with a different problem: $fun" for (fun, s) in (
-  # (:R2N, :R2NSolver), # 10-6 would cause failure, We can investigate this later.
+  (:R2N, :R2NSolver),
   (:R2, :FoSolver),
   (:fomo, :FomoSolver),
   (:lbfgs, :LBFGSSolver),
@@ -85,7 +95,7 @@ end
 @testset "Test restart NLS with a different problem: $fun" for (fun, s) in (
   (:tron, :TronSolverNLS),
   (:trunk, :TrunkSolverNLS),
-  # (:R2NLSSolver, :R2NLSSolver), # 10-6 would cause failure, We can investigate this later.
+  (:R2NLSSolver, :R2NLSSolver),
   )
   F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
   nlp = ADNLSModel(F, [-1.2; 1.0], 2)
@@ -101,7 +111,17 @@ end
   nlp = ADNLSModel(F2, [-1.2; 1.0], 2)
   SolverCore.reset!(solver, nlp)
 
-  stats = SolverCore.solve!(solver, nlp, stats, atol = 1e-10, rtol = 1e-10)
+  # Disable the residual stop so every solver is held to the gradient tolerance:
+  # this problem has zero residual, so R2NLS would otherwise stop on ‖F‖ ≤ √eps first.
+  stats = SolverCore.solve!(
+    solver,
+    nlp,
+    stats,
+    atol = 1e-10,
+    rtol = 1e-10,
+    Fatol = 0.0,
+    Frtol = 0.0,
+  )
   @test stats.status == :first_order
   @test isapprox(stats.solution, [0.0; 0.0], atol = 1e-6)
 end

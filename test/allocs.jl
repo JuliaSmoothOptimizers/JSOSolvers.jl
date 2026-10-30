@@ -41,15 +41,16 @@ if Sys.isunix()
     )
       for model in NLPModelsTest.nlp_problems
         nlp = eval(Meta.parse(model))()
-        if unconstrained(nlp) || (bound_constrained(nlp) && (name == :TronSolver))
-          if (name == :FoSolver || name == :FomoSolver)
+        if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolver))
+          if symsolver in (:FoSolver, :FomoSolver)
             solver = eval(symsolver)(nlp; M = 2) # nonmonotone configuration allocates extra memory
           elseif name == :R2N_ShiftedLBFGS
-            solver = eval(symsolver)(LBFGSModel(nlp), subsolver = ShiftedLBFGSSolver)
+            nlp = LBFGSModel(nlp) # build and solve on the same quasi-Newton model
+            solver = eval(symsolver)(nlp; subsolver = ShiftedLBFGSSolver(nlp))
           else
             solver = eval(symsolver)(nlp)
           end
-          if name == :FomoSolver
+          if symsolver == :FomoSolver
             T = eltype(nlp.meta.x0)
             stats = GenericExecutionStats(nlp, solver_specific = Dict(:avgβmax => T(0)))
           else
@@ -57,8 +58,8 @@ if Sys.isunix()
           end
           with_logger(NullLogger()) do
             SolverCore.solve!(solver, nlp, stats)
-            reset!(solver)
-            reset!(nlp)
+            SolverCore.reset!(solver)
+            NLPModels.reset!(nlp)
             al = @wrappedallocs SolverCore.solve!(solver, nlp, stats)
             @test al == 0
           end

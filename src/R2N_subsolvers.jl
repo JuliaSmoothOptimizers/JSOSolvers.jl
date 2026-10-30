@@ -14,18 +14,17 @@ mutable struct KrylovR2NSubsolver{T, V, Op, W, ShiftOp} <: AbstractR2NSubsolver{
   A::ShiftOp      # The Shifted Operator (only for CG/CR)
   solver_name::Symbol
   npc_dir::V      # Store NPC direction if needed
+  x::V            # Own copy of the iterate; H is evaluated at this vector
 
   function KrylovR2NSubsolver(nlp::AbstractNLPModel{T, V}, solver_name::Symbol = :cg) where {T, V}
-    x_init = nlp.meta.x0
     n = nlp.meta.nvar
-    H = isa(nlp, LBFGSModel) ? nlp.op : hess_op(nlp, x_init)
-
-    A = nothing
+    x = copy(nlp.meta.x0)
+    H = isa(nlp, LBFGSModel) ? nlp.op : hess_op(nlp, x)
     A = ShiftedOperator(H)
 
     workspace = krylov_workspace(Val(solver_name), n, n, V)
 
-    new{T, V, typeof(H), typeof(workspace), typeof(A)}(workspace, H, A, solver_name, V(undef, n))
+    new{T, V, typeof(H), typeof(workspace), typeof(A)}(workspace, H, A, solver_name, V(undef, n), x)
   end
 end
 
@@ -34,15 +33,22 @@ CRR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :cr)
 MinresR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :minres) 
 MinresQlpR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :minres_qlp)
 
+# The operators are built once on sub.x and follow it in place, so solve! does not
+# allocate; they are only rebuilt by reset_subsolver! for a new model.
 function initialize!(sub::KrylovR2NSubsolver, nlp, x)
-  # x here is the live solver.x from the main loop!
-  sub.H = isa(nlp, LBFGSModel) ? nlp.op : hess_op(nlp, x)
-  sub.A = ShiftedOperator(sub.H)
+  sub.x .= x
   return nothing
 end
 
 function update_subsolver!(sub::KrylovR2NSubsolver, nlp, x)
-  # Standard hess_op updates internally if it holds the NLP reference
+  sub.x .= x
+  return nothing
+end
+
+function reset_subsolver!(sub::KrylovR2NSubsolver, nlp, x)
+  sub.x .= x
+  sub.H = isa(nlp, LBFGSModel) ? nlp.op : hess_op(nlp, sub.x)
+  sub.A = ShiftedOperator(sub.H)
   return nothing
 end
 
@@ -106,6 +112,13 @@ end
 
 initialize!(sub::ShiftedLBFGSSolver, nlp, x) = nothing
 update_subsolver!(sub::ShiftedLBFGSSolver, nlp, x) = nothing # LBFGS updates via push! in outer loop
+
+# A new model brings its own LBFGS operator; the generic method would keep the old one.
+function reset_subsolver!(sub::ShiftedLBFGSSolver, nlp, x)
+  nlp isa LBFGSModel || error("ShiftedLBFGSSolver can only be used by LBFGSModel")
+  sub.H = nlp.op
+  return nothing
+end
 
 function (sub::ShiftedLBFGSSolver)(s, rhs, σ, atol, rtol, n; verbose = 0)
   # rhs is usually -∇f. solve_shifted_system! expects negative gradient
@@ -407,7 +420,7 @@ end
 
 get_operator(sub::HSLR2NSubsolver) = sub
 
-function get_operator_norm(sub::HSLR2NSubsolver)
+function get_operator_norm(sub::HSLR2NSubsolver{T}) where {T}
   # Calculate the matrix infinity norm (maximum absolute row sum)
   # Exclude the shift values which are at indices nnzh+1:end
   row_sums = zeros(T, sub.n)

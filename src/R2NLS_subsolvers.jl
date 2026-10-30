@@ -200,6 +200,67 @@ function update_subsolver!(sub::QRMumpsR2NLSSubsolver, nls, x)
   return nothing
 end
 
+function reset_subsolver!(sub::QRMumpsR2NLSSubsolver{T}, nls::AbstractNLSModel, x) where {T}
+  # 1. Release the old qr_mumps objects now (runs and deregisters their finalizers,
+  # so destroy is not called a second time at GC). spfct was built from spmat: free it first.
+  sub.spfct === nothing || finalize(sub.spfct)
+  sub.spmat === nothing || finalize(sub.spmat)
+  sub.spfct = nothing
+  sub.spmat = nothing
+
+  # 2. Update dimensions (new problem may differ in size/nnzj)
+  n = nls.meta.nvar
+  m = nls.nls_meta.nequ
+  nnzj = nls.nls_meta.nnzj
+  sub.m = m
+  sub.n = n
+  sub.nnzj = nnzj
+
+  # 2b. Re-apply the size/density guard for the new problem. If it trips, skip the
+  # expensive rebuild (symbolic analysis) and flag the subsolver as unsupported.
+  if qrmumps_guard_triggered(
+    m,
+    n,
+    nnzj,
+    sub.fill_ratio,
+    sub.dense_max_entries,
+    sub.max_nvar,
+    sub.max_nnzj,
+  )
+    sub.Jx = SparseMatrixCOO(m, n, Int[], Int[], T[])
+    sub.unsupported = true
+    return nothing
+  end
+  sub.unsupported = false
+
+  qrm_init()
+
+  # 3. Resize storage for the augmented matrix [J; √σ I] and its right-hand side
+  resize!(sub.irn, nnzj + n)
+  resize!(sub.jcn, nnzj + n)
+  resize!(sub.val, nnzj + n)
+  resize!(sub.b_aug, m + n)
+
+  # 4. Populate sparsity structure for the new problem
+  jac_structure_residual!(nls, view(sub.irn, 1:nnzj), view(sub.jcn, 1:nnzj))
+  @inbounds for i = 1:n
+    sub.irn[nnzj + i] = m + i
+    sub.jcn[nnzj + i] = i
+  end
+  sub.Jx = SparseMatrixCOO(m, n, sub.irn[1:nnzj], sub.jcn[1:nnzj], sub.val[1:nnzj])
+
+  # 5. Recreate the qr_mumps objects — triggers symbolic analysis for the new structure.
+  # Must come after the resize! calls above, since spmat keeps a pointer into val
+  # (irn/jcn are copied to Cint by qrm_spmat_init).
+  sub.spmat = qrm_spmat_init(m + n, n, sub.irn, sub.jcn, sub.val; sym = false)
+  sub.spfct = qrm_spfct_init(sub.spmat)
+  qrm_analyse!(sub.spmat, sub.spfct; transp = 'n')
+
+  # 6. Load actual Jacobian values at the starting point
+  update_subsolver!(sub, nls, x)
+  return nothing
+end
+
 function (sub::QRMumpsR2NLSSubsolver{T})(s, rhs, σ, atol, rtol, n; verbose = 0) where {T}
   sqrt_σ = sqrt(σ)
 
@@ -228,21 +289,22 @@ mutable struct KrylovR2NLSSubsolver{T, V, Op, W} <: AbstractR2NLSSubsolver{T}
   workspace::W
   Jx::Op
   solver_name::Symbol
-  Jv::V    
-  Jtv::V   
+  Jv::V
+  Jtv::V
+  x::V     # Own copy of the iterate; Jx is evaluated at this vector
 
   function KrylovR2NLSSubsolver(nls::AbstractNLSModel{T, V}, solver_name::Symbol) where {T, V}
     m = nls.nls_meta.nequ
     n = nls.meta.nvar
 
+    x = copy(nls.meta.x0)
     Jv = V(undef, m)
     Jtv = V(undef, n)
-    Jx = jac_op_residual!(nls, nls.meta.x0, Jv, Jtv)
+    Jx = jac_op_residual!(nls, x, Jv, Jtv)
 
     workspace = krylov_workspace(Val(solver_name), m, n, V)
-    
-    # THE FIX: All 5 parameters are now correctly passed to new()
-    new{T, V, typeof(Jx), typeof(workspace)}(workspace, Jx, solver_name, Jv, Jtv)
+
+    new{T, V, typeof(Jx), typeof(workspace)}(workspace, Jx, solver_name, Jv, Jtv, x)
   end
 end
 
@@ -250,13 +312,21 @@ LSMRSubsolver(nls) = KrylovR2NLSSubsolver(nls, :lsmr)
 LSQRSubsolver(nls) = KrylovR2NLSSubsolver(nls, :lsqr)
 CGLSSubsolver(nls) = KrylovR2NLSSubsolver(nls, :cgls)
 
+# The operator is built once on sub.x and follows it in place, so solve! does not
+# allocate; it is only rebuilt by reset_subsolver! for a new model.
 function initialize!(sub::KrylovR2NLSSubsolver, nls, x)
-  # Because Jv and Jtv were safely initialized in the constructor, this will no longer crash
-  sub.Jx = jac_op_residual!(nls, x, sub.Jv, sub.Jtv)
+  sub.x .= x
   return nothing
 end
 
 function update_subsolver!(sub::KrylovR2NLSSubsolver, nls, x)
+  sub.x .= x
+  return nothing
+end
+
+function reset_subsolver!(sub::KrylovR2NLSSubsolver, nls, x)
+  sub.x .= x
+  sub.Jx = jac_op_residual!(nls, sub.x, sub.Jv, sub.Jtv)
   return nothing
 end
 
