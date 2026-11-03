@@ -17,6 +17,7 @@ const FOMO_γ2 = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)
 const FOMO_γ3 = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1 // 2), "T(1/2)")
 const FOMO_αmax =
   DefaultParameter((nlp::AbstractNLPModel) -> 1 / eps(eltype(nlp.meta.x0)), "1/eps(T)")
+const FOMO_α0 = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(0), "T(0)")
 const FOMO_β = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(9 // 10), "T(9/10)")
 const FOMO_θ1 = DefaultParameter((nlp::AbstractNLPModel) -> eltype(nlp.meta.x0)(1 // 10), "T(1/10)")
 const FOMO_θ2 =
@@ -32,6 +33,7 @@ This structure designed for `fomo` regroups the following parameters:
   - `γ1`, `γ2`: regularization update parameters.
   - `γ3` : momentum factor βmax update parameter in case of unsuccessful iteration.
   - `αmax`: maximum step parameter for fomo algorithm.
+  - `α0`: initial value of the step parameter (capped by `αmax`); if `0`, it is chosen from the initial gradient norm.
   - `β ∈ [0,1)`: target decay rate for the momentum.
   - `θ1`: momentum contribution parameter for convergence condition (1).
   - `θ2`: momentum contribution parameter for convergence condition (2). 
@@ -51,6 +53,7 @@ Default values are:
   - `γ2::T = $(FOMO_γ2)`
   - `γ3::T = $(FOMO_γ3)`
   - `αmax::T = $(FOMO_αmax)`
+  - `α0::T = $(FOMO_α0)`
   - `β = $(FOMO_β) ∈ [0,1)`
   - `θ1 = $(FOMO_θ1)`
   - `θ2 = $(FOMO_θ2)`
@@ -64,6 +67,7 @@ struct FOMOParameterSet{T} <: AbstractParameterSet
   γ2::Parameter{T, RealInterval{T}}
   γ3::Parameter{T, RealInterval{T}}
   αmax::Parameter{T, RealInterval{T}}
+  α0::Parameter{T, RealInterval{T}}
   β::Parameter{T, RealInterval{T}}
   θ1::Parameter{T, RealInterval{T}}
   θ2::Parameter{T, RealInterval{T}}
@@ -80,6 +84,7 @@ function FOMOParameterSet(
   γ2::T = get(FOMO_γ2, nlp),
   γ3::T = get(FOMO_γ3, nlp),
   αmax::T = get(FOMO_αmax, nlp),
+  α0::T = get(FOMO_α0, nlp),
   β::T = get(FOMO_β, nlp),
   θ1::T = get(FOMO_θ1, nlp),
   θ2::T = get(FOMO_θ2, nlp),
@@ -94,6 +99,7 @@ function FOMOParameterSet(
     Parameter(γ2, RealInterval(T(1), T(Inf), lower_open = true, upper_open = true)),
     Parameter(γ3, RealInterval(T(0), T(1))),
     Parameter(αmax, RealInterval(T(0), T(Inf), lower_open = true, upper_open = true)),
+    Parameter(α0, RealInterval(T(0), T(Inf), upper_open = true)),
     Parameter(β, RealInterval(T(0), T(1), upper_open = true)),
     Parameter(θ1, RealInterval(T(0), T(1))),
     Parameter(θ2, RealInterval(T(0), T(1), upper_open = true)),
@@ -143,6 +149,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `γ1 = $(FOMO_γ1)`, `γ2 = $(FOMO_γ2)`: regularization update parameters.
 - `γ3 = $(FOMO_γ3)` : momentum factor βmax update parameter in case of unsuccessful iteration.
 - `αmax = $(FOMO_αmax)`: maximum step parameter for fomo algorithm.
+- `α0 = $(FOMO_α0)`: initial value of the step parameter (capped by `αmax`); if `0`, it is chosen from the initial gradient norm.
 - `max_eval::Int = -1`: maximum number of objective evaluations.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
@@ -214,6 +221,7 @@ end
   γ2::T = get(FOMO_γ2, nlp),
   γ3::T = get(FOMO_γ3, nlp),
   αmax::T = get(FOMO_αmax, nlp),
+  α0::T = get(FOMO_α0, nlp),
   β::T = get(FOMO_β, nlp),
   θ1::T = get(FOMO_θ1, nlp),
   θ2::T = get(FOMO_θ2, nlp),
@@ -229,6 +237,7 @@ end
     γ2 = γ2,
     γ3 = γ3,
     αmax = αmax,
+    α0 = α0,
     β = β,
     θ1 = θ1,
     θ2 = θ2,
@@ -276,6 +285,7 @@ For advanced usage, first define a `FomoSolver` to preallocate the memory used i
 - `γ1 = $(FOMO_γ1)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
 - `γ2 = $(FOMO_γ2)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
 - `αmax = $(FOMO_αmax)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
+- `α0 = $(FOMO_α0)`: algorithm parameter, see [`FOMOParameterSet`](@ref).
 - `max_eval::Int = -1`: maximum number of evaluation of the objective function.
 - `max_time::Float64 = 30.0`: maximum time limit in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
@@ -347,6 +357,7 @@ Base.@deprecate R2Solver(nlp::AbstractNLPModel; kwargs...) FoSolver(
   γ2::T = get(FOMO_γ2, nlp),
   γ3::T = get(FOMO_γ3, nlp),
   αmax::T = get(FOMO_αmax, nlp),
+  α0::T = get(FOMO_α0, nlp),
   β::T = get(FOMO_β, nlp),
   θ1::T = get(FOMO_θ1, nlp),
   θ2::T = get(FOMO_θ2, nlp),
@@ -362,6 +373,7 @@ Base.@deprecate R2Solver(nlp::AbstractNLPModel; kwargs...) FoSolver(
     γ2 = γ2,
     γ3 = γ3,
     αmax = αmax,
+    α0 = α0,
     β = β,
     θ1 = θ1,
     θ2 = θ2,
@@ -409,6 +421,7 @@ function SolverCore.solve!(
   γ2 = value(solver.params.γ2)
   γ3 = value(solver.params.γ3)
   αmax = value(solver.params.αmax)
+  α0 = value(solver.params.α0)
   β = value(solver.params.β)
   θ1 = value(solver.params.θ1)
   θ2 = value(solver.params.θ2)
@@ -441,7 +454,7 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇fk)
   set_dual_residual!(stats, norm_∇fk)
 
-  solver.α = init_alpha(norm_∇fk, step_backend)
+  solver.α = min(iszero(α0) ? init_alpha(norm_∇fk, step_backend) : α0, αmax)
 
   # Stopping criterion: 
   fmin = min(-one(T), f0) / eps(T)

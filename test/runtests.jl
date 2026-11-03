@@ -40,6 +40,19 @@ include("test-gpu.jl")
   end
 end
 
+@testset "Test FOMO initial step parameter α0 with $fun" for fun in (fomo, R2, TR)
+  nlp = BROWNDEN()
+  α_init = Ref(0.0)
+  cb(nlp, solver, stats) = stats.iter == 0 && (α_init[] = solver.α)
+  fun(nlp; α0 = 0.25, callback = cb)
+  @test α_init[] == 0.25
+  fun(nlp; α0 = 0.25, αmax = 0.125, callback = cb)
+  @test α_init[] == 0.125
+  stats = fun(nlp; callback = cb)
+  @test α_init[] > 0
+  @test stats.status == :first_order
+end
+
 @testset "Test small residual checks $solver" for solver in (:TrunkSolverNLS, :TronSolverNLS)
   nls = ADNLSModel(x -> [x[1] - 1; sin(x[2])], [-1.2; 1.0], 2)
   stats = GenericExecutionStats(nls)
@@ -47,6 +60,12 @@ end
   SolverCore.solve!(solver, nls, stats, atol = 0.0, rtol = 0.0, Fatol = 1e-6, Frtol = 0.0)
   @test stats.status_reliable && stats.status == :small_residual
   @test stats.objective_reliable && isapprox(stats.objective, 0, atol = 1e-6)
+end
+
+@testset "Test TrunkSolverNLS residual norm scaling" begin
+  nls = ADNLSModel(x -> [x[1]], [1.0], 1)
+  stats = trunk(nls; atol = 0.0, rtol = 0.0, Fatol = 1.1, Frtol = 0.0, max_iter = 0)
+  @test stats.status_reliable && stats.status == :small_residual
 end
 
 @testset "Test iteration limit" begin
