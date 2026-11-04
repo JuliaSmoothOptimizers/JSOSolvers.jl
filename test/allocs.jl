@@ -1,3 +1,5 @@
+using CUDA, JSOSolvers, Logging, NLPModels, NLPModelsTest, SolverCore, Test
+
 """
     @wrappedallocs(expr)
 Given an expression, this macro wraps that expression inside a new function
