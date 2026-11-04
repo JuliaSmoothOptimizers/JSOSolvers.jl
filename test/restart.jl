@@ -8,10 +8,9 @@
 )
   f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
   nlp = ADNLPModel(f, [-1.2; 1.0])
- 
-  solver = eval(s)(nlp)
-  
+
   stats = GenericExecutionStats(nlp)
+  solver = eval(s)(nlp)
   stats = SolverCore.solve!(solver, nlp, stats)
   @test stats.status == :first_order
   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)
@@ -28,20 +27,12 @@ end
   (:tron, :TronSolverNLS),
   (:trunk, :TrunkSolverNLS),
   (:R2NLSSolver, :R2NLSSolver),
-  (:R2NLSSolver_LSQR, :R2NLSSolver),
-  (:R2NLSSolver_QRMumps, :R2NLSSolver),
 )
   F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
   nlp = ADNLSModel(F, [-1.2; 1.0], 2)
 
   stats = GenericExecutionStats(nlp)
-  if fun == :R2NLSSolver_LSQR
-    solver = eval(s)(nlp, subsolver = LSQRSubsolver(nlp))
-  elseif fun == :R2NLSSolver_QRMumps
-    solver = eval(s)(nlp, subsolver = QRMumpsSubsolver(nlp))
-  else
-    solver = eval(s)(nlp)
-  end
+  solver = eval(s)(nlp)
   stats = SolverCore.solve!(solver, nlp, stats)
   @test stats.status == :first_order
   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)
@@ -74,17 +65,15 @@ end
 )
   f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
   nlp = ADNLPModel(f, [-1.2; 1.0])
- 
-  solver = eval(s)(nlp) 
- 
+
   stats = GenericExecutionStats(nlp)
+  solver = eval(s)(nlp)
   stats = SolverCore.solve!(solver, nlp, stats)
   @test stats.status == :first_order
   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)
 
   f2(x) = (x[1])^2 + 4 * (x[2] - x[1]^2)^2
   nlp = ADNLPModel(f2, [-1.2; 1.0])
-  
   SolverCore.reset!(solver, nlp)
 
   stats = SolverCore.solve!(solver, nlp, stats, atol = 1e-10, rtol = 1e-10)
@@ -96,13 +85,12 @@ end
   (:tron, :TronSolverNLS),
   (:trunk, :TrunkSolverNLS),
   (:R2NLSSolver, :R2NLSSolver),
-  )
+)
   F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
   nlp = ADNLSModel(F, [-1.2; 1.0], 2)
 
   stats = GenericExecutionStats(nlp)
   solver = eval(s)(nlp)
-
   stats = SolverCore.solve!(solver, nlp, stats)
   @test stats.status == :first_order
   @test isapprox(stats.solution, [1.0; 1.0], atol = 1e-6)

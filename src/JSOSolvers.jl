@@ -1,13 +1,12 @@
 module JSOSolvers
 
 # stdlib
-using LinearAlgebra, Logging, Printf, SparseArrays
+using LinearAlgebra, Logging, Printf
 
 # JSO packages
 using Arpack, TSVD, GenericLinearAlgebra
 using Krylov,
   LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverParameters, SolverTools
-
 
 import SolverTools.reset!
 import SolverCore.solve!

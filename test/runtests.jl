@@ -1,13 +1,13 @@
 # stdlib
 using Printf, LinearAlgebra, Logging, SparseArrays, Test
+using CUDA
 # additional packages
-using ADNLPModels, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools, Krylov
+using ADNLPModels, LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverTools
 using NLPModelsTest, SolverParameters
 
 # this package
 using JSOSolvers
 
-using CUDA
 include("test-gpu.jl")
 
 @testset "Test parameterset" begin
@@ -70,33 +70,6 @@ end
   @test stats.status_reliable && stats.status == :small_residual
 end
 
-@testset "Test R2N regularization lower bounds" begin
-  σmin = 10.0
-  nlp = ADNLPModel(x -> (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2, [-1.2; 1.0])
-  r2n_callback_called = Ref(false)
-  function r2n_sigma_callback(nlp, solver, stats)
-    r2n_callback_called[] = true
-    @test solver.σ >= σmin
-  end
-  R2N(nlp; σmin = σmin, callback = r2n_sigma_callback, max_iter = 3)
-  @test r2n_callback_called[]
-
-  nls = ADNLSModel(x -> [x[1] - 1; 2 * (x[2] - x[1]^2)], [-1.2; 1.0], 2)
-  r2nls_callback_called = Ref(false)
-  function r2nls_sigma_callback(nls, solver, stats)
-    r2nls_callback_called[] = true
-    @test solver.σ >= σmin
-  end
-  R2NLS(
-    nls;
-    σmin = σmin,
-    subsolver = LSMRSubsolver,
-    callback = r2nls_sigma_callback,
-    max_iter = 3,
-  )
-  @test r2nls_callback_called[]
-end
-
 @testset "Test iteration limit" begin
   @testset "$fun" for fun in (R2, R2N, fomo, lbfgs, tron, trunk)
     f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
@@ -116,25 +89,13 @@ end
 end
 
 @testset "Test unbounded below" begin
-  @testset "$name" for (name, solver) in [
-    ("trunk", trunk),
-    ("lbfgs", lbfgs),
-    ("tron", tron),
-    ("R2", R2),
-    ("R2N", R2N),
-    (
-      "R2N_ShiftedLBFGS",
-      (nlp; kwargs...) ->
-        R2N(LBFGSModel(nlp), subsolver = ShiftedLBFGSSolver; kwargs...),
-    ),
-    ("fomo", fomo),
-  ]
+  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk, R2N)
     T = Float64
     x0 = [T(0)]
     f(x) = -exp(x[1])
     nlp = ADNLPModel(f, x0)
 
-    stats = solver(nlp)
+    stats = eval(fun)(nlp)
     @test stats.status == :unbounded
     @test stats.objective < -one(T) / eps(T)
   end

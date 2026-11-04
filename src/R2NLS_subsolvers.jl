@@ -344,7 +344,7 @@ function (sub::KrylovR2NLSSubsolver)(s, rhs, σ, atol, rtol, n; verbose = 0)
     itmax = max(2 * n, 50),
     verbose = verbose,
   )
-  
+
   s .= sub.workspace.x
   return Krylov.issolved(sub.workspace), sub.workspace.stats.status, sub.workspace.stats.niter
 end

@@ -429,10 +429,7 @@ function SolverCore.solve!(
   norm_∇fk = norm(∇fk)
   set_dual_residual!(stats, norm_∇fk)
 
-  σk = max(
-    σmin,
-    norm_∇fk == zero(T) ? one(T) : (2^round(log2(norm_∇fk + one(T))) / norm_∇fk),
-  )
+  σk = max(σmin, norm_∇fk == zero(T) ? one(T) : (2^round(log2(norm_∇fk + one(T))) / norm_∇fk))
   ρk = zero(T)
 
   fmin = min(-one(T), f0) / eps(T)
@@ -533,13 +530,11 @@ function SolverCore.solve!(
       end
     end
 
-     if !force_sigma_increase &&
-       !(solver.subsolver isa ShiftedLBFGSSolver) &&
-       npcCount >= 1
+    if !force_sigma_increase && !(solver.subsolver isa ShiftedLBFGSSolver) && npcCount >= 1
       if npc_handler == :ag
         is_npc_ag_step = true
         npcCount = 0
-        
+
         # strictly for Krylov solvers, which extract valid NPC directions.
         dir = get_npc_direction(solver.subsolver)
 
@@ -552,7 +547,7 @@ function SolverCore.solve!(
         # Check a descent direction
         # ==========================================
         if dot_ag > 0
-            force_sigma_increase = true
+          force_sigma_increase = true
         else
           force_sigma_increase = false
           α, ft, nbk, nbG = armijo_goldstein(
@@ -566,7 +561,7 @@ function SolverCore.solve!(
             γ₁ = ls_increase,
             bk_max = bk_max,
             bG_max = bG_max,
-            verbose = false
+            verbose = false,
           )
           # AG budget exhausted: treat as failure and increase σ instead of taking the step.
           if nbk >= bk_max || nbG >= bG_max
@@ -612,26 +607,26 @@ function SolverCore.solve!(
       end
     end
 
-  if force_sigma_increase || (npc_handler == :sigma && npcCount >= 1)
+    if force_sigma_increase || (npc_handler == :sigma && npcCount >= 1)
       step_accepted = false
       σk = γ2 * σk
       solver.σ = σk
       npcCount = 0
-    else 
+    else
       # 1. Determine if we took an NPC Armijo-Goldstein step this iteration
       if is_npc_ag_step && always_accept_npc_ag
         is_npc_ag_step = false # reset
-        ρk = η1 
+        ρk = η1
         @. xt = x + s
-        
+
         # Safety Check: If the Cauchy step logic overwrote `s`, we MUST re-evaluate ft!
         if !fck_computed
           ft = obj(nlp, xt)
         end
-        
+
         step_accepted = true
-      
-      # 2. Standard Model Predicted Reduction
+
+        # 2. Standard Model Predicted Reduction
       else
         mul!(Hs, H, s)
         dot_sHs = dot(s, Hs)    # s'H s
@@ -667,7 +662,7 @@ function SolverCore.solve!(
           end
           step_accepted = ρk >= η1
         end
-      end  
+      end
 
       # 3. Process the Step  
       if step_accepted
@@ -698,8 +693,8 @@ function SolverCore.solve!(
         else
           σk = γ1 * σk
         end
-      
-      # Update Sigma on Rejection
+
+        # Update Sigma on Rejection
       else
         σk = γ2 * σk
       end

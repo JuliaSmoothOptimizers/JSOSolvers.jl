@@ -71,7 +71,7 @@ using JSOSolvers, ADNLPModels
 
 # Rosenbrock
 nlp = ADNLPModel(x -> 100 * (x[2] - x[1]^2)^2 + (x[1] - 1)^2, [-1.2; 1.0])
-stats = lbfgs(nlp) # or trunk, tron, R2, R2N
+stats = lbfgs(nlp) # or trunk, tron, R2
 ```
 
 ## Documentation

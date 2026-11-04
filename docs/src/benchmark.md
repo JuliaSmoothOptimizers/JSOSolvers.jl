@@ -159,19 +159,16 @@ solvers_unc = Dict(
 )
 
 stats_unc = bmark_solvers(solvers_unc, cutest_unc_problems)
-
 ```
 
 We can explore the results and generate performance profiles for these unconstrained solvers just as we did before:
 
 ```@example ex1
 pretty_stats(stats_unc[:R2N])
-
 ```
 
 ```@example ex1
 print_pp_column(:elapsed_time, stats_unc)
-
 ```
 
 **Note on `R2NLS`:** To benchmark the `R2NLS` solver on nonlinear least-squares (NLS) problems, you can follow this exact same pattern by providing a collection of `AbstractNLSModel` instances instead of general `CUTEstModel`s.

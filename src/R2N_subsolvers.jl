@@ -30,7 +30,7 @@ end
 
 CGR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :cg)
 CRR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :cr)
-MinresR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :minres) 
+MinresR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :minres)
 MinresQlpR2NSubsolver(nlp) = KrylovR2NSubsolver(nlp, :minres_qlp)
 
 # The operators are built once on sub.x and follow it in place, so solve! does not
@@ -294,18 +294,16 @@ function HSLR2NSubsolver(
     false,
   )
   finalizer(finalize_subsolver!, sub)
-  
+
   return sub
 end
 
 # Helper to dispatch safely on the HSL object type
 _finalize_hsl_obj!(obj::Ma97) = Base.finalize(obj)
-_finalize_hsl_obj!(obj)       = nothing # Fallback for Ma57 or other types #TODO if MA57 has it add it 
-
+_finalize_hsl_obj!(obj) = nothing # Fallback for Ma57 or other types #TODO if MA57 has it add it 
 
 # _finalize_hsl_obj!(obj::Ma57) = Base.finalize(obj)  # was `nothing` → silent leak
 
- 
 # Krylov/LBFGS: no-op, so try/finally in R2N is safe for all solvers
 function finalize_subsolver!(sub::AbstractR2NSubsolver)
   return nothing
@@ -335,15 +333,14 @@ MA97R2NSubsolver(
   dense_max_nvar::Int = DEFAULT_HSL_DENSE_MAX_NVAR,
   max_nvar::Int = typemax(Int),
   max_nnzh::Int = typemax(Int),
-) =
-  HSLR2NSubsolver(
-    nlp;
-    hsl_constructor = ma97_coord,
-    fill_ratio = fill_ratio,
-    dense_max_nvar = dense_max_nvar,
-    max_nvar = max_nvar,
-    max_nnzh = max_nnzh,
-  )
+) = HSLR2NSubsolver(
+  nlp;
+  hsl_constructor = ma97_coord,
+  fill_ratio = fill_ratio,
+  dense_max_nvar = dense_max_nvar,
+  max_nvar = max_nvar,
+  max_nnzh = max_nnzh,
+)
 
 """
     MA57R2NSubsolver(nlp; fill_ratio = 0.5, dense_max_nvar = 12_000,
@@ -357,15 +354,14 @@ MA57R2NSubsolver(
   dense_max_nvar::Int = DEFAULT_HSL_DENSE_MAX_NVAR,
   max_nvar::Int = typemax(Int),
   max_nnzh::Int = typemax(Int),
-) =
-  HSLR2NSubsolver(
-    nlp;
-    hsl_constructor = ma57_coord,
-    fill_ratio = fill_ratio,
-    dense_max_nvar = dense_max_nvar,
-    max_nvar = max_nvar,
-    max_nnzh = max_nnzh,
-  )
+) = HSLR2NSubsolver(
+  nlp;
+  hsl_constructor = ma57_coord,
+  fill_ratio = fill_ratio,
+  dense_max_nvar = dense_max_nvar,
+  max_nvar = max_nvar,
+  max_nnzh = max_nnzh,
+)
 
 is_unsupported(sub::HSLR2NSubsolver) = sub.unsupported
 
@@ -424,18 +420,18 @@ function get_operator_norm(sub::HSLR2NSubsolver{T}) where {T}
   # Calculate the matrix infinity norm (maximum absolute row sum)
   # Exclude the shift values which are at indices nnzh+1:end
   row_sums = zeros(T, sub.n)
-  
+
   @inbounds for k = 1:sub.nnzh
     i = sub.rows[k]
     j = sub.cols[k]
     v = abs(sub.vals[k])
-    
+
     row_sums[i] += v
     if i != j
       row_sums[j] += v
     end
   end
-  
+
   return maximum(row_sums)
 end
 
@@ -455,9 +451,9 @@ function reset_subsolver!(sub::HSLR2NSubsolver{T}, nlp::AbstractNLPModel, x) whe
   finalize_subsolver!(sub)
 
   # 2. Update dimensions (new problem may differ in size/nnzh)
-  n    = nlp.meta.nvar
+  n = nlp.meta.nvar
   nnzh = nlp.meta.nnzh
-  sub.n    = n
+  sub.n = n
   sub.nnzh = nnzh
 
   # 2b. Re-apply the density guard for the new problem. If too dense, skip the
@@ -484,7 +480,7 @@ function reset_subsolver!(sub::HSLR2NSubsolver{T}, nlp::AbstractNLPModel, x) whe
   end
 
   # 5. Recreate the HSL object — triggers symbolic analysis for the new structure
-  sub.hsl_obj    = sub.hsl_constructor(n, sub.cols, sub.rows, sub.vals)
+  sub.hsl_obj = sub.hsl_constructor(n, sub.cols, sub.rows, sub.vals)
   sub._finalized = false   # ← must reset: object is alive again
 
   # 6. Resize MA57 workspace if needed

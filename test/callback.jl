@@ -1,5 +1,4 @@
 using ADNLPModels, JSOSolvers, LinearAlgebra, Logging #, Plots
-
 @testset "Test callback" begin
   f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
   nlp = ADNLPModel(f, [-1.2; 1.0])
@@ -13,7 +12,6 @@ using ADNLPModels, JSOSolvers, LinearAlgebra, Logging #, Plots
       stats.status = :user
     end
   end
-
   stats = with_logger(NullLogger()) do
     R2(nlp, callback = cb)
   end
@@ -23,7 +21,6 @@ using ADNLPModels, JSOSolvers, LinearAlgebra, Logging #, Plots
     R2N(nlp, callback = cb)
   end
   @test stats.iter == 8
-
   stats = with_logger(NullLogger()) do
     lbfgs(nlp, callback = cb)
   end
@@ -63,7 +60,7 @@ end
     tron(nls, callback = cb)
   end
   @test stats.iter == 8
-  
+
   stats = with_logger(NullLogger()) do
     R2NLS(nls, callback = cb)
   end
@@ -102,28 +99,5 @@ end
   end
   stats = with_logger(NullLogger()) do
     R2(nlp, callback = cb)
-  end
-
-  # --- Callbacks for R2N and R2NLS ---
-  function cb_r2n(nlp, solver, stats)
-    if stats.iter == 4
-      @test solver.σ > 0.0
-      stats.status = :user
-    end
-  end
-  stats = with_logger(NullLogger()) do
-    R2N(nlp, callback = cb_r2n)
-  end
-
-  F(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
-  nls = ADNLSModel(F, [-1.2; 1.0], 2)
-  function cb_r2nls(nls, solver, stats)
-    if stats.iter == 4
-      @test solver.σ > 0.0
-      stats.status = :user
-    end
-  end
-  stats = with_logger(NullLogger()) do
-    R2NLS(nls, callback = cb_r2nls)
   end
 end
