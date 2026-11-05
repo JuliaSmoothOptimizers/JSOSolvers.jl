@@ -340,7 +340,6 @@ function (sub::KrylovR2NLSSubsolver)(s, rhs, σ, atol, rtol, n; verbose = 0)
     atol = atol,
     rtol = rtol,
     λ = sqrt(σ),
-    # itmax = max(2 * (size(sub.Jx, 1) + size(sub.Jx, 2)), 50),
     itmax = max(2 * n, 50),
     verbose = verbose,
   )

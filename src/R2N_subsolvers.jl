@@ -88,7 +88,7 @@ function get_npc_direction(sub::KrylovR2NSubsolver)
   return sub.npc_dir
 end
 function get_operator_norm(sub::KrylovR2NSubsolver)
-  # Estimate norm of H. 
+  # Estimate norm of H.
   val, _ = LinearOperators.estimate_opnorm(sub.H)
   return val
 end
@@ -107,8 +107,6 @@ mutable struct ShiftedLBFGSSolver{T, Op} <: AbstractR2NSubsolver{T}
     new{T, typeof(nlp.op)}(nlp.op)
   end
 end
-
-# ShiftedLBFGSSolver(nlp) = ShiftedLBFGSSolver(nlp)
 
 initialize!(sub::ShiftedLBFGSSolver, nlp, x) = nothing
 update_subsolver!(sub::ShiftedLBFGSSolver, nlp, x) = nothing # LBFGS updates via push! in outer loop
@@ -129,7 +127,7 @@ end
 get_operator(sub::ShiftedLBFGSSolver) = sub.H
 
 function get_operator_norm(sub::ShiftedLBFGSSolver)
-  # Estimate norm of H. 
+  # Estimate norm of H.
   val, _ = LinearOperators.estimate_opnorm(sub.H)
   return val
 end
@@ -300,9 +298,7 @@ end
 
 # Helper to dispatch safely on the HSL object type
 _finalize_hsl_obj!(obj::Ma97) = Base.finalize(obj)
-_finalize_hsl_obj!(obj) = nothing # Fallback for Ma57 or other types #TODO if MA57 has it add it 
-
-# _finalize_hsl_obj!(obj::Ma57) = Base.finalize(obj)  # was `nothing` → silent leak
+_finalize_hsl_obj!(obj) = nothing # Ma57 holds only Julia-managed memory
 
 # Krylov/LBFGS: no-op, so try/finally in R2N is safe for all solvers
 function finalize_subsolver!(sub::AbstractR2NSubsolver)

@@ -123,7 +123,6 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 - `nlp::AbstractNLPModel{T, V}` is the model to solve, see `NLPModels.jl`.
 
 # Keyword arguments
-- `params::R2NParameterSet = R2NParameterSet(nlp)`: algorithm parameters, see [`R2NParameterSet`](@ref).
 - `η1::T = $(R2N_η1)`: step acceptance parameter, see [`R2NParameterSet`](@ref).
 - `η2::T = $(R2N_η2)`: step acceptance parameter, see [`R2NParameterSet`](@ref).
 - `θ1::T = $(R2N_θ1)`: Cauchy step parameter, see [`R2NParameterSet`](@ref).
@@ -158,7 +157,6 @@ For advanced usage, first define a `R2NSolver` to preallocate the memory used in
 
 # Output
 The value returned is a `GenericExecutionStats`, see `SolverCore.jl`.
-- `callback`: function called at each iteration, see [`Callback`](https://jso.dev/JSOSolvers.jl/stable/#Callback) section.
 
 # Examples
 ```jldoctest; output = false
@@ -664,7 +662,7 @@ function SolverCore.solve!(
         end
       end
 
-      # 3. Process the Step  
+      # 3. Process the Step
       if step_accepted
         successful_iters += 1
         x .= xt

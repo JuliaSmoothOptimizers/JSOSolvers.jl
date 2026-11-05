@@ -115,7 +115,6 @@ For advanced usage, first create a `R2NLSSolver` to preallocate the necessary me
 - `rtol::T = √eps(T)`: relative stopping tolerance; the algorithm stops when ‖J(x)ᵀF(x)‖ ≤ atol + rtol * ‖J(x₀)ᵀF(x₀)‖.
 - `Fatol::T = √eps(T)`: absolute tolerance for the residual.
 - `Frtol::T = eps(T)`: relative tolerance for the residual; the algorithm stops when ‖F(x)‖ ≤ Fatol + Frtol * ‖F(x₀)‖.
-- `params::R2NLSParameterSet = R2NLSParameterSet()`: algorithm parameters, see [`R2NLSParameterSet`](@ref).
 - `η1::T = $(R2NLS_η1)`: step acceptance parameter, see [`R2NLSParameterSet`](@ref).
 - `η2::T = $(R2NLS_η2)`: step acceptance parameter, see [`R2NLSParameterSet`](@ref).
 - `θ1::T = $(R2NLS_θ1)`: Cauchy step parameter, see [`R2NLSParameterSet`](@ref).
@@ -135,12 +134,11 @@ For advanced usage, first create a `R2NLSSolver` to preallocate the necessary me
 - `max_time::Float64 = 30.0`: maximum allowed time in seconds.
 - `max_iter::Int = typemax(Int)`: maximum number of iterations.
 - `verbose::Int = 0`: if > 0, displays iteration details every `verbose` iterations.
+- `callback`: function called at each iteration, see [`Callback`](https://jso.dev/JSOSolvers.jl/stable/#Callback) section.
 
 # Output
 
 Returns a `GenericExecutionStats` object containing statistics and information about the optimization process (see `SolverCore.jl`).
-
-- `callback`: function called at each iteration, see [`Callback`](https://jso.dev/JSOSolvers.jl/stable/#Callback) section.
 
 # Examples
 
@@ -174,7 +172,7 @@ end
 
 function R2NLSSolver(
   nls::AbstractNLSModel{T, V};
-  subsolver::Union{Function, Type, AbstractR2NLSSubsolver{T}} = QRMumpsSubsolver(nls), # Default is an INSTANCE
+  subsolver::Union{Function, Type, AbstractR2NLSSubsolver{T}} = QRMumpsSubsolver(nls),
   η1::T = get(R2NLS_η1, nls),
   η2::T = get(R2NLS_η2, nls),
   θ1::T = get(R2NLS_θ1, nls),
@@ -222,7 +220,6 @@ function R2NLSSolver(
 
   x .= nls.meta.x0
 
-  # We pass the subsolver instance directly into the struct. No if/else checks needed!
   R2NLSSolver(x, xt, gx, gt, r, rt, temp, sub, obj_vec, one(T), s, scp, T(eps(T)^(1/5)), params)
 end
 
@@ -353,7 +350,7 @@ function SolverCore.solve!(
 
   # Heuristic for initial σ
   solver.σ = max(σmin, T(1e-4) * norm_∇fk) # initial σ is scaled proportionally to the gradient norm
-  # Stopping criterion: 
+  # Stopping criterion:
   unbounded = false
   ρk = zero(T)
 
