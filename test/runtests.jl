@@ -16,6 +16,7 @@ include("test-gpu.jl")
     (TRONParameterSet, tron),
     (TRUNKParameterSet, trunk),
     (FOMOParameterSet, fomo),
+    (R2NParameterSet, R2N),
   )
     nlp = BROWNDEN()
     params = eval(paramset)(nlp)
@@ -29,6 +30,7 @@ include("test-gpu.jl")
   @testset "Test unconstrained NLS parameters $paramset" for (paramset, fun) in (
     (TRONLSParameterSet, tron),
     (TRUNKLSParameterSet, trunk),
+    (R2NLSParameterSet, R2NLS),
   )
     nls = MGH01()
     params = eval(paramset)(nls)
@@ -53,7 +55,8 @@ end
   @test stats.status == :first_order
 end
 
-@testset "Test small residual checks $solver" for solver in (:TrunkSolverNLS, :TronSolverNLS)
+@testset "Test small residual checks $solver" for solver in
+                                                  (:TrunkSolverNLS, :TronSolverNLS, :R2NLSSolver)
   nls = ADNLSModel(x -> [x[1] - 1; sin(x[2])], [-1.2; 1.0], 2)
   stats = GenericExecutionStats(nls)
   solver = eval(solver)(nls)
@@ -69,7 +72,7 @@ end
 end
 
 @testset "Test iteration limit" begin
-  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk)
+  @testset "$fun" for fun in (R2, R2N, fomo, lbfgs, tron, trunk)
     f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
     nlp = ADNLPModel(f, [-1.2; 1.0])
 
@@ -77,7 +80,7 @@ end
     @test stats.status == :max_iter
   end
 
-  @testset "$(fun)-NLS" for fun in (tron, trunk)
+  @testset "$(fun)-NLS" for fun in (R2NLS, tron, trunk)
     f(x) = [x[1] - 1; 2 * (x[2] - x[1]^2)]
     nlp = ADNLSModel(f, [-1.2; 1.0], 2)
 
@@ -87,7 +90,7 @@ end
 end
 
 @testset "Test unbounded below" begin
-  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk)
+  @testset "$fun" for fun in (R2, fomo, lbfgs, tron, trunk, R2N)
     T = Float64
     x0 = [T(0)]
     f(x) = -exp(x[1])
@@ -99,6 +102,8 @@ end
   end
 end
 
+include("test_hsl_subsolver.jl")
+include("test_qrmumps_subsolver.jl")
 include("restart.jl")
 include("callback.jl")
 include("consistency.jl")

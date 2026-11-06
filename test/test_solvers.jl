@@ -8,6 +8,11 @@ function tests()
         ("lbfgs", lbfgs),
         ("tron", tron),
         ("R2", R2),
+        ("R2N", R2N),
+        (
+          "R2N_ShiftedLBFGS",
+          (nlp; kwargs...) -> R2N(LBFGSModel(nlp), subsolver = ShiftedLBFGSSolver; kwargs...),
+        ),
         ("fomo_r2", fomo),
         ("fomo_tr", (nlp; kwargs...) -> fomo(nlp, step_backend = JSOSolvers.tr_step(); kwargs...)),
       ]
@@ -16,6 +21,7 @@ function tests()
       end
       @testset "$name : nonmonotone configuration" for (name, solver) in [
         ("R2", (nlp; kwargs...) -> R2(nlp, M = 2; kwargs...)),
+        ("R2N", (nlp; kwargs...) -> R2N(nlp, non_mono_size = 2; kwargs...)),
         ("fomo_r2", (nlp; kwargs...) -> fomo(nlp, M = 2; kwargs...)),
         (
           "fomo_tr",
@@ -41,6 +47,9 @@ function tests()
         ("trunk full Hessian", (nls; kwargs...) -> trunk(nls, variant = :Newton; kwargs...)),
         ("tron+cgls", (nls; kwargs...) -> tron(nls, subsolver = :cgls; kwargs...)),
         ("tron full Hessian", (nls; kwargs...) -> tron(nls, variant = :Newton; kwargs...)),
+        ("R2NLS_CGLS", (nls; kwargs...) -> R2NLS(nls, subsolver = CGLSSubsolver; kwargs...)),
+        ("R2NLS_LSQR", (nls; kwargs...) -> R2NLS(nls, subsolver = LSQRSubsolver; kwargs...)),
+        ("R2NLS_LSMR", (nls; kwargs...) -> R2NLS(nls, subsolver = LSMRSubsolver; kwargs...)),
       ]
         unconstrained_nls(solver)
         multiprecision_nls(solver, :unc)

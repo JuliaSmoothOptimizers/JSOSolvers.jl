@@ -4,6 +4,7 @@ module JSOSolvers
 using LinearAlgebra, Logging, Printf
 
 # JSO packages
+using Arpack, TSVD, GenericLinearAlgebra
 using Krylov,
   LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverParameters, SolverTools
 
@@ -58,14 +59,20 @@ function default_callback_quasi_newton(
     end
   end
 end
+# subsolver interface
+include("R2N_subsolver_common.jl")
+include("R2N_subsolvers.jl")
+include("R2NLS_subsolvers.jl")
 
 # Unconstrained solvers
 include("lbfgs.jl")
 include("trunk.jl")
 include("fomo.jl")
+include("R2N.jl")
 
 # Unconstrained solvers for NLS
 include("trunkls.jl")
+include("R2NLS.jl")
 
 # List of keywords accepted by TRONTrustRegion
 const tron_keys = (
