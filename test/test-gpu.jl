@@ -2,7 +2,7 @@ if CUDA.functional()
   @testset "GPU multiple precision support tests (NLP)" begin
     @testset "GPU multiple precision support of problem $p with $fun (NLP)" for p in
                                                                                 NLPModelsTest.nlp_problems,
-      fun in [trunk; fomo]
+      fun in [trunk; fomo; tron]
 
       nlp = eval(Symbol(p))(CuArray{Float64, 1, CUDA.DeviceMemory})
       if !(unconstrained(nlp))
@@ -16,7 +16,7 @@ if CUDA.functional()
 
     @testset "GPU multiple precision support of problem $p with $fun (NLS)" for p in
                                                                                 NLPModelsTest.nls_problems,
-      fun in [trunk]
+      fun in [trunk; tron]
 
       nls = eval(Symbol(p))(CuArray{Float64, 1, CUDA.DeviceMemory})
       if !(unconstrained(nls))
