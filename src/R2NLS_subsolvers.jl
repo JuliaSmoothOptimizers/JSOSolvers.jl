@@ -191,13 +191,13 @@ is_unsupported(sub::QRMumpsR2NLSSubsolver) = sub.unsupported
 
 function initialize!(sub::QRMumpsR2NLSSubsolver, nls, x)
   update_subsolver!(sub, nls, x)
-  return nothing
+  return sub
 end
 
 function update_subsolver!(sub::QRMumpsR2NLSSubsolver, nls, x)
   jac_coord_residual!(nls, x, view(sub.val, 1:sub.nnzj))
   sub.Jx.vals .= view(sub.val, 1:sub.nnzj)
-  return nothing
+  return sub
 end
 
 function reset_subsolver!(sub::QRMumpsR2NLSSubsolver{T}, nls::AbstractNLSModel, x) where {T}
@@ -229,7 +229,7 @@ function reset_subsolver!(sub::QRMumpsR2NLSSubsolver{T}, nls::AbstractNLSModel, 
   )
     sub.Jx = SparseMatrixCOO(m, n, Int[], Int[], T[])
     sub.unsupported = true
-    return nothing
+    return sub
   end
   sub.unsupported = false
 
@@ -258,7 +258,7 @@ function reset_subsolver!(sub::QRMumpsR2NLSSubsolver{T}, nls::AbstractNLSModel, 
 
   # 6. Load actual Jacobian values at the starting point
   update_subsolver!(sub, nls, x)
-  return nothing
+  return sub
 end
 
 function (sub::QRMumpsR2NLSSubsolver{T})(s, rhs, σ, atol, rtol, n; verbose = 0) where {T}
@@ -279,7 +279,7 @@ function (sub::QRMumpsR2NLSSubsolver{T})(s, rhs, σ, atol, rtol, n; verbose = 0)
 end
 
 get_jacobian(sub::QRMumpsR2NLSSubsolver) = sub.Jx
-get_operator_norm(sub::QRMumpsR2NLSSubsolver) = norm(sub.Jx.vals)
+get_operator_norm(sub::QRMumpsR2NLSSubsolver) = sum(abs2, sub.Jx.vals) # ‖J‖_F² ≥ ‖JᵀJ‖₂
 
 # ==============================================================================
 #  Krylov Subsolvers (Aligned with KrylovR2NSubsolver style)
@@ -316,18 +316,18 @@ CGLSSubsolver(nls) = KrylovR2NLSSubsolver(nls, :cgls)
 # allocate; it is only rebuilt by reset_subsolver! for a new model.
 function initialize!(sub::KrylovR2NLSSubsolver, nls, x)
   sub.x .= x
-  return nothing
+  return sub
 end
 
 function update_subsolver!(sub::KrylovR2NLSSubsolver, nls, x)
   sub.x .= x
-  return nothing
+  return sub
 end
 
 function reset_subsolver!(sub::KrylovR2NLSSubsolver, nls, x)
   sub.x .= x
   sub.Jx = jac_op_residual!(nls, sub.x, sub.Jv, sub.Jtv)
-  return nothing
+  return sub
 end
 
 function (sub::KrylovR2NLSSubsolver)(s, rhs, σ, atol, rtol, n; verbose = 0)
@@ -352,5 +352,5 @@ get_jacobian(sub::KrylovR2NLSSubsolver) = sub.Jx
 
 function get_operator_norm(sub::KrylovR2NLSSubsolver)
   λmax, _ = LinearOperators.estimate_opnorm(sub.Jx)
-  return λmax
+  return λmax^2
 end

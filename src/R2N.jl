@@ -171,7 +171,7 @@ stats = R2N(nlp)
 Passing a pre-built HSL subsolver with input-size guards (e.g. to bail out on very
 large problems instead of paying HSL's eager symbolic analysis):
 ```julia
-using JSOSolvers, ADNLPModels
+using JSOSolvers, ADNLPModels, HSL
 nlp = ADNLPModel(x -> sum(x.^2), ones(3))
 sub = MA57R2NSubsolver(nlp; max_nvar = 100_000, max_nnzh = 5_000_000)
 stats = R2N(nlp; subsolver = sub)
@@ -417,7 +417,7 @@ function SolverCore.solve!(
   end
 
   initialize!(solver.subsolver, nlp, x)
-  H = get_operator(solver.subsolver)
+  H = get_model_hessian(solver.subsolver)
 
   set_iter!(stats, 0)
   f0 = obj(nlp, x)
@@ -515,18 +515,10 @@ function SolverCore.solve!(
     subsolver_solved, sub_stats, subiter, npcCount =
       solver.subsolver(s, rhs, σk, atol, subtol, n; verbose = subsolver_verbose)
 
-    force_sigma_increase = solver.subsolver isa HSLR2NSubsolver && !subsolver_solved
-
-    if solver.subsolver isa HSLR2NSubsolver && subsolver_solved
-      num_neg, num_zero = get_inertia(solver.subsolver)
-
-      # If the matrix is singular or indefinite, the exact step is not a minimizer.
-      # Because exact solutions cannot be used as strict descent NPC directions,
-      # we immediately reject the step and increase sigma.
-      if num_zero > 0 || num_neg > 0
-        force_sigma_increase = true
-      end
-    end
+    # Direct subsolvers report the inertia of H + σI; (-1, -1) means unknown (Krylov, L-BFGS).
+    # A failed, singular or indefinite factorization gives no usable step: reject it and increase σ.
+    num_neg, num_zero = get_inertia(solver.subsolver)
+    force_sigma_increase = num_neg >= 0 && (!subsolver_solved || num_neg > 0 || num_zero > 0)
 
     if !force_sigma_increase && !(solver.subsolver isa ShiftedLBFGSSolver) && npcCount >= 1
       if npc_handler == :ag
@@ -586,7 +578,7 @@ function SolverCore.solve!(
       if γ_k > 0
         ν_k = 2*(1-δ1) / (γ_k)
       else
-        λmax = get_operator_norm(solver.subsolver)
+        λmax = get_model_hessian_norm(solver.subsolver)
         ν_k = θ1 / (λmax + σk)
       end
 
@@ -674,7 +666,7 @@ function SolverCore.solve!(
 
         if !(solver.subsolver isa ShiftedLBFGSSolver)
           update_subsolver!(solver.subsolver, nlp, x)
-          H = get_operator(solver.subsolver)
+          H = get_model_hessian(solver.subsolver)
         end
 
         set_objective!(stats, ft)

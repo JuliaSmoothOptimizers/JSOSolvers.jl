@@ -28,9 +28,9 @@ if LIBHSL_isfunctional()
   @testset "Testing HSL Subsolvers & Memory Safety" begin
     dense_nlp = ADNLPModel(x -> sum(abs2, x), ones(2))
     small_dense_subsolver = MA97R2NSubsolver(dense_nlp)
-    @test !is_unsupported(small_dense_subsolver)
-    finalize_subsolver!(small_dense_subsolver)
-    @test is_unsupported(MA97R2NSubsolver(dense_nlp; dense_max_nvar = 0))
+    @test !JSOSolvers.is_unsupported(small_dense_subsolver)
+    JSOSolvers.finalize_subsolver!(small_dense_subsolver)
+    @test JSOSolvers.is_unsupported(MA97R2NSubsolver(dense_nlp; dense_max_nvar = 0))
 
     # `dense_max_nvar` is the largest `n` whose dense Hessian is still accepted:
     # the default keeps moderately sized dense problems (e.g. n = 5_000) on HSL
@@ -66,7 +66,7 @@ if LIBHSL_isfunctional()
     dense_quad = ADNLPModel(x -> sum(abs2, x) + abs2(sum(x)), ones(dense_n))
     @test dense_quad.meta.nnzh > 0.5 * JSOSolvers.dense_hessian_entries(dense_n)
     dense_sub = MA57R2NSubsolver(dense_quad)
-    @test !is_unsupported(dense_sub)
+    @test !JSOSolvers.is_unsupported(dense_sub)
     dense_stats = R2N(dense_quad; subsolver = dense_sub)
     @test dense_stats.status == :first_order
 

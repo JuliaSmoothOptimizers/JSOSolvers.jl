@@ -23,7 +23,7 @@ end
 
 @testset "Testing qr_mumps Subsolver density threshold" begin
   nls = ADNLSModel(x -> [x[1] - 1; 2 * (x[2] - x[1]^2)], [-1.2; 1.0], 2)
-  @test !is_unsupported(QRMumpsSubsolver(nls))
+  @test !JSOSolvers.is_unsupported(QRMumpsSubsolver(nls))
 
   # The threshold counts dense Jacobian entries, so problems whose dense `m * n`
   # fits under it are handed to qr_mumps no matter how dense they are.
@@ -68,7 +68,7 @@ end
   dense_m = dense_nls.nls_meta.nequ
   @test dense_nls.nls_meta.nnzj > 0.5 * JSOSolvers.dense_jacobian_entries(dense_m, dense_n)
   dense_sub = QRMumpsSubsolver(dense_nls)
-  @test !is_unsupported(dense_sub)
+  @test !JSOSolvers.is_unsupported(dense_sub)
   @test R2NLS(dense_nls; subsolver = dense_sub).status == :first_order
 end
 

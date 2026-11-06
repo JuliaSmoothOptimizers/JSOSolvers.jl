@@ -3,13 +3,6 @@
 #   Defines abstract types and generic functions shared by R2N and R2NLS
 # ==============================================================================
 
-export AbstractSubsolver, AbstractR2NSubsolver, AbstractR2NLSSubsolver
-export initialize!, update_subsolver!
-export finalize_subsolver!, reset_subsolver!
-export get_operator,
-  get_jacobian, get_inertia, has_npc_direction, get_npc_direction, get_operator_norm
-export is_unsupported
-
 """
     AbstractSubsolver{T}
 
@@ -48,7 +41,7 @@ This is typically called once at the start of the optimization.
 function initialize! end
 
 """
-    update_subsolver!(subsolver::AbstractSubsolver, model, x)
+    update_subsolver!(subsolver::AbstractSubsolver, nlp, x)
 
 Update the internal representation of the subsolver at point `x`.
 For R2N solvers, this typically updates the Hessian or Operator.
@@ -57,11 +50,12 @@ For R2NLS solvers, this updates the Jacobian.
 function update_subsolver! end
 
 """
-    get_operator(subsolver)
+    get_model_hessian(subsolver)
 
-Return the operator/matrix H for outer loop calculations (curvature, Cauchy point) in R2N.
+Return the model Hessian H (operator or matrix) used by R2N in the
+outer loop (curvature, Cauchy point).
 """
-function get_operator end
+function get_model_hessian end
 
 """
     get_jacobian(subsolver)
@@ -71,10 +65,18 @@ Return the operator/matrix J for outer loop calculations in R2NLS.
 function get_jacobian end
 
 """
+    get_model_hessian_norm(subsolver)
+
+Return an estimate or upper bound of ‖H‖, the norm of the model Hessian used by R2N.
+Used for the Cauchy point.
+"""
+function get_model_hessian_norm end
+
+"""
     get_operator_norm(subsolver)
 
-Return the norm (usually infinity norm or estimate) of the operator H or J.
-Used for Cauchy point calculation.
+Return an estimate or upper bound of ‖JᵀJ‖ for the Gauss-Newton model of R2NLS,
+where J is the Jacobian operator. Used for the Cauchy point.
 """
 function get_operator_norm end
 
@@ -131,5 +133,5 @@ Reset the subsolver state. Default behavior is to finalize and re-initialize.
 function reset_subsolver!(subsolver::AbstractSubsolver, nlp, x)
   finalize_subsolver!(subsolver)
   initialize!(subsolver, nlp, x)
-  return nothing
+  return subsolver
 end
