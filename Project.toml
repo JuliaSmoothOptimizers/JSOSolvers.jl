@@ -15,9 +15,6 @@ SolverParameters = "d076d87d-d1f9-4ea3-a44b-64b4cdd1e470"
 SolverTools = "b5612192-2639-5dc1-abfe-fbedd65fab29"
 
 [compat]
-# CUDA 6.5 requires KernelAbstractions 0.10, whose precompile workload
-# causes CPU allocations on Julia 1.10 until the upstream fix is released.
-CUDA = "5, 6.0 - 6.4"
 Krylov = "0.10.0"
 LinearOperators = "2.0"
 NLPModels = "0.21"
