@@ -121,9 +121,7 @@ get_npc_direction(sub) = error("No NPC direction available for $(typeof(sub)).")
 
 Explicitly free any C/Fortran memory allocated by the subsolver to prevent leaks.
 """
-function finalize_subsolver!(subsolver::AbstractSubsolver)
-  return nothing
-end
+finalize_subsolver!(subsolver::AbstractSubsolver) = nothing
 
 """
     reset_subsolver!(subsolver::AbstractSubsolver, nlp, x)
