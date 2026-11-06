@@ -73,12 +73,12 @@ Used for the Cauchy point.
 function get_model_hessian_norm end
 
 """
-    get_operator_norm(subsolver)
+    get_jacobian_norm(subsolver)
 
-Return an estimate or upper bound of ‖JᵀJ‖ for the Gauss-Newton model of R2NLS,
-where J is the Jacobian operator. Used for the Cauchy point.
+Return an estimate or upper bound of ‖J‖, the norm of the Jacobian returned by
+[`get_jacobian`](@ref). Used by R2NLS for the Cauchy point.
 """
-function get_operator_norm end
+function get_jacobian_norm end
 
 # ==============================================================================
 #   Optional Interface Methods (Default Implementations)

@@ -279,7 +279,7 @@ function (sub::QRMumpsR2NLSSubsolver{T})(s, rhs, σ, atol, rtol, n; verbose = 0)
 end
 
 get_jacobian(sub::QRMumpsR2NLSSubsolver) = sub.Jx
-get_operator_norm(sub::QRMumpsR2NLSSubsolver) = sum(abs2, sub.Jx.vals) # ‖J‖_F² ≥ ‖JᵀJ‖₂
+get_jacobian_norm(sub::QRMumpsR2NLSSubsolver) = norm(sub.Jx.vals) # ‖J‖_F ≥ ‖J‖₂
 
 # ==============================================================================
 #  Krylov Subsolvers (Aligned with KrylovR2NSubsolver style)
@@ -350,7 +350,7 @@ end
 
 get_jacobian(sub::KrylovR2NLSSubsolver) = sub.Jx
 
-function get_operator_norm(sub::KrylovR2NLSSubsolver)
+function get_jacobian_norm(sub::KrylovR2NLSSubsolver)
   λmax, _ = LinearOperators.estimate_opnorm(sub.Jx)
-  return λmax^2
+  return λmax
 end

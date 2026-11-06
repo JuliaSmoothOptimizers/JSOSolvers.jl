@@ -435,8 +435,8 @@ function SolverCore.solve!(
         γ_k = curvature_gn / norm_∇fk^2 + solver.σ
         ν_k = 2 * (1 - δ1) / γ_k
       else
-        λmax = get_operator_norm(solver.subsolver)
-        ν_k = θ1 / (λmax + solver.σ)  # λmax bounds ‖JᵀJ‖
+        λmax = get_jacobian_norm(solver.subsolver)
+        ν_k = θ1 / (λmax^2 + solver.σ)  # λmax ≈ ‖J‖, so λmax² bounds ‖JᵀJ‖
       end
 
       @. scp = -ν_k * ∇f
