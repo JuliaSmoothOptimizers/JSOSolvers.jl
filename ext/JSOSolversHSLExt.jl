@@ -1,20 +1,7 @@
 module JSOSolversHSLExt
 
 using HSL, JSOSolvers, LinearAlgebra, NLPModels
-import JSOSolvers:
-  AbstractR2NSubsolver,
-  MA57R2NSubsolver,
-  MA97R2NSubsolver,
-  DEFAULT_HSL_DENSE_MAX_NVAR,
-  hsl_guard_triggered,
-  initialize!,
-  update_subsolver!,
-  reset_subsolver!,
-  finalize_subsolver!,
-  is_unsupported,
-  get_inertia,
-  get_model_hessian,
-  get_model_hessian_norm
+using JSOSolvers: DEFAULT_HSL_DENSE_MAX_NVAR, hsl_guard_triggered
 
 """
     HSLR2NSubsolver(nlp; hsl_constructor = ma97_coord,
@@ -147,7 +134,7 @@ function HSLR2NSubsolver(
     max_nnzh,
     false,
   )
-  finalizer(finalize_subsolver!, sub)
+  finalizer(JSOSolvers.finalize_subsolver!, sub)
 
   return sub
 end
@@ -161,14 +148,14 @@ _finalize_hsl_obj!(obj) = nothing # Ma57 holds only Julia-managed memory
 
 Safely triggers the underlying HSL finalizer exactly once.
 """
-function finalize_subsolver!(sub::HSLR2NSubsolver)
+function JSOSolvers.finalize_subsolver!(sub::HSLR2NSubsolver)
   sub._finalized && return nothing
   sub._finalized = true
   _finalize_hsl_obj!(sub.hsl_obj)
   return nothing
 end
 
-MA97R2NSubsolver(
+JSOSolvers.MA97R2NSubsolver(
   nlp;
   fill_ratio::Real = 0.5,
   dense_max_nvar::Int = DEFAULT_HSL_DENSE_MAX_NVAR,
@@ -183,7 +170,7 @@ MA97R2NSubsolver(
   max_nnzh = max_nnzh,
 )
 
-MA57R2NSubsolver(
+JSOSolvers.MA57R2NSubsolver(
   nlp;
   fill_ratio::Real = 0.5,
   dense_max_nvar::Int = DEFAULT_HSL_DENSE_MAX_NVAR,
@@ -198,27 +185,27 @@ MA57R2NSubsolver(
   max_nnzh = max_nnzh,
 )
 
-is_unsupported(sub::HSLR2NSubsolver) = sub.unsupported
+JSOSolvers.is_unsupported(sub::HSLR2NSubsolver) = sub.unsupported
 
-function initialize!(sub::HSLR2NSubsolver, nlp, x)
+function JSOSolvers.initialize!(sub::HSLR2NSubsolver, nlp, x)
   # Compute the initial Hessian values at x
   hess_coord!(nlp, x, view(sub.vals, 1:sub.nnzh))
   return sub
 end
 
-function update_subsolver!(sub::HSLR2NSubsolver, nlp, x)
+function JSOSolvers.update_subsolver!(sub::HSLR2NSubsolver, nlp, x)
   hess_coord!(nlp, x, view(sub.vals, 1:sub.nnzh))
   return sub
 end
 
-function get_inertia(sub::HSLR2NSubsolver{T, S}) where {T, S <: Ma97{T}}
+function JSOSolvers.get_inertia(sub::HSLR2NSubsolver{T, S}) where {T, S <: Ma97{T}}
   n = sub.n
   num_neg = sub.hsl_obj.info.num_neg
   num_zero = n - sub.hsl_obj.info.matrix_rank
   return num_neg, num_zero
 end
 
-function get_inertia(sub::HSLR2NSubsolver{T, S}) where {T, S <: Ma57{T}}
+function JSOSolvers.get_inertia(sub::HSLR2NSubsolver{T, S}) where {T, S <: Ma57{T}}
   n = sub.n
   num_neg = sub.hsl_obj.info.num_negative_eigs
   num_zero = n - sub.hsl_obj.info.rank
@@ -250,9 +237,9 @@ function (sub::HSLR2NSubsolver)(s, rhs, σ, atol, rtol, n; verbose = 0)
   return _hsl_factor_and_solve!(sub, rhs, s)
 end
 
-get_model_hessian(sub::HSLR2NSubsolver) = sub
+JSOSolvers.get_model_hessian(sub::HSLR2NSubsolver) = sub
 
-function get_model_hessian_norm(sub::HSLR2NSubsolver{T}) where {T}
+function JSOSolvers.get_model_hessian_norm(sub::HSLR2NSubsolver{T}) where {T}
   # Calculate the matrix infinity norm (maximum absolute row sum)
   # Exclude the shift values which are at indices nnzh+1:end
   row_sums = zeros(T, sub.n)
@@ -282,9 +269,9 @@ function LinearAlgebra.mul!(y::AbstractVector, sub::HSLR2NSubsolver, x::Abstract
   )
 end
 
-function reset_subsolver!(sub::HSLR2NSubsolver{T}, nlp::AbstractNLPModel, x) where {T}
+function JSOSolvers.reset_subsolver!(sub::HSLR2NSubsolver{T}, nlp::AbstractNLPModel, x) where {T}
   # 1. Free current C/Fortran object before rebuilding
-  finalize_subsolver!(sub)
+  JSOSolvers.finalize_subsolver!(sub)
 
   # 2. Update dimensions (new problem may differ in size/nnzh)
   n = nlp.meta.nvar
