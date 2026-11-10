@@ -1,3 +1,5 @@
+using CUDA, JSOSolvers, Logging, NLPModels, NLPModelsTest, SolverCore, Test
+
 """
     @wrappedallocs(expr)
 Given an expression, this macro wraps that expression inside a new function
@@ -28,7 +30,8 @@ macro wrappedallocs(expr)
   end
 end
 
-if Sys.isunix()
+# KernelAbstractions precompilation introduces CPU allocations on Julia 1.10.
+if Sys.isunix() && VERSION ≥ v"1.11"
   @testset "Allocation tests" begin
     @testset "$symsolver" for symsolver in (
       :LBFGSSolver,
