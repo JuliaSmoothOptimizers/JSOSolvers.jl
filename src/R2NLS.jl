@@ -1,3 +1,4 @@
+include("R2NLS_subsolvers.jl")
 export R2NLS, R2NLSSolver, R2NLSParameterSet
 
 """

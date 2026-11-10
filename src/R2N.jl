@@ -1,3 +1,7 @@
+# Subsolver interface (also used by R2NLS.jl, which is included after this file)
+include("R2N_subsolver_common.jl")
+include("R2N_subsolvers.jl")
+
 export R2N, R2NSolver, R2NParameterSet
 
 """

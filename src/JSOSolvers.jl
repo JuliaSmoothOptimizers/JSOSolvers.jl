@@ -59,10 +59,6 @@ function default_callback_quasi_newton(
     end
   end
 end
-# subsolver interface
-include("R2N_subsolver_common.jl")
-include("R2N_subsolvers.jl")
-include("R2NLS_subsolvers.jl")
 
 # Unconstrained solvers
 include("lbfgs.jl")
