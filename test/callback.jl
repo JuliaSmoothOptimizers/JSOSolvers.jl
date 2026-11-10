@@ -18,6 +18,11 @@ using ADNLPModels, JSOSolvers, LinearAlgebra, Logging #, Plots
   @test stats.iter == 8
 
   stats = with_logger(NullLogger()) do
+    R2N(nlp, callback = cb)
+  end
+  @test stats.iter == 8
+
+  stats = with_logger(NullLogger()) do
     lbfgs(nlp, callback = cb)
   end
   @test stats.iter == 8
@@ -56,11 +61,16 @@ end
     tron(nls, callback = cb)
   end
   @test stats.iter == 8
+
+  stats = with_logger(NullLogger()) do
+    R2NLS(nls, callback = cb)
+  end
+  @test stats.iter == 8
 end
 
 @testset "Test quasi-Newton callback" begin
   f(x) = (x[1] - 1)^2 + 4 * (x[2] - x[1]^2)^2
-  for solver in (:trunk, :tron)
+  for solver in (:trunk, :tron, :R2N)
     for model in (:LBFGSModel, :LSR1Model)
       nlp = eval(model)(ADNLPModel(f, [-1.2; 1.0]))
       B0 = Matrix(hess_op(nlp, nlp.meta.x0))

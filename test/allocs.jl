@@ -33,8 +33,14 @@ end
 # KernelAbstractions precompilation introduces CPU allocations on Julia 1.10.
 if Sys.isunix() && VERSION ≥ v"1.11"
   @testset "Allocation tests" begin
-    @testset "$symsolver" for symsolver in
-                              (:LBFGSSolver, :FoSolver, :FomoSolver, :TrunkSolver, :TronSolver)
+    @testset "$symsolver" for symsolver in (
+      :LBFGSSolver,
+      :FoSolver,
+      :FomoSolver,
+      :TrunkSolver,
+      :TronSolver,
+      :R2NSolver,
+    )
       for model in NLPModelsTest.nlp_problems
         nlp = eval(Meta.parse(model))()
         if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolver))
@@ -60,7 +66,7 @@ if Sys.isunix() && VERSION ≥ v"1.11"
       end
     end
 
-    @testset "$symsolver" for symsolver in (:TrunkSolverNLS, :TronSolverNLS)
+    @testset "$symsolver" for symsolver in (:TrunkSolverNLS, :TronSolverNLS, :R2NLSSolver)
       for model in NLPModelsTest.nls_problems
         nlp = eval(Meta.parse(model))()
         if unconstrained(nlp) || (bound_constrained(nlp) && (symsolver == :TronSolverNLS))

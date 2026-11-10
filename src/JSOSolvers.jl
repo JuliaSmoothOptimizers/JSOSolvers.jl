@@ -4,6 +4,7 @@ module JSOSolvers
 using LinearAlgebra, Logging, Printf
 
 # JSO packages
+using Arpack, TSVD, GenericLinearAlgebra
 using Krylov,
   LinearOperators, NLPModels, NLPModelsModifiers, SolverCore, SolverParameters, SolverTools
 
@@ -63,9 +64,11 @@ end
 include("lbfgs.jl")
 include("trunk.jl")
 include("fomo.jl")
+include("R2N.jl")
 
 # Unconstrained solvers for NLS
 include("trunkls.jl")
+include("R2NLS.jl")
 
 # List of keywords accepted by TRONTrustRegion
 const tron_keys = (
