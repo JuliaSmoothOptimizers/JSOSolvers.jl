@@ -7,6 +7,7 @@ makedocs(
   format = Documenter.HTML(
     prettyurls = get(ENV, "CI", nothing) == "true",
     assets = ["assets/style.css"],
+    size_threshold = 400 * 2^10, # 400 KiB
   ),
   sitename = "JSOSolvers.jl",
   pages = [
