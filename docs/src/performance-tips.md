@@ -24,7 +24,7 @@ NLPModels.reset!(nlp) # reset counters
 ## Experimental: choosing the L-BFGS memory automatically
 
 The memory parameter `mem` of [`lbfgs`](@ref) defaults to 5, but the best value depends on the problem.
-With the optional packages LBFGSMemTuner.jl (not yet registered), Symbolics.jl (v6) and ExpressionTreeForge.jl loaded, `mem = :auto` asks a two-stage
+With the optional packages [LBFGSMemTuner.jl](https://github.com/felixgao1226/LBFGSMemTuner.jl) (not yet registered), Symbolics.jl (v6) and ExpressionTreeForge.jl loaded, `mem = :auto` asks a two-stage
 statistical model (Gao, Migot and Mudalige, AMMCS 2026) to recommend a value:
 
 ```julia
