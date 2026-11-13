@@ -9,6 +9,7 @@ using NLPModelsTest, SolverParameters
 using JSOSolvers
 
 include("test-gpu.jl")
+include("lbfgs_auto_mem.jl")
 
 @testset "Test parameterset" begin
   @testset "Test unconstrained parameters $paramset" for (paramset, fun) in (
