@@ -9,7 +9,8 @@ const LBFGS_bk_max = DefaultParameter(25)
     LBFGSParameterSet{T} <: AbstractParameterSet
 
 This structure designed for `lbfgs` regroups the following parameters:
-  - `mem`: memory parameter of the `lbfgs` algorithm
+  - `mem`: memory parameter of the `lbfgs` algorithm. It can be set to `:auto` to let the `LBFGSMemTuner.jl`
+    package choose a value for the problem, see [`lbfgs`](@ref).
   - `τ₁`: slope factor in the Wolfe condition when performing the line search
   - `bk_max`: maximum number of backtracks when performing the line search.
 
@@ -30,13 +31,33 @@ struct LBFGSParameterSet{T} <: AbstractParameterSet
   bk_max::Parameter{Int, IntegerRange{Int}}
 end
 
+"""
+    lbfgs_auto_mem(nlp) -> Int
+
+Memory parameter recommended for `nlp` when `mem = :auto` is requested. The method is provided by the package extension
+that is loaded together with `LBFGSMemTuner`; without it, the default is used and a warning is issued.
+"""
+function lbfgs_auto_mem end
+
+function resolve_lbfgs_mem(nlp::AbstractNLPModel, mem::Union{Int, Symbol})
+  mem isa Int && return mem
+  mem === :auto || throw(ArgumentError("`mem` must be an Int or :auto, got :$mem"))
+  if isempty(methods(lbfgs_auto_mem))
+    @warn "`mem = :auto` needs the LBFGSMemTuner package: run `using LBFGSMemTuner` (and `using Symbolics`). Using mem = $(get(LBFGS_mem, nlp))." maxlog =
+      1
+    return get(LBFGS_mem, nlp)
+  end
+  return Base.invokelatest(lbfgs_auto_mem, nlp)::Int
+end
+
 # add a default constructor
 function LBFGSParameterSet(
   nlp::AbstractNLPModel{T};
-  mem::Int = get(LBFGS_mem, nlp),
+  mem::Union{Int, Symbol} = get(LBFGS_mem, nlp),
   τ₁::T = get(LBFGS_τ₁, nlp),
   bk_max::Int = get(LBFGS_bk_max, nlp),
 ) where {T}
+  mem = resolve_lbfgs_mem(nlp, mem)
   LBFGSParameterSet(
     Parameter(mem, IntegerRange(Int(1), Int(100))),
     Parameter(τ₁, RealInterval(T(0), T(1), lower_open = true)),
@@ -51,14 +72,17 @@ An implementation of a limited memory BFGS line-search method for unconstrained 
 
 For advanced usage, first define a `LBFGSSolver` to preallocate the memory used in the algorithm, and then call `solve!`.
 
-    solver = LBFGSSolver(nlp; mem::Int = $(LBFGS_mem))
+    solver = LBFGSSolver(nlp; mem::Union{Int, Symbol} = $(LBFGS_mem))
     solve!(solver, nlp; kwargs...)
 
 # Arguments
 - `nlp::AbstractNLPModel{T, V}` represents the model to solve, see `NLPModels.jl`.
 The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
-- `mem::Int = $(LBFGS_mem)`: algorithm parameter, see [`LBFGSParameterSet`](@ref).
+- `mem::Union{Int, Symbol} = $(LBFGS_mem)`: algorithm parameter, see [`LBFGSParameterSet`](@ref).
+  The experimental value `:auto` asks `LBFGSMemTuner.jl` (with `Symbolics.jl`) to recommend a value from features of
+  `nlp`; extracting those features can cost more than the solve. The value used is stored in
+  `stats.solver_specific[:mem]`.
 - `atol::T = √eps(T)`: absolute tolerance.
 - `rtol::T = √eps(T)`: relative tolerance, the algorithm stops when ‖∇f(xᵏ)‖ ≤ atol + rtol * ‖∇f(x⁰)‖.
 - `callback`: function called at each iteration, see [`Callback`](https://jso.dev/JSOSolvers.jl/stable/#Callback) section.
@@ -137,7 +161,7 @@ end
 @doc (@doc LBFGSSolver) function lbfgs(
   nlp::AbstractNLPModel{T, V};
   x::V = nlp.meta.x0,
-  mem::Int = get(LBFGS_mem, nlp),
+  mem::Union{Int, Symbol} = get(LBFGS_mem, nlp),
   τ₁::T = get(LBFGS_τ₁, nlp),
   bk_max::Int = get(LBFGS_bk_max, nlp),
   kwargs...,
@@ -170,6 +194,7 @@ function SolverCore.solve!(
   SolverCore.reset!(stats)
   start_time = time()
   set_time!(stats, 0.0)
+  set_solver_specific!(stats, :mem, value(solver.params.mem))
 
   # parameters
   τ₁ = value(solver.params.τ₁)
