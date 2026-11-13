@@ -43,7 +43,7 @@ function resolve_lbfgs_mem(nlp::AbstractNLPModel, mem::Union{Int, Symbol})
   mem isa Int && return mem
   mem === :auto || throw(ArgumentError("`mem` must be an Int or :auto, got :$mem"))
   if isempty(methods(lbfgs_auto_mem))
-    @warn "`mem = :auto` needs the LBFGSMemTuner package: run `using LBFGSMemTuner` (and `using Symbolics`). Using mem = $(get(LBFGS_mem, nlp))." maxlog =
+    @warn "`mem = :auto` needs the LBFGSMemTuner package: run `using LBFGSMemTuner, Symbolics, ExpressionTreeForge`. Using mem = $(get(LBFGS_mem, nlp))." maxlog =
       1
     return get(LBFGS_mem, nlp)
   end
@@ -80,7 +80,7 @@ For advanced usage, first define a `LBFGSSolver` to preallocate the memory used 
 The keyword arguments may include
 - `x::V = nlp.meta.x0`: the initial guess.
 - `mem::Union{Int, Symbol} = $(LBFGS_mem)`: algorithm parameter, see [`LBFGSParameterSet`](@ref).
-  The experimental value `:auto` asks `LBFGSMemTuner.jl` (with `Symbolics.jl`) to recommend a value from features of
+  The experimental value `:auto` asks `LBFGSMemTuner.jl` (with `Symbolics.jl` and `ExpressionTreeForge.jl`) to recommend a value from features of
   `nlp`; extracting those features can cost more than the solve. The value used is stored in
   `stats.solver_specific[:mem]`.
 - `atol::T = √eps(T)`: absolute tolerance.
