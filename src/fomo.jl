@@ -196,7 +196,7 @@ mutable struct FomoSolver{T, V} <: AbstractFirstOrderSolver
   m::V
   d::V
   p::V
-  o::V
+  o::Vector{T} # last M objective values: host memory, accessed elementwise
   α::T
   params::FOMOParameterSet{T}
 end
@@ -324,7 +324,7 @@ mutable struct FoSolver{T, V} <: AbstractFirstOrderSolver
   x::V
   g::V
   c::V
-  o::V
+  o::Vector{T} # last M objective values: host memory, accessed elementwise
   α::T
   params::FOMOParameterSet{T}
 end
