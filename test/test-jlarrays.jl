@@ -72,11 +72,24 @@ function NLPModels.jtprod_residual!(
   return Jtw
 end
 
+function NLPModels.hprod!(
+  nlp::BroadcastQuartic,
+  x::AbstractVector,
+  v::AbstractVector,
+  Hv::AbstractVector;
+  obj_weight = one(eltype(x)),
+)
+  increment!(nlp, :neval_hprod)
+  Hv .= obj_weight .* 3 .* x .^ 2 .* v
+  return Hv
+end
+
 @testset "JLArray, scalar indexing disallowed" begin
   S = JLArray{Float64, 1}
   @testset "$name" for (name, solve) in [
     ("R2", () -> R2(BroadcastQuartic(S))),
     ("R2 (M = 3)", () -> R2(BroadcastQuartic(S); M = 3)),
+    ("R2N (non_mono_size = 3)", () -> R2N(BroadcastQuartic(S); non_mono_size = 3)),
     ("TR", () -> TR(BroadcastQuartic(S))),
     ("fomo", () -> fomo(BroadcastQuartic(S))),
     ("fomo (M = 3)", () -> fomo(BroadcastQuartic(S); M = 3)),
