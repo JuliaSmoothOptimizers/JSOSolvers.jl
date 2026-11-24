@@ -200,7 +200,7 @@ mutable struct R2NSolver{T, V, Sub <: AbstractR2NSubsolver{T}, M <: AbstractNLPM
   Hs::V             # Storage for H*s products
   s::V              # Step direction
   scp::V            # Cauchy point step
-  obj_vec::V        # History of objective values for non-monotone strategy
+  obj_vec::Vector{T} # History of objective values for non-monotone strategy (host memory)
   subsolver::Sub    # The subproblem solver
   h::LineModel{T, V, M} # Line search model
   subtol::T         # Current tolerance for the subproblem

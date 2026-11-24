@@ -163,7 +163,7 @@ mutable struct R2NLSSolver{T, V, Sub <: AbstractR2NLSSubsolver{T}} <: AbstractOp
   rt::V        # Residual vector at trial point F(xt)
   temp::V      # Temporary vector for intermediate calculations (e.g. J*v)
   subsolver::Sub # The solver for the linear least-squares subproblem
-  obj_vec::V   # History of objective values for non-monotone strategy
+  obj_vec::Vector{T} # History of objective values for non-monotone strategy (host memory)
   subtol::T    # Current tolerance for the subproblem solver
   s::V         # The calculated step direction
   scp::V       # The Cauchy point step
